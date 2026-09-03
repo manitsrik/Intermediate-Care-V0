@@ -150,17 +150,26 @@ function buildSummarySheet_(ss) {
     .setWarningOnly(true);
 }
 
-/** เพิ่มคนที่กดติดตั้งเข้าตาราง users ให้อัตโนมัติ */
+/**
+ * เพิ่มคนที่กดติดตั้งเข้าตาราง users ในฐานะผู้ดูแลระบบ
+ * ถ้ามีแถวอยู่แล้วจะเลื่อนสิทธิ์ให้เป็น admin เพื่อกันไม่ให้ไม่มีใครจัดการผู้ใช้ได้
+ */
 function ensureCurrentUserIsRegistered_() {
   var email = Session.getActiveUser().getEmail();
   if (!email) return;
+
   var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEETS.USERS);
-  var existing = sh.getLastRow() > 1
-    ? sh.getRange(2, 1, sh.getLastRow() - 1, 1).getValues().map(function (r) { return String(r[0]).toLowerCase(); })
-    : [];
-  if (existing.indexOf(email.toLowerCase()) === -1) {
-    sh.appendRow([email, '', 'staff', 'TRUE', nowIso_()]);
+  var last = sh.getLastRow();
+  var rows = last > 1 ? sh.getRange(2, 1, last - 1, SCHEMA[SHEETS.USERS].length).getValues() : [];
+
+  for (var i = 0; i < rows.length; i++) {
+    if (String(rows[i][0]).trim().toLowerCase() === email.toLowerCase()) {
+      sh.getRange(i + 2, idx_(SHEETS.USERS, 'role')).setValue('admin');
+      sh.getRange(i + 2, idx_(SHEETS.USERS, 'active')).setValue('TRUE');
+      return;
+    }
   }
+  sh.appendRow([email, '', 'admin', 'TRUE', nowIso_()]);
 }
 
 /** เมนูบนแถบเครื่องมือของ Google Sheets */

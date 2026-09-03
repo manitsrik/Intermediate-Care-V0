@@ -6,7 +6,7 @@
 function doGet() {
   return HtmlService.createTemplateFromFile('index')
     .evaluate()
-    .setTitle(CONFIG.APP_NAME)
+    .setTitle(CONFIG.APP_NAME + ' · ' + CONFIG.ORG)
     .addMetaTag('viewport', 'width=device-width, initial-scale=1, viewport-fit=cover');
 }
 

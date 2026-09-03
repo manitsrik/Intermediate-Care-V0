@@ -51,7 +51,12 @@ var DB = {
       'NoIMC', 'closed', 17, 17, 1, '', 'กลับบ้าน', '')
   ],
   bi: [],
-  fu: []
+  fu: [],
+  users: [
+    { email: 'preview@local', name: 'พรีวิวบนเครื่อง', role: 'admin', active: true, added_at: '' },
+    { email: 'nurse1@example.org', name: 'สมศรี (พยาบาล)', role: 'staff', active: true, added_at: '' },
+    { email: 'pt1@example.org', name: 'สมชาย (นักกายภาพบำบัด)', role: 'staff', active: false, added_at: '', fileAccess: false }
+  ]
 };
 
 function p(id, hn, prefix, name, sex, age, rights, dx, ward, start, screening, status,
@@ -111,9 +116,36 @@ function thai_(iso) {
 function full_(pt) { return [pt.prefix, pt.first_name, pt.last_name].filter(String).join(' ').trim(); }
 
 var API = {
+  apiListUsers: function () {
+    return DB.users.map(function (u) {
+      var o = JSON.parse(JSON.stringify(u));
+      o.fileAccess = u.fileAccess !== false;
+      return o;
+    });
+  },
+
+  apiShareFile: function (email) {
+    var row = DB.users.filter(function (u) { return u.email === email; })[0];
+    if (row) row.fileAccess = true;
+    return { ok: true, email: email, already: false };
+  },
+
+  apiSaveUser: function (form) {
+    var email = String(form.email || '').trim().toLowerCase();
+    if (!email) throw new Error('กรุณากรอกอีเมล');
+    var row = DB.users.filter(function (u) { return u.email === email; })[0];
+    var created = !row;
+    if (created) { row = { email: email, added_at: '' }; DB.users.push(row); }
+    row.name = form.name || row.name || '';
+    row.role = form.role || 'staff';
+    row.active = String(form.active).toUpperCase() !== 'FALSE';
+    row.fileAccess = true;
+    return { ok: true, email: email, created: created, shared: true, alreadyShared: false, shareError: '' };
+  },
+
   apiBootstrap: function () {
     return {
-      user: { email: 'preview@local', name: 'พรีวิวบนเครื่อง', role: 'staff' },
+      user: { email: 'preview@local', name: 'พรีวิวบนเครื่อง', role: 'admin', isAdmin: true },
       appName: CONFIG.APP_NAME, org: CONFIG.ORG, maskMode: true,
       biItems: BI_ITEMS, biMax: BI_MAX, vocab: VOCAB,
       today: new Date().toISOString().slice(0, 10)

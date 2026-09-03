@@ -57,6 +57,7 @@ var ICONS = {
   dashboard: '<rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect>',
   patients: '<path d="M16 20v-1.5a3.5 3.5 0 0 0-3.5-3.5h-5A3.5 3.5 0 0 0 4 18.5V20"></path><circle cx="10" cy="8" r="3.2"></circle><path d="M19 20v-1.4a3.2 3.2 0 0 0-2.4-3.1"></path><path d="M15.2 5.2a3.2 3.2 0 0 1 0 5.6"></path>',
   followups: '<rect x="4" y="5.5" width="16" height="14.5" rx="2"></rect><path d="M4 10h16M9 3.5v4M15 3.5v4"></path>',
+  settings: '<path d="M4 7h16M4 12h16M4 17h16"></path><circle cx="9" cy="7" r="2.2" fill="currentColor" stroke="none"></circle><circle cx="15" cy="12" r="2.2" fill="currentColor" stroke="none"></circle><circle cx="8" cy="17" r="2.2" fill="currentColor" stroke="none"></circle>',
   back: '<path d="M19 12H5M11 6l-6 6 6 6"></path>',
   arrow: '<path d="M5 12h14M13 6l6 6-6 6"></path>'
 };
@@ -126,28 +127,35 @@ function readForm(formEl) {
 var NAV = [
   { key: 'dashboard', icon: 'dashboard', label: 'ภาพรวม', short: 'ภาพรวม' },
   { key: 'list', icon: 'patients', label: 'รายชื่อผู้ป่วย', short: 'ผู้ป่วย' },
-  { key: 'followups', icon: 'followups', label: 'การติดตาม', short: 'ติดตาม' }
+  { key: 'followups', icon: 'followups', label: 'การติดตาม', short: 'ติดตาม' },
+  { key: 'settings', icon: 'settings', label: 'ตั้งค่า', short: 'ตั้งค่า', adminOnly: true }
 ];
 
 /** หน้าย่อยที่ควรทำให้เมนูหลักตัวไหนสว่างค้างไว้ */
 var NAV_OF_VIEW = {
   list: 'list', patient: 'list', detail: 'list', bi: 'list', fu: 'list', close: 'list',
-  dashboard: 'dashboard', followups: 'followups'
+  dashboard: 'dashboard', followups: 'followups', settings: 'settings'
 };
 
 var TITLE_OF_VIEW = {
   list: 'รายชื่อผู้ป่วย', patient: 'ข้อมูลผู้ป่วย', detail: 'เวชระเบียน',
   bi: 'ประเมิน BI', fu: 'บันทึกการติดตาม', close: 'จบโปรแกรม',
-  dashboard: 'ภาพรวมงาน', followups: 'การติดตาม'
+  dashboard: 'ภาพรวมงาน', followups: 'การติดตาม', settings: 'ตั้งค่า'
 };
 
+function visibleNav() {
+  return NAV.filter(function (n) { return !n.adminOnly || (BOOT && BOOT.user && BOOT.user.isAdmin); });
+}
+
 function renderNav() {
-  document.getElementById('sidenav').innerHTML = NAV.map(function (n) {
+  var items = visibleNav();
+
+  document.getElementById('sidenav').innerHTML = items.map(function (n) {
     return '<button class="navitem" data-nav="' + n.key + '" onclick="go(\'' + n.key + '\')">' +
       icon(n.icon) + '<span>' + esc(n.label) + '</span></button>';
   }).join('');
 
-  document.getElementById('bottomnav').innerHTML = NAV.map(function (n) {
+  document.getElementById('bottomnav').innerHTML = items.map(function (n) {
     return '<button class="tab" data-nav="' + n.key + '" onclick="go(\'' + n.key + '\')">' +
       icon(n.icon, 22) + '<span>' + esc(n.short) + '</span></button>';
   }).join('');
@@ -168,6 +176,7 @@ function go(name, param) {
     list: renderList,
     dashboard: renderDashboard,
     followups: renderFollowups,
+    settings: renderSettings,
     patient: renderPatientForm,
     detail: renderDetail,
     bi: renderBiForm,
@@ -185,11 +194,10 @@ function boot() {
   call('apiBootstrap').then(function (b) {
     BOOT = b;
     document.getElementById('app-name').textContent = b.appName;
-    document.getElementById('app-org').textContent = b.org;
+    document.getElementById('app-org-unit').textContent = b.orgUnit || b.org;
+    document.getElementById('app-org-place').textContent = b.orgPlace || '';
     document.getElementById('who-email').textContent = b.user.email;
-    document.getElementById('user-initial').textContent = initials(b.user.email);
-    document.getElementById('mask-note').hidden = !b.maskMode;
-    document.getElementById('mask-banner').hidden = !b.maskMode;
+    document.getElementById('user-initial').textContent = initials(b.user.email);    document.getElementById('mask-banner').hidden = !b.maskMode;
     renderNav();
     go('list');
   }).catch(function (e) {
@@ -799,6 +807,144 @@ function renderFollowups() {
   }).catch(fail);
 }
 
+/* ------------------------------------------------------ ตั้งค่าผู้ใช้งาน */
+
+/** สิทธิ์แก้ไขไฟล์ Sheet เป็นคนละเรื่องกับสิทธิ์ในแอป ต้องมีทั้งคู่ถึงจะบันทึกได้ */
+function fileAccessCell(u) {
+  if (u.fileAccess === true) return '<span class="chip chip-ok">แชร์แล้ว</span>';
+  if (u.fileAccess === null) return '<span class="chip">ตรวจสอบไม่ได้</span>';
+  return '<span class="chip chip-warn">ยังไม่ได้แชร์</span> ' +
+    '<button class="btn btn-sm u-share" data-email="' + esc(u.email) + '">แชร์ไฟล์ให้</button>';
+}
+
+function renderSettings() {
+  busy();
+  call('apiListUsers').then(function (users) {
+    var meEmail = String(BOOT.user.email).toLowerCase();
+
+    var html = '<div class="page-head"><div class="head-text"><h1>ตั้งค่า</h1>' +
+      '<span class="sub num">ผู้ใช้งาน ' + users.length + ' คน · ใช้งานอยู่ ' +
+      users.filter(function (u) { return u.active; }).length + ' คน</span></div></div>';
+
+    if (BOOT.user.noAdminYet) {
+      html += '<div class="card" style="border-color:#f3cfc4;background:#fffaf8">' +
+        '<h2 style="color:var(--warn)">ยังไม่มีผู้ดูแลระบบ</h2>' +
+        '<p style="margin:0 0 4px;color:var(--body);line-height:1.6">' +
+        'ตอนนี้ยังไม่มีใครถูกตั้งเป็นผู้ดูแลระบบ ทุกคนที่ลงทะเบียนไว้จึงเข้าหน้านี้ได้ชั่วคราว ' +
+        'กดปุ่มด้านล่างเพื่อตั้งตัวเองเป็นผู้ดูแล แล้วช่องทางชั่วคราวนี้จะปิดทันที</p>' +
+        '<div class="btn-row"><button class="btn btn-primary" id="claim-admin">' +
+        'ตั้ง ' + esc(BOOT.user.email) + ' เป็นผู้ดูแลระบบ</button></div></div>';
+    }
+
+    html += '<div class="card"><h2>เพิ่มผู้ใช้งาน</h2>' +
+      '<form id="user-form"><div class="grid">' +
+      field({ k: 'email', l: 'อีเมล Google', t: 'email', req: true, ph: 'name@gmail.com' }) +
+      field({ k: 'name', l: 'ชื่อ-ตำแหน่ง', t: 'text', ph: 'เช่น สมศรี (พยาบาล)' }) +
+      field({ k: 'role', l: 'สิทธิ์', t: 'select', o: BOOT.vocab.ROLE, req: true }) +
+      '</div><div class="btn-row"><button type="submit" class="btn btn-primary">เพิ่มผู้ใช้</button></div>' +
+      '</form>' +
+      '<p style="color:var(--muted);font-size:13px;margin:14px 0 0;line-height:1.6">' +
+      'ระบบจะแชร์ไฟล์ Google Sheet ให้ในสิทธิ์ผู้แก้ไขอัตโนมัติ ' +
+      'ถ้าแชร์ไม่สำเร็จจะขึ้นสถานะเตือนไว้ในตารางด้านล่าง</p></div>';
+
+    html += '<div class="card flush"><div class="table-wrap"><table class="cards"><thead><tr>' +
+      '<th>อีเมล</th><th>ชื่อ</th><th>สิทธิ์</th><th>สถานะ</th><th>การเข้าถึงไฟล์</th>' +
+      '</tr></thead><tbody>' +
+      users.map(function (u) {
+        var isSelf = (u.email.toLowerCase() === meEmail);
+        return '<tr style="cursor:default">' +
+          '<td class="head"><strong>' + esc(u.email) + '</strong>' +
+            (isSelf ? ' <span class="chip chip-sq">คุณ</span>' : '') + '</td>' +
+          '<td data-l="อีเมล" class="hn-cell">' + esc(u.email) +
+            (isSelf ? ' <span class="chip chip-sq">คุณ</span>' : '') + '</td>' +
+          '<td data-l="ชื่อ" class="name-cell">' + esc(u.name || '—') + '</td>' +
+          '<td data-l="สิทธิ์">' +
+            (isSelf ? '<span class="chip chip-brand">ผู้ดูแลระบบ</span>'
+              : '<select class="u-role" data-email="' + esc(u.email) + '" autocomplete="off">' +
+                BOOT.vocab.ROLE.map(function (r) {
+                  return '<option value="' + r + '"' + (r === u.role ? ' selected' : '') + '>' +
+                    (r === 'admin' ? 'ผู้ดูแลระบบ' : 'ผู้ใช้ทั่วไป') + '</option>';
+                }).join('') + '</select>') +
+          '</td>' +
+          '<td data-l="สถานะ">' +
+            (isSelf ? '<span class="chip chip-brand">ใช้งานอยู่</span>'
+              : '<label class="check"><input type="checkbox" class="u-active" ' +
+                'data-email="' + esc(u.email) + '"' + (u.active ? ' checked' : '') + '>' +
+                '<span>' + (u.active ? 'ใช้งานอยู่' : 'ปิดการใช้งาน') + '</span></label>') +
+          '</td>' +
+          '<td data-l="ไฟล์">' + fileAccessCell(u) + '</td></tr>';
+      }).join('') +
+      '</tbody></table></div></div>';
+
+    html += '<div class="card"><h2>สิทธิ์แต่ละระดับ</h2><dl class="kv">' +
+      kv('ผู้ใช้ทั่วไป', 'ลงทะเบียนเคส ประเมิน BI บันทึกการติดตาม และดูข้อมูลทั้งหมด') +
+      kv('ผู้ดูแลระบบ', 'ทำได้ทุกอย่างเหมือนผู้ใช้ทั่วไป และเพิ่มหรือปิดสิทธิ์ผู้ใช้ในหน้านี้') +
+      '</dl></div>';
+
+    main().innerHTML = html;
+
+    var claim = document.getElementById('claim-admin');
+    if (claim) {
+      claim.addEventListener('click', function () {
+        claim.disabled = true; claim.textContent = 'กำลังตั้งค่า…';
+        call('apiClaimAdmin').then(function (r) {
+          BOOT.user.isAdmin = true;
+          BOOT.user.noAdminYet = false;
+          BOOT.user.role = 'admin';
+          toast('ตั้ง ' + r.email + ' เป็นผู้ดูแลระบบแล้ว');
+          renderSettings();
+        }).catch(function (err) { claim.disabled = false; fail(err); renderSettings(); });
+      });
+    }
+
+    $('#user-form').addEventListener('submit', function (e) {
+      e.preventDefault();
+      var data = readForm(e.target);
+      data.active = 'TRUE';
+      var btn = e.target.querySelector('button[type=submit]');
+      btn.disabled = true; btn.textContent = 'กำลังบันทึก…';
+      call('apiSaveUser', data).then(function (r) {
+        if (r.shared) {
+          toast('เพิ่ม ' + r.email + ' และแชร์ไฟล์ให้แล้ว');
+        } else {
+          toast('เพิ่ม ' + r.email + ' แล้ว แต่แชร์ไฟล์ไม่สำเร็จ: ' + r.shareError, true);
+        }
+        renderSettings();
+      }).catch(function (err) {
+        btn.disabled = false; btn.textContent = 'เพิ่มผู้ใช้';
+        fail(err);
+      });
+    });
+
+    Array.prototype.forEach.call(document.querySelectorAll('.u-share'), function (el) {
+      el.addEventListener('click', function () {
+        el.disabled = true; el.textContent = 'กำลังแชร์…';
+        call('apiShareFile', el.getAttribute('data-email')).then(function (r) {
+          toast('แชร์ไฟล์ให้ ' + r.email + ' แล้ว');
+          renderSettings();
+        }).catch(function (err) { el.disabled = false; el.textContent = 'แชร์ไฟล์ให้'; fail(err); });
+      });
+    });
+
+    Array.prototype.forEach.call(document.querySelectorAll('.u-role, .u-active'), function (el) {
+      el.addEventListener('change', function () {
+        var email = el.getAttribute('data-email');
+        var row = users.filter(function (u) { return u.email === email; })[0];
+        var data = {
+          email: email,
+          name: row.name,
+          role: el.classList.contains('u-role') ? el.value : row.role,
+          active: (el.classList.contains('u-active') ? el.checked : row.active) ? 'TRUE' : 'FALSE'
+        };
+        call('apiSaveUser', data).then(function () {
+          toast('อัปเดต ' + email + ' แล้ว');
+          renderSettings();
+        }).catch(function (err) { fail(err); renderSettings(); });
+      });
+    });
+  }).catch(fail);
+}
+
 /* ---------------------------------------------------------- ภาพรวมงาน */
 
 function renderDashboard() {
@@ -824,9 +970,10 @@ function renderDashboard() {
         d.months.map(function (m) {
           var p = m.month.split('-');
           var label = TH_MONTHS[parseInt(p[1], 10) - 1] + ' ' + String(parseInt(p[0], 10) + 543).slice(-2);
-          return '<div class="bar">' +
+          return '<div class="bar" title="' + esc(label) + ' · ' + m.count + ' ราย">' +
             '<span class="val num">' + m.count + '</span>' +
-            '<div class="fill" style="height:' + Math.round((m.count / maxCount) * 100) + '%"></div>' +
+            '<div class="track"><div class="fill" style="height:' +
+              Math.max(Math.round((m.count / maxCount) * 100), 2) + '%"></div></div>' +
             '<span class="lbl">' + esc(label) + '</span></div>';
         }).join('') + '</div></div>';
     }

@@ -16,7 +16,7 @@ function currentUser_() {
 
   // ยังไม่มีใครในตาราง users เลย ถือว่าอยู่ระหว่างติดตั้ง อนุญาตให้คนที่เปิดไฟล์ได้ใช้งาน
   if (!active.length) {
-    return { email: email, name: email, role: 'staff', bootstrap: true };
+    return { email: email, name: email, role: 'admin', isAdmin: true, bootstrap: true };
   }
 
   var me = active.filter(function (u) {
@@ -26,7 +26,189 @@ function currentUser_() {
   if (!me) {
     throw new Error('บัญชี ' + email + ' ยังไม่มีสิทธิ์ใช้งาน กรุณาให้ผู้ดูแลเพิ่มอีเมลนี้ในชีต users');
   }
-  return { email: email, name: me.name || email, role: me.role || 'staff', bootstrap: false };
+
+  var role = String(me.role || 'staff').toLowerCase();
+
+  /*
+    ถ้ายังไม่มีใครเป็นผู้ดูแลระบบเลย ให้ผู้ใช้ที่ลงทะเบียนไว้ทำหน้าที่แทนไปก่อน
+    ไม่งั้นจะไม่มีใครเพิ่มผู้ใช้ได้เลยนอกจากเข้าไปแก้ในชีตดิบ
+    พอมีผู้ดูแลคนแรกแล้วช่องทางนี้จะปิดทันที
+  */
+  var hasAdmin = active.filter(function (u) {
+    return String(u.role).toLowerCase() === 'admin';
+  }).length > 0;
+
+  return {
+    email: email, name: me.name || email, role: role,
+    isAdmin: role === 'admin' || !hasAdmin,
+    noAdminYet: !hasAdmin,
+    bootstrap: false
+  };
+}
+
+/** ตั้งตัวเองเป็นผู้ดูแลระบบ ใช้ได้เฉพาะตอนที่ยังไม่มีผู้ดูแลคนใดในระบบ */
+function apiClaimAdmin() {
+  var email = String(Session.getActiveUser().getEmail() || '').trim();
+  if (!email) throw new Error('อ่านอีเมลของผู้ใช้ไม่ได้');
+
+  return withLock_(function () {
+    var rows = readAll_(SHEETS.USERS);
+    var admins = rows.filter(function (u) {
+      return String(u.role).toLowerCase() === 'admin' && String(u.active).toUpperCase() !== 'FALSE';
+    });
+    if (admins.length) {
+      throw new Error('มีผู้ดูแลระบบอยู่แล้ว ให้ผู้ดูแลคนนั้นเป็นผู้เพิ่มสิทธิ์ให้');
+    }
+
+    var me = rows.filter(function (u) {
+      return String(u.email).trim().toLowerCase() === email.toLowerCase();
+    })[0];
+
+    var rec = {
+      email: email,
+      name: me ? me.name : '',
+      role: 'admin',
+      active: 'TRUE',
+      added_at: me ? (me.added_at || nowIso_()) : nowIso_()
+    };
+    if (me) updateObject_(SHEETS.USERS, me._row, rec);
+    else appendObject_(SHEETS.USERS, rec);
+
+    return { ok: true, email: email };
+  });
+}
+
+/** ใช้กับฟังก์ชันที่ผู้ใช้ทั่วไปไม่ควรเรียกได้ */
+function requireAdmin_() {
+  var u = currentUser_();
+  if (!u.isAdmin && !u.bootstrap) {
+    throw new Error('เฉพาะผู้ดูแลระบบเท่านั้นที่ทำรายการนี้ได้');
+  }
+  return u;
+}
+
+/* --------------------------------------------------------- จัดการผู้ใช้ */
+
+/**
+ * รายชื่อคนที่มีสิทธิ์แก้ไขไฟล์ Sheet
+ * คืนค่า null ถ้าอ่านไม่ได้ เพื่อให้หน้าจอแยกได้ว่า "ไม่มีสิทธิ์" กับ "ตรวจไม่ได้"
+ */
+function fileEditors_() {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var list = ss.getEditors().map(function (u) { return String(u.getEmail()).toLowerCase(); });
+    var owner = ss.getOwner();
+    if (owner) list.push(String(owner.getEmail()).toLowerCase());
+    return list;
+  } catch (e) {
+    return null;
+  }
+}
+
+/**
+ * แชร์ไฟล์ Sheet ให้ผู้ใช้ในสิทธิ์ผู้แก้ไข
+ * จำเป็นเพราะแอปตั้งค่าให้แต่ละคนรันสคริปต์ด้วยบัญชีตัวเอง
+ * ถ้าไม่มีสิทธิ์แก้ไขไฟล์จะเปิดแอปได้แต่กดบันทึกไม่ผ่าน
+ */
+function shareWithEditor_(email) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var editors = fileEditors_();
+    if (editors && editors.indexOf(email.toLowerCase()) !== -1) {
+      return { shared: true, already: true };
+    }
+    ss.addEditor(email);
+    return { shared: true, already: false };
+  } catch (e) {
+    return { shared: false, error: e.message };
+  }
+}
+
+function apiShareFile(email) {
+  requireAdmin_();
+  var target = String(email || '').trim();
+  if (!target) throw new Error('กรุณาระบุอีเมล');
+  var r = shareWithEditor_(target);
+  if (!r.shared) throw new Error('แชร์ไฟล์ให้ ' + target + ' ไม่สำเร็จ: ' + r.error);
+  return { ok: true, email: target, already: r.already };
+}
+
+function apiListUsers() {
+  requireAdmin_();
+  var editors = fileEditors_();
+
+  return readAll_(SHEETS.USERS)
+    .filter(function (u) { return String(u.email).trim(); })
+    .map(function (u) {
+      var email = String(u.email).trim();
+      return {
+        email: email,
+        name: u.name || '',
+        role: String(u.role || 'staff').toLowerCase(),
+        active: String(u.active).toUpperCase() !== 'FALSE',
+        added_at: u.added_at || '',
+        // null = ตรวจสิทธิ์ไฟล์ไม่ได้ ไม่ใช่ว่าไม่มีสิทธิ์
+        fileAccess: editors === null ? null : (editors.indexOf(email.toLowerCase()) !== -1)
+      };
+    });
+}
+
+/**
+ * เพิ่มหรือแก้ผู้ใช้ ใช้อีเมลเป็นกุญแจ
+ * กันสองกรณีที่ทำให้ล็อกตัวเองออกจากระบบ คือปิดสิทธิ์ตัวเอง
+ * และลดสิทธิ์ผู้ดูแลคนสุดท้ายจนไม่เหลือใครจัดการผู้ใช้ได้
+ */
+function apiSaveUser(form) {
+  var me = requireAdmin_();
+
+  var email = String(form.email || '').trim().toLowerCase();
+  if (!email) throw new Error('กรุณากรอกอีเมล');
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error('รูปแบบอีเมลไม่ถูกต้อง: ' + email);
+
+  var role = String(form.role || 'staff').toLowerCase();
+  if (role !== 'admin' && role !== 'staff') throw new Error('สิทธิ์ต้องเป็น admin หรือ staff');
+  var active = String(form.active).toUpperCase() !== 'FALSE';
+
+  var isSelf = (email === String(me.email).trim().toLowerCase());
+  if (isSelf && (!active || role !== 'admin')) {
+    throw new Error('ลดสิทธิ์หรือปิดการใช้งานบัญชีตัวเองไม่ได้ ให้ผู้ดูแลคนอื่นเป็นคนทำแทน');
+  }
+
+  return withLock_(function () {
+    var rows = readAll_(SHEETS.USERS);
+    var existing = rows.filter(function (u) {
+      return String(u.email).trim().toLowerCase() === email;
+    })[0];
+
+    var admins = rows.filter(function (u) {
+      return String(u.role).toLowerCase() === 'admin' && String(u.active).toUpperCase() !== 'FALSE';
+    });
+    var wasActiveAdmin = existing &&
+      String(existing.role).toLowerCase() === 'admin' &&
+      String(existing.active).toUpperCase() !== 'FALSE';
+    if (wasActiveAdmin && (role !== 'admin' || !active) && admins.length <= 1) {
+      throw new Error('ต้องเหลือผู้ดูแลระบบอย่างน้อย 1 คน');
+    }
+
+    var rec = {
+      email: email,
+      name: form.name || (existing ? existing.name : ''),
+      role: role,
+      active: active ? 'TRUE' : 'FALSE',
+      added_at: existing ? (existing.added_at || nowIso_()) : nowIso_()
+    };
+
+    if (existing) updateObject_(SHEETS.USERS, existing._row, rec);
+    else appendObject_(SHEETS.USERS, rec);
+
+    // ให้สิทธิ์แก้ไขไฟล์ไปพร้อมกัน จะได้ไม่ต้องไปกดแชร์เองอีกที
+    var share = active ? shareWithEditor_(email) : { shared: false, error: 'ปิดการใช้งานอยู่' };
+
+    return {
+      ok: true, email: email, created: !existing,
+      shared: share.shared, alreadyShared: !!share.already, shareError: share.error || ''
+    };
+  });
 }
 
 /* ---------------------------------------------------------------- ตั้งต้น */
@@ -38,6 +220,8 @@ function apiBootstrap() {
     user: user,
     appName: CONFIG.APP_NAME,
     org: CONFIG.ORG,
+    orgUnit: CONFIG.ORG_UNIT,
+    orgPlace: CONFIG.ORG_PLACE,
     maskMode: CONFIG.MASK_MODE,
     biItems: BI_ITEMS,
     biMax: BI_MAX,

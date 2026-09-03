@@ -13,3 +13,6 @@ migration-preview.csv
 node_modules/
 .DS_Store
 Thumbs.db
+
+# ไฟล์ mockup ที่ประกอบขึ้นใหม่ได้จาก .dc.html ทุกครั้ง ไม่ต้องเก็บใน repo
+mockup/imc-app-redesign.html

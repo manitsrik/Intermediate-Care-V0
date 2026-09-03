@@ -45,12 +45,26 @@ function toast(msg, isError) {
   toastTimer = setTimeout(function () { el.hidden = true; }, isError ? 7000 : 3000);
 }
 
-function fail(e) {
-  toast((e && e.message) ? e.message : String(e), true);
-}
+function fail(e) { toast((e && e.message) ? e.message : String(e), true); }
 
 function busy(msg) {
   main().innerHTML = '<div class="loading">' + esc(msg || 'กำลังโหลด…') + '</div>';
+}
+
+/* --------------------------------------------------------------- ไอคอน */
+
+var ICONS = {
+  dashboard: '<rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect>',
+  patients: '<path d="M16 20v-1.5a3.5 3.5 0 0 0-3.5-3.5h-5A3.5 3.5 0 0 0 4 18.5V20"></path><circle cx="10" cy="8" r="3.2"></circle><path d="M19 20v-1.4a3.2 3.2 0 0 0-2.4-3.1"></path><path d="M15.2 5.2a3.2 3.2 0 0 1 0 5.6"></path>',
+  followups: '<rect x="4" y="5.5" width="16" height="14.5" rx="2"></rect><path d="M4 10h16M9 3.5v4M15 3.5v4"></path>',
+  back: '<path d="M19 12H5M11 6l-6 6 6 6"></path>',
+  arrow: '<path d="M5 12h14M13 6l6 6-6 6"></path>'
+};
+
+function icon(name, size, stroke) {
+  return '<svg width="' + (size || 18) + '" height="' + (size || 18) + '" viewBox="0 0 24 24" ' +
+    'fill="none" stroke="currentColor" stroke-width="' + (stroke || 1.6) + '" ' +
+    'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + ICONS[name] + '</svg>';
 }
 
 /* --------------------------------------------------------------- วันที่ */
@@ -80,17 +94,17 @@ function field(f, value) {
       return '<option value="' + esc(val) + '"' + (String(val) === String(v) ? ' selected' : '') + '>' +
         esc(val) + '</option>';
     }));
-    input = '<select name="' + f.k + '"' + (f.req ? ' required' : '') + '>' + opts.join('') + '</select>';
+    input = '<select name="' + f.k + '" autocomplete="off"' + (f.req ? ' required' : '') + '>' + opts.join('') + '</select>';
   } else if (f.t === 'textarea') {
     input = '<textarea name="' + f.k + '">' + esc(v) + '</textarea>';
   } else if (f.t === 'checkbox') {
-    return '<label class="' + cls + '" style="flex-direction:row;align-items:center;gap:8px">' +
-      '<input type="checkbox" name="' + f.k + '" style="width:auto"' +
+    return '<label class="check' + (f.full ? ' full' : '') + '">' +
+      '<input type="checkbox" name="' + f.k + '"' +
       (String(v) === 'TRUE' || v === true ? ' checked' : '') + '>' +
       '<span>' + esc(f.l) + '</span></label>';
   } else {
     input = '<input type="' + (f.t || 'text') + '" name="' + f.k + '" value="' + esc(v) + '"' +
-      (f.ph ? ' placeholder="' + esc(f.ph) + '"' : '') +
+      ' autocomplete="off"' + (f.ph ? ' placeholder="' + esc(f.ph) + '"' : '') +
       (f.req ? ' required' : '') + '>';
   }
   return '<label class="' + cls + '">' + label + input + '</label>';
@@ -109,22 +123,62 @@ function readForm(formEl) {
 
 /* ----------------------------------------------------------- โครงหน้าจอ */
 
+var NAV = [
+  { key: 'dashboard', icon: 'dashboard', label: 'ภาพรวม', short: 'ภาพรวม' },
+  { key: 'list', icon: 'patients', label: 'รายชื่อผู้ป่วย', short: 'ผู้ป่วย' },
+  { key: 'followups', icon: 'followups', label: 'การติดตาม', short: 'ติดตาม' }
+];
+
+/** หน้าย่อยที่ควรทำให้เมนูหลักตัวไหนสว่างค้างไว้ */
+var NAV_OF_VIEW = {
+  list: 'list', patient: 'list', detail: 'list', bi: 'list', fu: 'list', close: 'list',
+  dashboard: 'dashboard', followups: 'followups'
+};
+
+var TITLE_OF_VIEW = {
+  list: 'รายชื่อผู้ป่วย', patient: 'ข้อมูลผู้ป่วย', detail: 'เวชระเบียน',
+  bi: 'ประเมิน BI', fu: 'บันทึกการติดตาม', close: 'จบโปรแกรม',
+  dashboard: 'ภาพรวมงาน', followups: 'การติดตาม'
+};
+
+function renderNav() {
+  document.getElementById('sidenav').innerHTML = NAV.map(function (n) {
+    return '<button class="navitem" data-nav="' + n.key + '" onclick="go(\'' + n.key + '\')">' +
+      icon(n.icon) + '<span>' + esc(n.label) + '</span></button>';
+  }).join('');
+
+  document.getElementById('bottomnav').innerHTML = NAV.map(function (n) {
+    return '<button class="tab" data-nav="' + n.key + '" onclick="go(\'' + n.key + '\')">' +
+      icon(n.icon, 22) + '<span>' + esc(n.short) + '</span></button>';
+  }).join('');
+}
+
 function go(name, param) {
   VIEW = { name: name, param: param };
+
+  var active = NAV_OF_VIEW[name] || '';
   Array.prototype.forEach.call(document.querySelectorAll('[data-nav]'), function (b) {
-    b.classList.toggle('active', b.getAttribute('data-nav') === name);
+    b.classList.toggle('active', b.getAttribute('data-nav') === active);
   });
+  document.getElementById('mobile-title').textContent = TITLE_OF_VIEW[name] || '';
+  document.body.classList.toggle('hide-tabs', name === 'bi');
+
   window.scrollTo(0, 0);
-  var fn = ({
+  ({
     list: renderList,
     dashboard: renderDashboard,
+    followups: renderFollowups,
     patient: renderPatientForm,
     detail: renderDetail,
     bi: renderBiForm,
     fu: renderFuForm,
     close: renderCloseForm
-  })[name];
-  fn(param);
+  })[name](param);
+}
+
+function initials(name) {
+  var s = String(name || '').trim();
+  return s ? s.charAt(0) : '?';
 }
 
 function boot() {
@@ -133,7 +187,10 @@ function boot() {
     document.getElementById('app-name').textContent = b.appName;
     document.getElementById('app-org').textContent = b.org;
     document.getElementById('who-email').textContent = b.user.email;
+    document.getElementById('user-initial').textContent = initials(b.user.email);
+    document.getElementById('mask-note').hidden = !b.maskMode;
     document.getElementById('mask-banner').hidden = !b.maskMode;
+    renderNav();
     go('list');
   }).catch(function (e) {
     main().innerHTML = '<div class="card"><h2>เข้าใช้งานไม่ได้</h2><p>' +
@@ -148,25 +205,28 @@ var listFilter = { q: '', status: '', screening: '' };
 function renderList() {
   busy();
   call('apiListPatients', listFilter).then(function (rows) {
-    var html = '' +
+    var active = rows.filter(function (p) { return String(p.status) !== 'closed'; }).length;
+
+    var html =
       '<div class="page-head">' +
-      '  <h1>รายชื่อผู้ป่วย</h1>' +
+      '  <div class="head-text">' +
+      '    <h1>รายชื่อผู้ป่วย</h1>' +
+      '    <span class="sub num">ทั้งหมด ' + rows.length + ' ราย · กำลังดูแล ' + active + ' ราย</span>' +
+      '  </div>' +
       '  <div class="spacer"></div>' +
       '  <button class="btn btn-primary" onclick="go(\'patient\')">+ ลงทะเบียนเคสใหม่</button>' +
       '</div>' +
-      // autocomplete=off กันเบราว์เซอร์จำค่าตัวกรองข้ามการโหลดหน้า
-      // ซึ่งทำให้ผู้ใช้เห็นรายชื่อไม่ครบโดยไม่รู้ตัว
       '<div class="filters">' +
       '  <input id="f-q" autocomplete="off" placeholder="ค้นหา HN ชื่อ ตำบล หรือ Dx" value="' + esc(listFilter.q) + '">' +
       '  <select id="f-status" autocomplete="off">' +
       '    <option value="">ทุกสถานะ</option>' +
-      '    <option value="active">อยู่ในโปรแกรม</option>' +
+      '    <option value="active">กำลังดูแล</option>' +
       '    <option value="closed">จบโปรแกรมแล้ว</option>' +
       '  </select>' +
       '  <select id="f-screening" autocomplete="off">' +
       '    <option value="">ทุกผลคัดกรอง</option>' +
       '    <option value="IMC">เข้า IMC</option>' +
-      '    <option value="NoIMC">ไม่เข้า IMC</option>' +
+      '    <option value="NoIMC">ไม่เข้าเกณฑ์</option>' +
       '  </select>' +
       '</div>';
 
@@ -174,28 +234,14 @@ function renderList() {
       html += '<div class="card"><div class="empty">ยังไม่มีข้อมูลตามเงื่อนไขนี้</div></div>';
     } else {
       // data-l ใช้เป็นป้ายกำกับตอนตารางกลายเป็นการ์ดบนมือถือ (ดู css.html)
-      html += '<div class="card list-card" style="padding:0"><div class="table-wrap"><table class="cards"><thead><tr>' +
-        '<th>HN</th><th>ชื่อ-สกุล</th><th>Dx</th><th>ward</th><th>วัน Start</th>' +
-        '<th>BI แรก</th><th>BI ล่าสุด</th><th>ผลคัดกรอง</th><th>สถานะ</th>' +
+      // จำนวนช่องที่มองเห็นต้องเท่ากับจำนวนหัวตารางเสมอ ไม่งั้นข้อมูลจะเลื่อนคอลัมน์
+      html += '<div class="card flush"><div class="table-wrap"><table class="cards"><thead><tr>' +
+        '<th>ผู้ป่วย</th><th>การวินิจฉัย</th><th>Ward</th><th>วัน Start</th>' +
+        '<th>Barthel Index</th><th>ผลคัดกรอง</th><th>สถานะ</th>' +
         '</tr></thead><tbody>' +
-        rows.map(function (p) {
-          return '<tr onclick="go(\'detail\',\'' + esc(p.hn) + '\')">' +
-            // head ใช้เฉพาะบนมือถือ ส่วน hn-cell กับ name-cell ใช้เฉพาะบนจอใหญ่
-            // จำนวนช่องที่มองเห็นต้องเท่ากับจำนวนหัวตารางเสมอ ไม่งั้นข้อมูลจะเลื่อนคอลัมน์
-            '<td class="head"><strong>' + esc(p.hn) + '</strong> ' + esc(p.full_name || '') + '</td>' +
-            '<td data-l="HN" class="hn-cell"><strong>' + esc(p.hn) + '</strong></td>' +
-            '<td data-l="ชื่อ-สกุล" class="name-cell">' + esc(p.full_name || '—') + '</td>' +
-            '<td data-l="Dx">' + esc(p.dx || '—') + '</td>' +
-            '<td data-l="ward">' + esc(p.ward || '—') + '</td>' +
-            '<td data-l="วัน Start">' + esc(thDate(p.start_date)) + '</td>' +
-            '<td data-l="BI แรก">' + esc(p.first_bi === '' ? '—' : p.first_bi) + '</td>' +
-            '<td data-l="BI ล่าสุด">' + esc(p.latest_bi === '' ? '—' : p.latest_bi) + '</td>' +
-            '<td data-l="ผลคัดกรอง">' + screeningChip(p.screening_result) + '</td>' +
-            '<td data-l="สถานะ">' + statusChip(p.status) + '</td>' +
-            '</tr>';
-        }).join('') +
+        rows.map(patientRow).join('') +
         '</tbody></table></div></div>' +
-        '<p style="color:var(--muted);font-size:13px">ทั้งหมด ' + rows.length + ' ราย</p>';
+        '<p class="count-line num">แสดง ' + rows.length + ' ราย</p>';
     }
 
     main().innerHTML = html;
@@ -213,16 +259,59 @@ function renderList() {
   }).catch(fail);
 }
 
+function patientRow(p) {
+  var meta = [p.sex, p.age ? p.age + ' ปี' : ''].filter(String).join(' · ');
+  return '<tr onclick="go(\'detail\',\'' + esc(p.hn) + '\')">' +
+    '<td class="head"><strong>' + esc(p.hn) + '</strong> ' + esc(p.full_name || '') + '</td>' +
+    '<td data-l="ผู้ป่วย" class="name-cell"><div class="cell-person">' +
+      '<span class="avatar row">' + esc(initials(p.first_name)) + '</span>' +
+      '<span class="who"><b>' + esc(p.full_name || '—') + '</b>' +
+      '<small class="num">' + esc(p.hn) + (meta ? ' · ' + esc(meta) : '') + '</small></span>' +
+    '</div></td>' +
+    '<td data-l="Dx">' + esc(p.dx || '—') + '</td>' +
+    '<td data-l="Ward">' + esc(p.ward || '—') + '</td>' +
+    '<td data-l="วัน Start" class="num">' + esc(thDate(p.start_date)) + '</td>' +
+    '<td data-l="BI">' + biCell(p.first_bi, p.latest_bi) + '</td>' +
+    '<td data-l="ผลคัดกรอง">' + screeningChip(p.screening_result) + '</td>' +
+    '<td data-l="สถานะ">' + statusChip(p.status) + '</td>' +
+    '</tr>';
+}
+
+/** แสดงพัฒนาการเป็น "แรกรับ → ล่าสุด" พร้อมส่วนต่าง อ่านทีเดียวจบ */
+function biCell(first, latest) {
+  if (first === '' || first === undefined || first === null) {
+    return '<span style="color:var(--faint)">ยังไม่ประเมิน</span>';
+  }
+  var a = Number(first), b = Number(latest);
+  var diff = b - a;
+  var badge = isNaN(diff) ? '' :
+    (diff > 0
+      ? '<span class="chip chip-ok chip-sq num">+' + diff + '</span>'
+      : (diff === 0
+        ? '<span class="chip chip-flat chip-sq num">0</span>'
+        : '<span class="chip chip-warn chip-sq num">' + diff + '</span>'));
+
+  return '<span class="bi-cell num"><span class="from">' + esc(a) + '</span>' +
+    '<span style="color:#b6bec6">' + icon('arrow', 14, 2) + '</span>' +
+    '<span class="to">' + esc(isNaN(b) ? '—' : b) + '</span>' + badge + '</span>';
+}
+
 function screeningChip(v) {
-  if (v === 'IMC') return '<span class="chip chip-imc">เข้า IMC</span>';
-  if (v === 'NoIMC') return '<span class="chip chip-no">ไม่เข้า</span>';
+  if (v === 'IMC') return '<span class="chip chip-brand">เข้า IMC</span>';
+  if (v === 'NoIMC') return '<span class="chip">ไม่เข้าเกณฑ์</span>';
   return '<span class="chip">ยังไม่ประเมิน</span>';
 }
 
 function statusChip(v) {
   return v === 'closed'
-    ? '<span class="chip chip-closed">จบโปรแกรม</span>'
-    : '<span class="chip chip-imc">กำลังดูแล</span>';
+    ? '<span class="chip chip-flat">จบโปรแกรม</span>'
+    : '<span class="chip chip-brand">กำลังดูแล</span>';
+}
+
+function backBtn(view, param) {
+  return '<button class="back" onclick="go(\'' + view + '\'' +
+    (param ? ',\'' + esc(param) + '\'' : '') + ')">' + icon('back', 15, 2) +
+    '<span>ย้อนกลับ</span></button>';
 }
 
 /* ------------------------------------------------------ ฟอร์มข้อมูลผู้ป่วย */
@@ -243,8 +332,8 @@ function patientSections() {
     ['การวินิจฉัย', [
       { k: 'dx', l: 'Dx', t: 'select', o: V.DX, req: true },
       { k: 'hemiparesis_side', l: 'hemiparesis ข้าง', t: 'text', ph: 'เช่น right, left' },
-      { k: 'rt_pa', l: 'ได้รับ rt-PA', t: 'checkbox' },
       { k: 'dx_detail', l: 'Diagnosis ร่วม / รายละเอียด', t: 'text' },
+      { k: 'rt_pa', l: 'ได้รับ rt-PA', t: 'checkbox' },
       { k: 'ct_mri', l: 'CT / MRI / X-ray', t: 'textarea', full: true },
       { k: 'operation', l: 'Operation', t: 'textarea', full: true },
       { k: 'underlying', l: 'U/D (โรคประจำตัว)', t: 'textarea', full: true },
@@ -283,11 +372,10 @@ function renderPatientForm(hn) {
 
 function drawPatientForm(p) {
   var isNew = !p.patient_id;
-  var html = '<div class="page-head"><h1>' +
+  var html = backBtn(isNew ? 'list' : 'detail', isNew ? '' : p.hn) +
+    '<div class="page-head"><div class="head-text"><h1>' +
     (isNew ? 'ลงทะเบียนเคสใหม่' : 'แก้ไขข้อมูล ' + esc(p.hn)) +
-    '</h1><div class="spacer"></div>' +
-    '<button class="btn" onclick="go(\'' + (isNew ? 'list' : 'detail') + '\'' +
-    (isNew ? '' : ',\'' + esc(p.hn) + '\'') + ')">ยกเลิก</button></div>' +
+    '</h1></div></div>' +
     '<form id="patient-form">' +
     '<input type="hidden" name="patient_id" value="' + esc(p.patient_id || '') + '">';
 
@@ -325,8 +413,9 @@ function validateCid(cid) {
   if (s.length !== 13) return 'เลขประจำตัวประชาชนมี ' + s.length + ' หลัก ไม่ใช่ 13 หลัก';
   var sum = 0;
   for (var i = 0; i < 12; i++) sum += parseInt(s.charAt(i), 10) * (13 - i);
-  var check = (11 - (sum % 11)) % 10;
-  if (check !== parseInt(s.charAt(12), 10)) return 'เลขประจำตัวประชาชนไม่ผ่านการตรวจสอบหลักสุดท้าย';
+  if (((11 - (sum % 11)) % 10) !== parseInt(s.charAt(12), 10)) {
+    return 'เลขประจำตัวประชาชนไม่ผ่านการตรวจสอบหลักสุดท้าย';
+  }
   return '';
 }
 
@@ -336,96 +425,169 @@ function renderDetail(hn) {
   busy();
   call('apiGetPatient', hn).then(function (d) {
     var p = d.patient;
-    var html = '<div class="page-head">' +
-      '<h1>' + esc(p.full_name || p.hn) + '</h1>' +
-      screeningChip(p.screening_result) + ' ' + statusChip(p.status) +
-      '<div class="spacer"></div>' +
-      '<button class="btn" onclick="go(\'list\')">กลับ</button>' +
-      '<button class="btn" onclick="go(\'patient\',\'' + esc(p.hn) + '\')">แก้ไขข้อมูล</button>' +
-      '</div>';
 
-    html += '<div class="card"><h2>ข้อมูลทั่วไป</h2><dl class="kv">' +
-      kv('HN', p.hn) + kv('เลขประจำตัวประชาชน', p.cid) +
-      kv('เพศ / อายุ', [p.sex, p.age ? p.age + ' ปี' : ''].filter(String).join(' · ')) +
-      kv('สิทธิ์', p.rights) + kv('Dx', p.dx) + kv('Diagnosis ร่วม', p.dx_detail) +
-      kv('U/D', p.underlying) +
-      kv('admit / discharge', thDate(p.admit_date) + ' – ' + thDate(p.dc_date)) +
-      kv('ward', p.ward) +
-      kv('ที่อยู่', [p.address, p.tambon].filter(String).join(' ต.')) +
-      kv('โทรศัพท์', [p.phone1, p.phone2].filter(String).join(' / ')) +
-      kv('โปรแกรม', p.imc_program) +
-      kv('วัน Start', thDate(p.start_date)) +
-      kv('ครบ 6 เดือน', (p.six_month_status || '—') +
-        (p.imc_end_date ? ' (ครบวันที่ ' + thDate(p.imc_end_date) + ')' : '')) +
-      kv('จำนวนครั้งที่ได้ PT', p.pt_visit_count) +
-      (p.status === 'closed' ? kv('เหตุจบโปรแกรม', p.dc_reason) : '') +
-      kv('หมายเหตุ', p.note) +
-      '</dl></div>';
+    var html = backBtn('list') +
+      '<div class="card"><div class="patient-head">' +
+      '<span class="avatar lg">' + esc(initials(p.first_name)) + '</span>' +
+      '<div class="head-text">' +
+      '  <div class="patient-meta" style="gap:10px">' +
+      '    <h1>' + esc(p.full_name || p.hn) + '</h1>' +
+      '    <span class="chip chip-flat num">HN ' + esc(p.hn) + '</span>' +
+      screeningChip(p.screening_result) + statusChip(p.status) +
+      '  </div>' +
+      '  <div class="patient-meta">' +
+      [p.sex && p.age ? esc(p.sex) + ' · ' + esc(p.age) + ' ปี' : '',
+       p.rights ? 'สิทธิ์ ' + esc(p.rights) : '',
+       p.dx ? esc(p.dx) + (p.hemiparesis_side ? ' with ' + esc(p.hemiparesis_side) + ' hemiparesis' : '') : '',
+       p.ward ? 'Ward ' + esc(p.ward) : '']
+        .filter(String).join('<span class="dot">·</span>') +
+      '  </div>' +
+      '</div>' +
+      '<div class="spacer" style="margin-left:auto"></div>' +
+      '<div class="btn-row" style="margin:0">' +
+      '  <button class="btn" onclick="go(\'patient\',\'' + esc(p.hn) + '\')">แก้ไขข้อมูล</button>' +
+      '  <button class="btn" onclick="go(\'fu\',\'' + esc(p.hn) + '\')">บันทึกการติดตาม</button>' +
+      '  <button class="btn btn-primary" onclick="go(\'bi\',\'' + esc(p.hn) + '\')">ประเมิน BI ครั้งใหม่</button>' +
+      '</div></div></div>';
 
-    html += '<div class="card"><h2>คะแนน Barthel Index</h2>' +
+    html += '<div class="cols"><div>';
+
+    html += '<div class="card"><h2>คะแนน Barthel Index' +
+      '<span class="sub num">ประเมินแล้ว ' + d.assessments.length + ' ครั้ง · เต็ม ' + BOOT.biMax + ' คะแนน</span></h2>' +
       (d.assessments.length ? biChart(d.assessments) + biTable(d.assessments)
         : '<div class="empty">ยังไม่มีการประเมิน</div>') +
-      '<div class="btn-row"><button class="btn btn-primary" onclick="go(\'bi\',\'' + esc(p.hn) + '\')">+ ประเมิน BI ครั้งใหม่</button></div>' +
       '</div>';
 
-    html += '<div class="card"><h2>การติดตาม</h2>' +
-      (d.followups.length
-        ? '<div class="timeline">' + d.followups.map(function (f) {
-            return '<div class="tl-item">' +
-              '<div class="tl-date">ครั้งที่ ' + esc(f.seq) + ' · ' + esc(thDate(f.fu_date)) +
-              (f.fu_type ? ' · <span class="chip">' + esc(f.fu_type) + '</span>' : '') + '</div>' +
-              '<div>' + esc(f.complications || f.note || '—') + '</div>' +
-              '</div>';
-          }).join('') + '</div>'
-        : '<div class="empty">ยังไม่มีบันทึกการติดตาม</div>') +
-      '<div class="btn-row"><button class="btn btn-primary" onclick="go(\'fu\',\'' + esc(p.hn) + '\')">+ บันทึกการติดตาม</button>' +
+    html += '<div class="card"><h2>การติดตาม' +
+      '<span class="sub num">' + d.followups.length + ' ครั้ง</span></h2>' +
+      (d.followups.length ? timeline(d.followups) : '<div class="empty">ยังไม่มีบันทึกการติดตาม</div>') +
+      '<div class="btn-row">' +
+      '<button class="btn" onclick="go(\'fu\',\'' + esc(p.hn) + '\')">+ บันทึกการติดตาม</button>' +
       (p.status === 'closed' ? ''
         : '<button class="btn btn-danger" onclick="go(\'close\',\'' + esc(p.hn) + '\')">จบโปรแกรม</button>') +
       '</div></div>';
 
+    html += '</div><div>' + programCard(p) + infoCard(p) + '</div></div>';
+
     main().innerHTML = html;
   }).catch(fail);
+}
+
+function programCard(p) {
+  var total = 183, used = null;
+  if (p.start_date) {
+    var a = String(p.start_date).split('-'), b = new Date();
+    used = Math.round((b - new Date(a[0], a[1] - 1, a[2])) / 86400000);
+    if (used < 0) used = 0;
+    if (used > total) used = total;
+  }
+  var pct = used === null ? 0 : Math.round((used / total) * 100);
+
+  return '<div class="card"><h2>สถานะโปรแกรม</h2>' +
+    (used === null ? '<p style="color:var(--muted);margin:0 0 14px">ยังไม่ได้กำหนดวัน Start</p>' :
+      '<div style="display:flex;align-items:baseline;gap:8px;margin-bottom:10px">' +
+      '<span style="font-size:24px;font-weight:600" class="num">' + used + '</span>' +
+      '<span style="color:var(--muted);font-size:13px" class="num">จาก ' + total + ' วัน</span></div>' +
+      '<div class="progress" style="margin-bottom:14px"><span style="width:' + pct + '%"></span></div>') +
+    '<dl class="kv">' +
+    kv('วัน Start', thDate(p.start_date)) +
+    kv('ครบ 6 เดือน', thDate(p.imc_end_date)) +
+    kv('สถานะ 6 เดือน', p.six_month_status) +
+    kv('จำนวนครั้งที่ได้ PT', p.pt_visit_count) +
+    kv('รูปแบบโปรแกรม', p.imc_program) +
+    (p.status === 'closed' ? kv('เหตุจบโปรแกรม', p.dc_reason) : '') +
+    '</dl></div>';
+}
+
+function infoCard(p) {
+  return '<div class="card"><h2>ข้อมูลทั่วไป</h2><dl class="kv">' +
+    kv('เลขประจำตัว', p.cid) +
+    kv('admit / D/C', thDate(p.admit_date) + ' – ' + thDate(p.dc_date)) +
+    kv('U/D', p.underlying) +
+    kv('CT / MRI', p.ct_mri) +
+    kv('Operation', p.operation) +
+    kv('ปัญหาอื่น ๆ', p.other_problems) +
+    kv('ที่อยู่', [p.address, p.tambon ? 'ต.' + p.tambon : ''].filter(String).join(' ')) +
+    kv('โทรศัพท์', [p.phone1, p.phone2].filter(String).join(' / ')) +
+    kv('วันนัด OPD', thDate(p.kbh_appt_date)) +
+    kv('หมายเหตุ', p.note) +
+    '</dl></div>';
 }
 
 function kv(k, v) {
   return '<dt>' + esc(k) + '</dt><dd>' + esc(v === '' || v === undefined || v === null ? '—' : v) + '</dd>';
 }
 
+function timeline(list) {
+  return '<div class="timeline">' + list.slice().reverse().map(function (f, i, arr) {
+    var last = (i === arr.length - 1);
+    return '<div class="tl-item">' +
+      '<div class="tl-rail"><div class="tl-dot' + (i ? ' past' : '') + '"></div>' +
+      (last ? '' : '<div class="tl-line"></div>') + '</div>' +
+      '<div class="tl-body">' +
+      '<div class="tl-date num">ครั้งที่ ' + esc(f.seq) + ' · ' + esc(thDate(f.fu_date)) +
+      (f.fu_type ? ' <span class="chip chip-sq">' + esc(f.fu_type) + '</span>' : '') + '</div>' +
+      '<div class="tl-note">' + esc(f.complications || f.note || '—') + '</div>' +
+      '</div></div>';
+  }).join('') + '</div>';
+}
+
 function biTable(list) {
   return '<div class="table-wrap"><table><thead><tr>' +
-    '<th>ครั้งที่</th><th>วันที่ประเมิน</th><th>คะแนน</th><th>กลุ่ม CTF</th><th>เข้าเกณฑ์ IMC</th><th>ผู้ประเมิน</th>' +
+    '<th>ครั้งที่</th><th>วันที่ประเมิน</th><th>คะแนน</th><th>กลุ่ม CTF</th><th>เข้าเกณฑ์</th>' +
     '</tr></thead><tbody>' +
     list.map(function (a) {
       return '<tr style="cursor:default">' +
-        '<td>' + esc(a.seq) + '</td>' +
-        '<td>' + esc(thDate(a.assess_date)) + '</td>' +
-        '<td><strong>' + esc(a.total) + '</strong> / ' + BOOT.biMax + '</td>' +
-        '<td>' + esc(a.ctf_group) + '</td>' +
+        '<td class="num">' + esc(a.seq) + '</td>' +
+        '<td class="num">' + esc(thDate(a.assess_date)) + '</td>' +
+        '<td class="num"><strong>' + esc(a.total) + '</strong> / ' + BOOT.biMax + '</td>' +
+        '<td>' + esc(a.ctf_group || '—') + '</td>' +
         '<td>' + (String(a.imc_eligible).toUpperCase() === 'TRUE' ? 'ใช่' : '—') + '</td>' +
-        '<td style="font-size:12px;color:var(--muted)">' + esc(a.assessed_by) + '</td>' +
         '</tr>';
     }).join('') + '</tbody></table></div>';
 }
 
-/** กราฟเส้นแสดงพัฒนาการคะแนน BI */
+/**
+ * กราฟเส้นแสดงพัฒนาการคะแนน BI พร้อมเส้นเกณฑ์ 15 คะแนน
+ * เห็นได้ทันทีว่าผู้ป่วยข้ามเกณฑ์เข้าโปรแกรมตอนไหน
+ */
 function biChart(list) {
   if (list.length < 2) return '';
-  var w = 100, h = 40, max = BOOT.biMax;
-  var pts = list.map(function (a, i) {
-    var x = (i / (list.length - 1)) * w;
-    var y = h - (Number(a.total) / max) * h;
-    return x.toFixed(1) + ',' + y.toFixed(1);
-  }).join(' ');
-  return '<svg viewBox="-4 -4 ' + (w + 8) + ' ' + (h + 8) + '" ' +
-    'style="width:100%;max-width:420px;height:120px;margin-bottom:12px" ' +
-    'role="img" aria-label="กราฟคะแนน Barthel Index">' +
-    '<polyline points="' + pts + '" fill="none" stroke="#0b6b5e" stroke-width="1.5" ' +
-    'stroke-linejoin="round" stroke-linecap="round"/>' +
-    list.map(function (a, i) {
-      var x = (i / (list.length - 1)) * w;
-      var y = h - (Number(a.total) / max) * h;
-      return '<circle cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="1.8" fill="#0b6b5e"/>';
-    }).join('') +
+  var W = 700, H = 160, L = 34, R = 690, max = BOOT.biMax;
+  var y = function (v) { return H - (Number(v) / max) * (H - 10); };
+  var x = function (i) { return L + (i / (list.length - 1)) * (R - L); };
+
+  var grid = [0, 5, 10, 15, 20].map(function (v) {
+    return '<line x1="' + L + '" y1="' + y(v).toFixed(1) + '" x2="' + R + '" y2="' + y(v).toFixed(1) +
+      '" stroke="' + (v === 0 ? '#dfe3e8' : '#eef1f4') + '" stroke-width="1"></line>' +
+      '<text x="' + (L - 10) + '" y="' + (y(v) + 4).toFixed(1) + '" text-anchor="end" font-size="11" fill="#98a2ac">' + v + '</text>';
+  }).join('');
+
+  var pts = list.map(function (a, i) { return x(i).toFixed(1) + ',' + y(a.total).toFixed(1); }).join(' ');
+
+  var dots = list.map(function (a, i) {
+    return '<circle cx="' + x(i).toFixed(1) + '" cy="' + y(a.total).toFixed(1) + '" r="4.5" ' +
+      'fill="#37aaaf" stroke="#ffffff" stroke-width="2"></circle>';
+  }).join('');
+
+  var labels = list.map(function (a, i) {
+    return '<text x="' + x(i).toFixed(1) + '" y="182" text-anchor="middle" font-size="11" fill="#8a95a1">' +
+      'ครั้งที่ ' + esc(a.seq) + '</text>';
+  }).join('');
+
+  var lastIdx = list.length - 1;
+
+  return '<svg viewBox="0 0 700 196" style="width:100%;height:190px;display:block;margin-bottom:14px" ' +
+    'role="img" aria-label="กราฟคะแนน Barthel Index จาก ' + esc(list[0].total) + ' เป็น ' + esc(list[lastIdx].total) + '">' +
+    grid +
+    '<line x1="' + L + '" y1="' + y(15).toFixed(1) + '" x2="' + R + '" y2="' + y(15).toFixed(1) +
+      '" stroke="#c2340c" stroke-width="1.2" stroke-dasharray="5 4" opacity="0.5"></line>' +
+    '<text x="' + (R - 4) + '" y="' + (y(15) - 6).toFixed(1) + '" text-anchor="end" font-size="11" fill="#c2340c">เกณฑ์เข้า IMC</text>' +
+    '<polyline points="' + pts + '" fill="none" stroke="#37aaaf" stroke-width="2" ' +
+      'stroke-linecap="round" stroke-linejoin="round"></polyline>' +
+    dots + labels +
+    '<text x="' + x(lastIdx).toFixed(1) + '" y="' + (y(list[lastIdx].total) - 12).toFixed(1) + '" ' +
+      'text-anchor="middle" font-size="13" font-weight="600" fill="#1f2933">' + esc(list[lastIdx].total) + '</text>' +
     '</svg>';
 }
 
@@ -433,24 +595,35 @@ function biChart(list) {
 
 function renderBiForm(hn) {
   var items = BOOT.biItems;
-  var html = '<div class="page-head"><h1>ประเมิน Barthel Index</h1>' +
-    '<div class="spacer"></div>' +
-    '<button class="btn" onclick="go(\'detail\',\'' + esc(hn) + '\')">ยกเลิก</button></div>' +
+
+  var html = backBtn('detail', hn) +
+    '<div class="page-head"><div class="head-text">' +
+    '<h1>ประเมิน Barthel Index</h1>' +
+    '<span class="sub num">HN ' + esc(hn) + '</span>' +
+    '</div></div>' +
     '<form id="bi-form"><input type="hidden" name="hn" value="' + esc(hn) + '">' +
     '<div class="card"><div class="grid">' +
     field({ k: 'assess_date', l: 'วันที่ประเมิน', t: 'date', req: true }, BOOT.today) +
+    '<div class="field" style="justify-content:flex-end">' +
+    '  <div style="display:flex;align-items:baseline"><span style="font-size:13px;color:var(--muted)">ความคืบหน้า</span>' +
+    '  <span id="bi-progress-text" class="num" style="margin-left:auto;font-size:13px;color:var(--brand-ink);font-weight:600">0 จาก ' + items.length + ' ข้อ</span></div>' +
+    '  <div class="progress"><span id="bi-progress" style="width:0%"></span></div>' +
+    '</div>' +
     '</div></div>';
 
   items.forEach(function (item) {
     html += '<div class="bi-item" id="bi-item-' + item.key + '">' +
-      '<div class="bi-head"><span class="bi-no">' + item.no + '</span>' +
-      '<span class="bi-title">' + esc(item.en) +
-      '<small>' + esc(item.th) + '</small></span></div>' +
+      '<div class="bi-head">' +
+      '<span class="bi-no num">' + item.no + '</span>' +
+      '<span class="bi-en">' + esc(item.en) + '</span>' +
+      '<span class="bi-score num" id="bi-score-' + item.key + '">ยังไม่ได้เลือก</span>' +
+      '</div>' +
+      '<p class="bi-th">' + esc(item.th) + '</p>' +
       '<div class="bi-options">' +
       item.options.map(function (opt, score) {
         return '<label class="bi-opt">' +
           '<input type="radio" name="' + item.key + '" value="' + score + '">' +
-          '<span class="score">' + score + '</span>' +
+          '<span class="score num">' + score + '</span>' +
           '<span>' + esc(opt) + '</span></label>';
       }).join('') +
       '</div></div>';
@@ -461,11 +634,10 @@ function renderBiForm(hn) {
     field({ k: 'note', l: 'หมายเหตุ', t: 'textarea', full: true }) +
     '</div></div>' +
     '<div class="bi-summary">' +
-    '<div><div class="bi-total"><span id="bi-total">0</span><small> / ' + BOOT.biMax + ' คะแนน</small></div>' +
-    '<div id="bi-progress" style="font-size:13px;color:var(--muted)">ประเมินแล้ว 0 จาก ' + items.length + ' ข้อ</div></div>' +
-    '<div id="bi-verdict"></div>' +
-    '<div class="spacer" style="margin-left:auto"></div>' +
-    '<button type="submit" class="btn btn-primary">บันทึกผลประเมิน</button>' +
+    '<div class="bi-total num"><span id="bi-total">0</span><small> / ' + BOOT.biMax + ' คะแนน</small></div>' +
+    '<div class="bi-verdict" id="bi-verdict"></div>' +
+    '<div style="margin-left:auto"></div>' +
+    '<button type="submit" class="btn btn-primary" id="bi-save" disabled>บันทึกผลประเมิน</button>' +
     '</div></form>';
 
   main().innerHTML = html;
@@ -478,13 +650,15 @@ function renderBiForm(hn) {
     e.preventDefault();
     var data = readForm(form);
     data.multiple_impairment = form.elements.multiple_impairment.checked;
+
     var missing = BOOT.biItems.filter(function (i) { return !form.elements[i.key].value; });
     if (missing.length) {
       toast('ยังประเมินไม่ครบ ขาดข้อ ' + missing.map(function (i) { return i.no; }).join(', '), true);
       document.getElementById('bi-item-' + missing[0].key).scrollIntoView({ behavior: 'smooth', block: 'center' });
       return;
     }
-    var btn = form.querySelector('button[type=submit]');
+
+    var btn = document.getElementById('bi-save');
     btn.disabled = true; btn.textContent = 'กำลังบันทึก…';
     call('apiSaveBi', data).then(function () {
       toast('บันทึกผลประเมินเรียบร้อย');
@@ -500,34 +674,56 @@ function renderBiForm(hn) {
 function updateBiSummary() {
   var form = $('#bi-form');
   var total = 0, done = 0;
+
   BOOT.biItems.forEach(function (item) {
     var v = form.elements[item.key].value;
     var box = document.getElementById('bi-item-' + item.key);
-    if (v !== '') { total += parseInt(v, 10); done++; box.classList.add('done'); }
-    else box.classList.remove('done');
+    var max = item.options.length - 1;
+
+    Array.prototype.forEach.call(box.querySelectorAll('.bi-opt'), function (o) {
+      o.classList.toggle('picked', o.querySelector('input').checked);
+    });
+
+    if (v !== '') {
+      total += parseInt(v, 10);
+      done++;
+      box.classList.add('done');
+      document.getElementById('bi-score-' + item.key).textContent = v + ' / ' + max + ' คะแนน';
+    } else {
+      box.classList.remove('done');
+      document.getElementById('bi-score-' + item.key).textContent = 'ยังไม่ได้เลือก';
+    }
   });
 
+  var n = BOOT.biItems.length;
   document.getElementById('bi-total').textContent = total;
-  document.getElementById('bi-progress').textContent =
-    'ประเมินแล้ว ' + done + ' จาก ' + BOOT.biItems.length + ' ข้อ';
+  document.getElementById('bi-progress').style.width = Math.round((done / n) * 100) + '%';
+  document.getElementById('bi-progress-text').textContent = done + ' จาก ' + n + ' ข้อ';
+
+  var complete = (done === n);
+  document.getElementById('bi-save').disabled = !complete;
 
   var el = document.getElementById('bi-verdict');
-  if (done < BOOT.biItems.length) { el.innerHTML = ''; return; }
+  if (!complete) {
+    el.innerHTML = '<span class="chip chip-warn">เหลืออีก ' + (n - done) + ' ข้อ</span>';
+    return;
+  }
 
   var multi = form.elements.multiple_impairment.checked;
   var eligible = total < 15 || multi;
   var ctf = total >= 12 ? 'ติดสังคม' : (total >= 5 ? 'ติดบ้าน' : 'ติดเตียง');
   el.innerHTML =
-    '<span class="chip ' + (eligible ? 'chip-imc' : 'chip-no') + '">' +
-    (eligible ? 'เข้าโปรแกรม IMC' : 'ไม่เข้าเกณฑ์ IMC') + '</span> ' +
+    '<span class="chip ' + (eligible ? 'chip-brand' : '') + '">' +
+    (eligible ? 'เข้าโปรแกรม IMC' : 'ไม่เข้าเกณฑ์ IMC') + '</span>' +
     '<span class="chip">CTF: ' + ctf + '</span>';
 }
 
 /* ------------------------------------------------------- ฟอร์มติดตามผล */
 
 function renderFuForm(hn) {
-  var html = '<div class="page-head"><h1>บันทึกการติดตาม</h1><div class="spacer"></div>' +
-    '<button class="btn" onclick="go(\'detail\',\'' + esc(hn) + '\')">ยกเลิก</button></div>' +
+  main().innerHTML = backBtn('detail', hn) +
+    '<div class="page-head"><div class="head-text"><h1>บันทึกการติดตาม</h1>' +
+    '<span class="sub num">HN ' + esc(hn) + '</span></div></div>' +
     '<form id="fu-form"><input type="hidden" name="hn" value="' + esc(hn) + '">' +
     '<div class="card"><div class="grid">' +
     field({ k: 'fu_date', l: 'วัน เดือน ปี', t: 'date', req: true }, BOOT.today) +
@@ -536,7 +732,6 @@ function renderFuForm(hn) {
     field({ k: 'note', l: 'หมายเหตุ', t: 'textarea', full: true }) +
     '</div><div class="btn-row"><button type="submit" class="btn btn-primary">บันทึก</button></div></div></form>';
 
-  main().innerHTML = html;
   $('#fu-form').addEventListener('submit', function (e) {
     e.preventDefault();
     var data = readForm(e.target);
@@ -555,8 +750,9 @@ function renderFuForm(hn) {
 /* --------------------------------------------------------- จบโปรแกรม */
 
 function renderCloseForm(hn) {
-  var html = '<div class="page-head"><h1>จบโปรแกรม IMC</h1><div class="spacer"></div>' +
-    '<button class="btn" onclick="go(\'detail\',\'' + esc(hn) + '\')">ยกเลิก</button></div>' +
+  main().innerHTML = backBtn('detail', hn) +
+    '<div class="page-head"><div class="head-text"><h1>จบโปรแกรม IMC</h1>' +
+    '<span class="sub num">HN ' + esc(hn) + '</span></div></div>' +
     '<form id="close-form"><input type="hidden" name="hn" value="' + esc(hn) + '">' +
     '<div class="card"><div class="grid">' +
     field({ k: 'end_date', l: 'วันที่จบโปรแกรม', t: 'date', req: true }, BOOT.today) +
@@ -564,7 +760,6 @@ function renderCloseForm(hn) {
     field({ k: 'note', l: 'หมายเหตุ', t: 'textarea', full: true }) +
     '</div><div class="btn-row"><button type="submit" class="btn btn-primary">ยืนยันจบโปรแกรม</button></div></div></form>';
 
-  main().innerHTML = html;
   $('#close-form').addEventListener('submit', function (e) {
     e.preventDefault();
     var data = readForm(e.target);
@@ -575,41 +770,116 @@ function renderCloseForm(hn) {
   });
 }
 
+/* ------------------------------------------------------ หน้าการติดตาม */
+
+function renderFollowups() {
+  busy();
+  call('apiListFollowups', 60).then(function (rows) {
+    var html = '<div class="page-head"><div class="head-text"><h1>การติดตาม</h1>' +
+      '<span class="sub num">' + rows.length + ' รายการล่าสุด</span></div></div>';
+
+    if (!rows.length) {
+      html += '<div class="card"><div class="empty">ยังไม่มีบันทึกการติดตาม</div></div>';
+    } else {
+      html += '<div class="card flush"><div class="table-wrap"><table class="cards"><thead><tr>' +
+        '<th>วันที่</th><th>ผู้ป่วย</th><th>ประเภท</th><th>ภาวะแทรกซ้อน / หมายเหตุ</th>' +
+        '</tr></thead><tbody>' +
+        rows.map(function (f) {
+          return '<tr onclick="go(\'detail\',\'' + esc(f.hn) + '\')">' +
+            '<td class="head"><strong class="num">' + esc(thDate(f.fu_date)) + '</strong> ' + esc(f.patient_name) + '</td>' +
+            '<td data-l="วันที่" class="hn-cell num">' + esc(thDate(f.fu_date)) + '</td>' +
+            '<td data-l="ผู้ป่วย" class="name-cell">' + esc(f.patient_name || f.hn) + '</td>' +
+            '<td data-l="ประเภท">' + (f.fu_type ? '<span class="chip chip-sq">' + esc(f.fu_type) + '</span>' : '—') + '</td>' +
+            '<td data-l="บันทึก">' + esc(f.complications || f.note || '—') + '</td>' +
+            '</tr>';
+        }).join('') +
+        '</tbody></table></div></div>';
+    }
+    main().innerHTML = html;
+  }).catch(fail);
+}
+
 /* ---------------------------------------------------------- ภาพรวมงาน */
 
 function renderDashboard() {
   busy();
   call('apiDashboard').then(function (d) {
-    var maxCount = Math.max.apply(null, d.months.map(function (m) { return m.count; }).concat([1]));
-    var html = '<div class="page-head"><h1>ภาพรวมงาน IMC</h1></div>' +
-      '<div class="stats">' +
+    var html = '<div class="page-head"><div class="head-text"><h1>ภาพรวมงาน IMC</h1>' +
+      '<span class="sub">' + esc(BOOT.org) + '</span></div></div>';
+
+    html += '<div class="stats">' +
       stat(d.total, 'ผู้ป่วยทั้งหมด') +
-      stat(d.imc, 'เข้าโปรแกรม IMC') +
-      stat(d.noImc, 'ไม่เข้าเกณฑ์') +
-      stat(d.active, 'กำลังดูแล') +
-      stat(d.closed, 'จบโปรแกรมแล้ว') +
-      stat(d.avgGain === null ? '—' : (d.avgGain > 0 ? '+' : '') + d.avgGain, 'BI เพิ่มเฉลี่ย') +
-      stat(d.improved, 'รายที่คะแนนดีขึ้น') +
+      stat(d.imc, 'เข้าโปรแกรม IMC', d.total ? Math.round(d.imc / d.total * 100) + '% ของทั้งหมด' : '') +
+      stat(d.active, 'กำลังดูแล', 'จบแล้ว ' + d.closed) +
+      stat(d.avgGain === null ? '—' : (d.avgGain > 0 ? '+' : '') + d.avgGain, 'คะแนน BI เพิ่มเฉลี่ย',
+        'ดีขึ้น ' + d.improved + ' ราย') +
       '</div>';
 
+    html += '<div class="cols"><div>';
+
     if (d.months.length) {
-      html += '<div class="card" style="margin-top:16px"><h2>เคสใหม่รายเดือน</h2><div class="bars">' +
+      var maxCount = Math.max.apply(null, d.months.map(function (m) { return m.count; }).concat([1]));
+      html += '<div class="card"><h2>ผู้ป่วยเข้าโปรแกรมใหม่รายเดือน' +
+        '<span class="sub">นับจากวัน Start</span></h2><div class="bars">' +
         d.months.map(function (m) {
           var p = m.month.split('-');
-          var label = TH_MONTHS[parseInt(p[1], 10) - 1] + ' ' + (parseInt(p[0], 10) + 543 - 2500);
-          return '<div class="bar" title="' + esc(m.count) + ' ราย">' +
-            '<div style="font-size:12px;font-variant-numeric:tabular-nums">' + m.count + '</div>' +
+          var label = TH_MONTHS[parseInt(p[1], 10) - 1] + ' ' + String(parseInt(p[0], 10) + 543).slice(-2);
+          return '<div class="bar">' +
+            '<span class="val num">' + m.count + '</span>' +
             '<div class="fill" style="height:' + Math.round((m.count / maxCount) * 100) + '%"></div>' +
-            '<div class="lbl">' + esc(label) + '</div></div>';
+            '<span class="lbl">' + esc(label) + '</span></div>';
         }).join('') + '</div></div>';
     }
+
+    html += '</div><div>';
+
+    var sum = d.imc + d.noImc;
+    html += '<div class="card"><h2>ผลการคัดกรอง</h2>' +
+      (sum ?
+        '<div class="split">' +
+        '<i style="width:' + (d.imc / sum * 100) + '%"></i>' +
+        '<i style="width:' + (d.noImc / sum * 100) + '%"></i>' +
+        '</div>' +
+        '<div class="legend">' +
+        legendRow('var(--brand)', 'เข้าเกณฑ์ IMC', d.imc, sum) +
+        legendRow('#c9d2d9', 'ไม่เข้าเกณฑ์', d.noImc, sum) +
+        '</div>'
+        : '<div class="empty">ยังไม่มีผลคัดกรอง</div>') +
+      '</div>';
+
+    html += '<div class="card"><h2>นัดหมายที่ใกล้ถึง</h2>' +
+      (d.upcoming && d.upcoming.length
+        ? d.upcoming.map(function (u) {
+            var when = u.days_left === 0 ? 'วันนี้' : (u.days_left === 1 ? 'พรุ่งนี้' : thDate(u.date));
+            return '<div class="list-row" onclick="go(\'detail\',\'' + esc(u.hn) + '\')">' +
+              '<span class="avatar row">' + esc(initials(u.name)) + '</span>' +
+              '<span class="who"><b>' + esc(u.name || u.hn) + '</b>' +
+              '<small>' + esc(u.program || 'นัดติดตาม') + '</small></span>' +
+              '<span class="when num' + (u.days_left <= 1 ? ' soon' : '') + '">' + esc(when) + '</span>' +
+              '</div>';
+          }).join('')
+        : '<div class="empty">ไม่มีนัดหมายที่บันทึกไว้ล่วงหน้า</div>') +
+      '</div>';
+
+    html += '</div></div>';
 
     main().innerHTML = html;
   }).catch(fail);
 }
 
-function stat(v, k) {
-  return '<div class="stat"><div class="v">' + esc(v) + '</div><div class="k">' + esc(k) + '</div></div>';
+function stat(v, k, side) {
+  return '<div class="stat">' +
+    '<div class="k">' + esc(k) + '</div>' +
+    '<div><span class="v num">' + esc(v) + '</span>' +
+    (side ? '<span class="side num">' + esc(side) + '</span>' : '') + '</div></div>';
+}
+
+function legendRow(color, label, n, sum) {
+  return '<div class="legend-row">' +
+    '<span class="sw" style="background:' + color + '"></span>' +
+    '<span>' + esc(label) + '</span>' +
+    '<b class="num">' + n + '</b>' +
+    '<span class="pct num">' + Math.round(n / sum * 100) + '%</span></div>';
 }
 
 boot();

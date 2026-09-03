@@ -294,6 +294,25 @@ function refreshPtVisitCount_(hn) {
   updateObject_(SHEETS.PATIENTS, p._row, p);
 }
 
+/** การติดตามทั้งหมดเรียงจากใหม่ไปเก่า พร้อมชื่อผู้ป่วยเพื่อให้หน้าเว็บไม่ต้องดึงซ้ำ */
+function apiListFollowups(limit) {
+  currentUser_();
+  var nameByHn = {};
+  readAll_(SHEETS.PATIENTS).forEach(function (p) {
+    nameByHn[String(p.hn)] = [p.prefix, p.first_name, p.last_name].filter(String).join(' ').trim();
+  });
+
+  return readAll_(SHEETS.FOLLOWUPS)
+    .filter(function (r) { return r.fu_date; })
+    .sort(function (a, b) { return String(b.fu_date).localeCompare(String(a.fu_date)); })
+    .slice(0, limit || 60)
+    .map(function (r) {
+      r.patient_name = nameByHn[String(r.hn)] || '';
+      r.fu_date_th = toThaiDate_(r.fu_date);
+      return r;
+    });
+}
+
 /* -------------------------------------------------------------- จบโปรแกรม */
 
 function apiClosePatient(form) {
@@ -340,7 +359,26 @@ function apiDashboard() {
     return { month: k, count: byMonth[k] };
   });
 
+  // นัดหมายที่ยังมาไม่ถึง เรียงจากใกล้ที่สุด ใช้เตือนงานที่ต้องทำ
+  var today = todayIso_();
+  var upcoming = patients
+    .filter(function (p) {
+      return p.kbh_appt_date && String(p.kbh_appt_date) >= today && String(p.status) !== 'closed';
+    })
+    .sort(function (a, b) { return String(a.kbh_appt_date).localeCompare(String(b.kbh_appt_date)); })
+    .slice(0, 6)
+    .map(function (p) {
+      return {
+        hn: p.hn,
+        name: [p.prefix, p.first_name, p.last_name].filter(String).join(' ').trim(),
+        program: p.imc_program,
+        date: p.kbh_appt_date,
+        days_left: daysBetweenIso_(today, String(p.kbh_appt_date))
+      };
+    });
+
   return {
+    upcoming: upcoming,
     total: patients.length,
     imc: imc,
     noImc: noImc,

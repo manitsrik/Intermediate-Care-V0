@@ -1,0 +1,253 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600&display=swap">
+  <style>
+    body { margin: 0; font-family: "IBM Plex Sans Thai", "Sarabun", "TH Sarabun New", "Leelawadee UI", "Noto Sans Thai", Thonburi, Tahoma, sans-serif; }
+    a { color: #207175; text-decoration: none; }
+    a:hover { color: #175f63; }
+    .num { font-variant-numeric: tabular-nums; }
+  </style>
+</helmet>
+
+<div style="display: flex; width: 1440px; height: 900px; background: #f5fafb; color: #1f2933; font-size: 14px;">
+
+  <aside style="width: 248px; flex: none; background: #175f63; display: flex; flex-direction: column; padding: 20px 14px;">
+    <div style="display: flex; align-items: center; gap: 10px; padding: 4px 8px 22px;">
+      <div style="width: 34px; height: 34px; border-radius: 9px; background: #3fbbc0; display: flex; align-items: center; justify-content: center; color: #ffffff; font-weight: 600; font-size: 12px; letter-spacing: 0.4px;">IMC</div>
+      <div style="display: flex; flex-direction: column; line-height: 1.3;">
+        <span style="color: #ffffff; font-weight: 600; font-size: 14px;">Intermediate Care</span>
+        <span style="font-size: 11px; color: #a9d6d8;">โรงพยาบาลกระบี่</span>
+      </div>
+    </div>
+    <nav style="display: flex; flex-direction: column; gap: 2px;">
+      <div style="display: flex; align-items: center; gap: 11px; padding: 10px 12px; border-radius: 8px; background: #3fbbc0; color: #ffffff; font-weight: 500;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect></svg>
+        <span>ภาพรวม</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 11px; padding: 10px 12px; border-radius: 8px; color: #bfe3e5;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M16 20v-1.5a3.5 3.5 0 0 0-3.5-3.5h-5A3.5 3.5 0 0 0 4 18.5V20"></path><circle cx="10" cy="8" r="3.2"></circle><path d="M19 20v-1.4a3.2 3.2 0 0 0-2.4-3.1"></path><path d="M15.2 5.2a3.2 3.2 0 0 1 0 5.6"></path></svg>
+        <span>รายชื่อผู้ป่วย</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 11px; padding: 10px 12px; border-radius: 8px; color: #bfe3e5;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4h6v2.5H9z"></path><path d="M15 5.2h2.2A1.8 1.8 0 0 1 19 7v11.2a1.8 1.8 0 0 1-1.8 1.8H6.8A1.8 1.8 0 0 1 5 18.2V7a1.8 1.8 0 0 1 1.8-1.8H9"></path><path d="m9 13 2 2 4-4"></path></svg>
+        <span>ประเมิน BI</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 11px; padding: 10px 12px; border-radius: 8px; color: #bfe3e5;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5.5" width="16" height="14.5" rx="2"></rect><path d="M4 10h16M9 3.5v4M15 3.5v4"></path></svg>
+        <span>การติดตาม</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 11px; padding: 10px 12px; border-radius: 8px; color: #bfe3e5;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h16M4 17h16"></path><circle cx="9" cy="7" r="2.2" fill="#175f63"></circle><circle cx="15" cy="12" r="2.2" fill="#175f63"></circle><circle cx="8" cy="17" r="2.2" fill="#175f63"></circle></svg>
+        <span>ตั้งค่า</span>
+      </div>
+    </nav>
+    <div style="margin-top: auto; display: flex; align-items: center; gap: 10px; padding: 8px 6px;">
+      <div style="width: 30px; height: 30px; border-radius: 50%; background: #2a8085; color: #e0f2f3; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600;">มน</div>
+      <div style="display: flex; flex-direction: column; line-height: 1.3;">
+        <span style="font-size: 12px; color: #ffffff;">มานิต ศรีก.</span>
+        <span style="font-size: 11px; color: #a9d6d8;">นักกายภาพบำบัด</span>
+      </div>
+    </div>
+  </aside>
+
+  <main style="flex-grow: 1; display: flex; flex-direction: column; padding: 26px 32px; gap: 16px; overflow: hidden;">
+
+    <div style="display: flex; align-items: flex-end;">
+      <div style="display: flex; flex-direction: column; gap: 3px;">
+        <h1 style="margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -0.2px;">ภาพรวมงาน IMC</h1>
+        <span style="font-size: 13px; color: #6b7885;">กลุ่มงานเวชกรรมฟื้นฟู โรงพยาบาลกระบี่</span>
+      </div>
+      <div style="margin-left: auto; display: flex; align-items: center; gap: 6px; border: 1px solid #dfe3e8; background: #ffffff; border-radius: 8px; padding: 9px 14px; font-size: 13px; color: #3d4852;">
+        <span class="num">ก.ย. 2568 – ปัจจุบัน</span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8a95a1" stroke-width="2" stroke-linecap="round"><path d="m6 9 6 6 6-6"></path></svg>
+      </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px;">
+      <div style="background: #ffffff; border: 1px solid #e4e8ec; border-radius: 12px; box-shadow: 0 1px 2px rgba(16,24,40,0.04); padding: 18px 20px; display: flex; flex-direction: column; gap: 5px;">
+        <span style="font-size: 13px; color: #6b7885;">ผู้ป่วยทั้งหมด</span>
+        <span style="font-size: 30px; font-weight: 600; letter-spacing: -0.5px;" class="num">55</span>
+      </div>
+      <div style="background: #ffffff; border: 1px solid #e4e8ec; border-radius: 12px; box-shadow: 0 1px 2px rgba(16,24,40,0.04); padding: 18px 20px; display: flex; flex-direction: column; gap: 5px;">
+        <span style="font-size: 13px; color: #6b7885;">เข้าโปรแกรม IMC</span>
+        <div style="display: flex; align-items: baseline; gap: 8px;">
+          <span style="font-size: 30px; font-weight: 600; letter-spacing: -0.5px; color: #207175;" class="num">31</span>
+          <span style="font-size: 13px; color: #8a95a1;" class="num">56% ของทั้งหมด</span>
+        </div>
+      </div>
+      <div style="background: #ffffff; border: 1px solid #e4e8ec; border-radius: 12px; box-shadow: 0 1px 2px rgba(16,24,40,0.04); padding: 18px 20px; display: flex; flex-direction: column; gap: 5px;">
+        <span style="font-size: 13px; color: #6b7885;">กำลังดูแล</span>
+        <div style="display: flex; align-items: baseline; gap: 8px;">
+          <span style="font-size: 30px; font-weight: 600; letter-spacing: -0.5px;" class="num">24</span>
+          <span style="font-size: 13px; color: #8a95a1;" class="num">จบแล้ว 31</span>
+        </div>
+      </div>
+      <div style="background: #ffffff; border: 1px solid #e4e8ec; border-radius: 12px; box-shadow: 0 1px 2px rgba(16,24,40,0.04); padding: 18px 20px; display: flex; flex-direction: column; gap: 5px;">
+        <span style="font-size: 13px; color: #6b7885;">คะแนน BI เพิ่มเฉลี่ย</span>
+        <div style="display: flex; align-items: baseline; gap: 8px;">
+          <span style="font-size: 30px; font-weight: 600; letter-spacing: -0.5px; color: #12a05c;" class="num">+2.2</span>
+          <span style="font-size: 13px; color: #8a95a1;" class="num">ดีขึ้น 20 ราย</span>
+        </div>
+      </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 736px 372px; gap: 16px; align-items: start;">
+
+      <div style="background: #ffffff; border: 1px solid #e4e8ec; border-radius: 12px; box-shadow: 0 1px 2px rgba(16,24,40,0.04); padding: 20px 22px;">
+        <h2 style="margin: 0 0 2px; font-size: 15px; font-weight: 600;">ผู้ป่วยเข้าโปรแกรมใหม่รายเดือน</h2>
+        <span style="font-size: 12px; color: #8a95a1;">นับจากวัน Start โปรแกรม</span>
+        <svg viewBox="0 0 700 210" style="width: 100%; height: 200px; display: block; margin-top: 6px;" role="img" aria-label="แผนภูมิแท่งผู้ป่วยเข้าโปรแกรมใหม่รายเดือน กันยายน 2 ตุลาคม 25 พฤศจิกายน 24 ธันวาคม 3">
+          <line x1="44" y1="50" x2="690" y2="50" stroke="#eef1f4" stroke-width="1"></line>
+          <line x1="44" y1="110" x2="690" y2="110" stroke="#eef1f4" stroke-width="1"></line>
+          <line x1="44" y1="170" x2="690" y2="170" stroke="#dfe3e8" stroke-width="1"></line>
+          <text x="34" y="54" text-anchor="end" font-size="11" fill="#98a2ac">20</text>
+          <text x="34" y="114" text-anchor="end" font-size="11" fill="#98a2ac">10</text>
+          <text x="34" y="174" text-anchor="end" font-size="11" fill="#98a2ac">0</text>
+
+          <path d="M106.75 170 L106.75 162 Q106.75 158 110.75 158 L166.75 158 Q170.75 158 170.75 162 L170.75 170 Z" fill="#37aaaf"></path>
+          <path d="M264.25 170 L264.25 24 Q264.25 20 268.25 20 L324.25 20 Q328.25 20 328.25 24 L328.25 170 Z" fill="#37aaaf"></path>
+          <path d="M421.75 170 L421.75 30 Q421.75 26 425.75 26 L481.75 26 Q485.75 26 485.75 30 L485.75 170 Z" fill="#37aaaf"></path>
+          <path d="M579.25 170 L579.25 156 Q579.25 152 583.25 152 L635.25 152 Q639.25 152 639.25 156 L639.25 170 Z" fill="#37aaaf"></path>
+
+          <text x="138.75" y="150" text-anchor="middle" font-size="13" font-weight="600" fill="#1f2933">2</text>
+          <text x="296.25" y="14" text-anchor="middle" font-size="13" font-weight="600" fill="#1f2933">25</text>
+          <text x="453.75" y="20" text-anchor="middle" font-size="13" font-weight="600" fill="#1f2933">24</text>
+          <text x="609.25" y="144" text-anchor="middle" font-size="13" font-weight="600" fill="#1f2933">3</text>
+
+          <text x="138.75" y="190" text-anchor="middle" font-size="12" fill="#6b7885">ก.ย. 68</text>
+          <text x="296.25" y="190" text-anchor="middle" font-size="12" fill="#6b7885">ต.ค. 68</text>
+          <text x="453.75" y="190" text-anchor="middle" font-size="12" fill="#6b7885">พ.ย. 68</text>
+          <text x="609.25" y="190" text-anchor="middle" font-size="12" fill="#6b7885">ธ.ค. 68</text>
+        </svg>
+      </div>
+
+      <div style="background: #ffffff; border: 1px solid #e4e8ec; border-radius: 12px; box-shadow: 0 1px 2px rgba(16,24,40,0.04); padding: 20px 22px;">
+        <h2 style="margin: 0 0 2px; font-size: 15px; font-weight: 600;">ผลการคัดกรอง</h2>
+        <span style="font-size: 12px; color: #8a95a1;" class="num">จากผู้ป่วยที่ประเมินแล้ว 55 ราย</span>
+
+        <div style="display: flex; gap: 2px; height: 12px; margin: 18px 0 16px;">
+          <div style="width: 56.4%; background: #3fbbc0; border-radius: 999px 0 0 999px;"></div>
+          <div style="width: 43.6%; background: #c9d2d9; border-radius: 0 999px 999px 0;"></div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 12px;">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <span style="width: 10px; height: 10px; border-radius: 3px; background: #3fbbc0; flex: none;"></span>
+            <span style="color: #3d4852;">เข้าเกณฑ์ IMC</span>
+            <span style="margin-left: auto; font-weight: 600;" class="num">31</span>
+            <span style="color: #8a95a1; width: 42px; text-align: right;" class="num">56%</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <span style="width: 10px; height: 10px; border-radius: 3px; background: #c9d2d9; flex: none;"></span>
+            <span style="color: #3d4852;">ไม่เข้าเกณฑ์</span>
+            <span style="margin-left: auto; font-weight: 600;" class="num">24</span>
+            <span style="color: #8a95a1; width: 42px; text-align: right;" class="num">44%</span>
+          </div>
+        </div>
+
+        <div style="border-top: 1px solid #eef1f4; margin-top: 16px; padding-top: 14px; display: flex; flex-direction: column; gap: 10px; font-size: 13px;">
+          <div style="display: flex;"><span style="color: #6b7885;">ติดตามครบ 6 เดือน</span><span style="margin-left: auto; font-weight: 500;" class="num">20 ราย</span></div>
+          <div style="display: flex;"><span style="color: #6b7885;">ยังไม่ครบกำหนด</span><span style="margin-left: auto; font-weight: 500;" class="num">11 ราย</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 736px 372px; gap: 16px; align-items: start;">
+
+      <div style="background: #ffffff; border: 1px solid #e4e8ec; border-radius: 12px; box-shadow: 0 1px 2px rgba(16,24,40,0.04); padding: 20px 22px;">
+        <h2 style="margin: 0 0 16px; font-size: 15px; font-weight: 600;">เหตุผลที่จบโปรแกรม</h2>
+        <div style="display: flex; flex-direction: column; gap: 11px;">
+
+          <div style="display: grid; grid-template-columns: 200px 1fr 32px; align-items: center; gap: 14px;">
+            <span style="color: #3d4852; font-size: 13px;">BI มากกว่า 15</span>
+            <div style="height: 18px; background: #f2f4f6; border-radius: 4px;"><div style="width: 100%; height: 100%; background: #3fbbc0; border-radius: 4px;"></div></div>
+            <span style="text-align: right; font-weight: 500;" class="num">9</span>
+          </div>
+          <div style="display: grid; grid-template-columns: 200px 1fr 32px; align-items: center; gap: 14px;">
+            <span style="color: #3d4852; font-size: 13px;">BI น้อยกว่า 15</span>
+            <div style="height: 18px; background: #f2f4f6; border-radius: 4px;"><div style="width: 100%; height: 100%; background: #3fbbc0; border-radius: 4px;"></div></div>
+            <span style="text-align: right; font-weight: 500;" class="num">9</span>
+          </div>
+          <div style="display: grid; grid-template-columns: 200px 1fr 32px; align-items: center; gap: 14px;">
+            <span style="color: #3d4852; font-size: 13px;">ไม่มาตามนัด</span>
+            <div style="height: 18px; background: #f2f4f6; border-radius: 4px;"><div style="width: 44.4%; height: 100%; background: #3fbbc0; border-radius: 4px;"></div></div>
+            <span style="text-align: right; font-weight: 500;" class="num">4</span>
+          </div>
+          <div style="display: grid; grid-template-columns: 200px 1fr 32px; align-items: center; gap: 14px;">
+            <span style="color: #3d4852; font-size: 13px;">ไม่ได้ติดตาม</span>
+            <div style="height: 18px; background: #f2f4f6; border-radius: 4px;"><div style="width: 33.3%; height: 100%; background: #3fbbc0; border-radius: 4px;"></div></div>
+            <span style="text-align: right; font-weight: 500;" class="num">3</span>
+          </div>
+          <div style="display: grid; grid-template-columns: 200px 1fr 32px; align-items: center; gap: 14px;">
+            <span style="color: #3d4852; font-size: 13px;">BI คงที่</span>
+            <div style="height: 18px; background: #f2f4f6; border-radius: 4px;"><div style="width: 22.2%; height: 100%; background: #3fbbc0; border-radius: 4px;"></div></div>
+            <span style="text-align: right; font-weight: 500;" class="num">2</span>
+          </div>
+          <div style="display: grid; grid-template-columns: 200px 1fr 32px; align-items: center; gap: 14px;">
+            <span style="color: #3d4852; font-size: 13px;">BI 20 ก่อนครบ 6 เดือน</span>
+            <div style="height: 18px; background: #f2f4f6; border-radius: 4px;"><div style="width: 22.2%; height: 100%; background: #3fbbc0; border-radius: 4px;"></div></div>
+            <span style="text-align: right; font-weight: 500;" class="num">2</span>
+          </div>
+          <div style="display: grid; grid-template-columns: 200px 1fr 32px; align-items: center; gap: 14px;">
+            <span style="color: #6b7885; font-size: 13px;">กลับมาทำงานได้ / เสียชีวิต</span>
+            <div style="height: 18px; background: #f2f4f6; border-radius: 4px;"><div style="width: 22.2%; height: 100%; background: #b6c2c9; border-radius: 4px;"></div></div>
+            <span style="text-align: right; font-weight: 500;" class="num">2</span>
+          </div>
+
+        </div>
+      </div>
+
+      <div style="background: #ffffff; border: 1px solid #e4e8ec; border-radius: 12px; box-shadow: 0 1px 2px rgba(16,24,40,0.04); padding: 20px 22px;">
+        <div style="display: flex; align-items: center; margin-bottom: 14px;">
+          <h2 style="margin: 0; font-size: 15px; font-weight: 600;">ต้องติดตามสัปดาห์นี้</h2>
+          <span style="margin-left: auto; background: #fdece7; color: #c2340c; border-radius: 999px; padding: 2px 9px; font-size: 12px; font-weight: 500;" class="num">4</span>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 13px;">
+          <div style="display: flex; align-items: center; gap: 11px;">
+            <div style="width: 32px; height: 32px; flex: none; border-radius: 50%; background: #ecf8f9; color: #207175; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600;">ท23</div>
+            <div style="display: flex; flex-direction: column; line-height: 1.35;">
+              <span style="font-size: 13px; font-weight: 500;">นาย ทดสอบ 23</span>
+              <span style="font-size: 12px; color: #8a95a1;">นัด OPD KBH</span>
+            </div>
+            <span style="margin-left: auto; font-size: 12px; color: #c2340c;" class="num">พรุ่งนี้</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 11px;">
+            <div style="width: 32px; height: 32px; flex: none; border-radius: 50%; background: #ecf8f9; color: #207175; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600;">ท5</div>
+            <div style="display: flex; flex-direction: column; line-height: 1.35;">
+              <span style="font-size: 13px; font-weight: 500;">น.ส. ทดสอบ 5</span>
+              <span style="font-size: 12px; color: #8a95a1;">เยี่ยมบ้าน</span>
+            </div>
+            <span style="margin-left: auto; font-size: 12px; color: #6b7885;" class="num">5 ก.ย.</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 11px;">
+            <div style="width: 32px; height: 32px; flex: none; border-radius: 50%; background: #ecf8f9; color: #207175; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600;">ท7</div>
+            <div style="display: flex; flex-direction: column; line-height: 1.35;">
+              <span style="font-size: 13px; font-weight: 500;">นาย ทดสอบ 7</span>
+              <span style="font-size: 12px; color: #8a95a1;">PT ครั้งที่ 7</span>
+            </div>
+            <span style="margin-left: auto; font-size: 12px; color: #6b7885;" class="num">6 ก.ย.</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 11px;">
+            <div style="width: 32px; height: 32px; flex: none; border-radius: 50%; background: #ecf8f9; color: #207175; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600;">ท22</div>
+            <div style="display: flex; flex-direction: column; line-height: 1.35;">
+              <span style="font-size: 13px; font-weight: 500;">น.ส. ทดสอบ 22</span>
+              <span style="font-size: 12px; color: #8a95a1;">ครบ 6 เดือน ประเมิน BI</span>
+            </div>
+            <span style="margin-left: auto; font-size: 12px; color: #6b7885;" class="num">8 ก.ย.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+</x-dc>
+</body>
+</html>

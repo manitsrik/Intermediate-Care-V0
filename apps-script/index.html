@@ -7,8 +7,9 @@
 </head>
 <body>
 
-<header class="topbar">
-  <div class="topbar-inner">
+<div class="shell">
+
+  <aside class="sidebar">
     <button class="brand" onclick="go('list')">
       <span class="brand-mark">IMC</span>
       <span class="brand-text">
@@ -16,18 +17,34 @@
         <small id="app-org"></small>
       </span>
     </button>
-    <nav class="topnav">
-      <button onclick="go('list')" data-nav="list">รายชื่อผู้ป่วย</button>
-      <button onclick="go('dashboard')" data-nav="dashboard">ภาพรวม</button>
-    </nav>
-    <div class="who"><span id="who-email"></span></div>
-  </div>
-  <div id="mask-banner" class="mask-banner" hidden>โหมดทดสอบ</div>
-</header>
 
-<main id="main">
-  <div class="loading">กำลังโหลด…</div>
-</main>
+    <nav class="sidenav" id="sidenav"></nav>
+
+    <div class="side-foot">
+      <div class="mask-note" id="mask-note" hidden>โหมดทดสอบ</div>
+      <div class="user">
+        <span class="avatar" id="user-initial">?</span>
+        <span class="user-mail" id="who-email"></span>
+      </div>
+    </div>
+  </aside>
+
+  <div class="content">
+    <header class="mobilebar">
+      <span class="brand-mark sm">IMC</span>
+      <span class="mobilebar-title" id="mobile-title">รายชื่อผู้ป่วย</span>
+      <button class="icon-btn" onclick="go('patient')" aria-label="ลงทะเบียนเคสใหม่">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>
+      </button>
+    </header>
+
+    <div class="mask-banner" id="mask-banner" hidden>โหมดทดสอบ</div>
+
+    <main id="main"><div class="loading">กำลังโหลด…</div></main>
+  </div>
+
+  <nav class="bottomnav" id="bottomnav"></nav>
+</div>
 
 <div id="toast" class="toast" hidden></div>
 

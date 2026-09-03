@@ -1,0 +1,142 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600&display=swap">
+  <style>
+    body { margin: 0; font-family: "IBM Plex Sans Thai", "Sarabun", "TH Sarabun New", "Leelawadee UI", "Noto Sans Thai", Thonburi, Tahoma, sans-serif; }
+    a { color: #207175; text-decoration: none; }
+    a:hover { color: #175f63; }
+    .num { font-variant-numeric: tabular-nums; }
+  </style>
+</helmet>
+
+<div style="display: flex; flex-direction: column; width: 390px; height: 844px; background: #f5fafb; color: #1f2933; font-size: 15px;">
+
+  <div style="background: #175f63; padding: 14px 16px 18px; display: flex; flex-direction: column; gap: 14px;">
+    <div style="display: flex; align-items: center; gap: 12px;">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round"><path d="M19 12H5M11 6l-6 6 6 6"></path></svg>
+      <span style="color: #ffffff; font-weight: 600; font-size: 16px;">เวชระเบียน</span>
+    </div>
+    <div style="display: flex; align-items: center; gap: 12px;">
+      <div style="width: 46px; height: 46px; flex: none; border-radius: 50%; background: #2a8085; color: #ffffff; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 600;">ท13</div>
+      <div style="display: flex; flex-direction: column; gap: 3px; line-height: 1.3;">
+        <span style="color: #ffffff; font-weight: 600; font-size: 17px;">นาย ทดสอบ 13</span>
+        <span style="color: #a9d6d8; font-size: 13px;" class="num">TEST013 · ชาย 62 ปี · UC · SU</span>
+      </div>
+    </div>
+    <div style="display: flex; gap: 7px;">
+      <span style="background: rgba(255,255,255,0.16); color: #ffffff; border-radius: 999px; padding: 4px 12px; font-size: 12px;">เข้าโปรแกรม IMC</span>
+      <span style="background: rgba(255,255,255,0.16); color: #ffffff; border-radius: 999px; padding: 4px 12px; font-size: 12px;">Ischemic stroke</span>
+    </div>
+  </div>
+
+  <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 12px; padding: 14px 16px; overflow: hidden;">
+
+    <div style="display: flex; gap: 9px;">
+      <span style="flex-grow: 1; text-align: center; background: #3fbbc0; color: #ffffff; border-radius: 10px; padding: 13px 10px; font-size: 14px; font-weight: 500;">ประเมิน BI</span>
+      <span style="flex-grow: 1; text-align: center; background: #ffffff; border: 1px solid #e4e8ec; color: #3d4852; border-radius: 10px; padding: 13px 10px; font-size: 14px;">บันทึกติดตาม</span>
+    </div>
+
+    <div style="background: #ffffff; border: 1px solid #e4e8ec; border-radius: 12px; padding: 15px 16px;">
+      <div style="display: flex; align-items: baseline; margin-bottom: 10px;">
+        <span style="font-weight: 600; font-size: 14px;">คะแนน Barthel Index</span>
+        <div style="margin-left: auto; display: flex; align-items: baseline; gap: 6px;">
+          <span style="font-size: 22px; font-weight: 600;" class="num">16</span>
+          <span style="background: #e8f8ef; color: #12a05c; border-radius: 5px; padding: 1px 6px; font-size: 11px; font-weight: 500;" class="num">+8</span>
+        </div>
+      </div>
+      <svg viewBox="0 0 320 96" style="width: 100%; height: 96px; display: block;" role="img" aria-label="กราฟคะแนน Barthel Index สี่ครั้ง จาก 8 เป็น 16">
+        <line x1="22" y1="8" x2="316" y2="8" stroke="#eef1f4" stroke-width="1"></line>
+        <line x1="22" y1="41" x2="316" y2="41" stroke="#eef1f4" stroke-width="1"></line>
+        <line x1="22" y1="74" x2="316" y2="74" stroke="#dfe3e8" stroke-width="1"></line>
+        <text x="16" y="11" text-anchor="end" font-size="9" fill="#98a2ac">20</text>
+        <text x="16" y="44" text-anchor="end" font-size="9" fill="#98a2ac">10</text>
+        <text x="16" y="77" text-anchor="end" font-size="9" fill="#98a2ac">0</text>
+        <line x1="22" y1="24.5" x2="316" y2="24.5" stroke="#c2340c" stroke-width="1" stroke-dasharray="4 3" opacity="0.5"></line>
+        <polyline points="30,47.6 125,41 220,24.5 310,15.2" fill="none" stroke="#37aaaf" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></polyline>
+        <circle cx="30" cy="47.6" r="4" fill="#37aaaf" stroke="#ffffff" stroke-width="1.8"></circle>
+        <circle cx="125" cy="41" r="4" fill="#37aaaf" stroke="#ffffff" stroke-width="1.8"></circle>
+        <circle cx="220" cy="24.5" r="4" fill="#37aaaf" stroke="#ffffff" stroke-width="1.8"></circle>
+        <circle cx="310" cy="15.2" r="4.5" fill="#37aaaf" stroke="#ffffff" stroke-width="1.8"></circle>
+        <text x="30" y="92" text-anchor="middle" font-size="10" fill="#8a95a1">ครั้ง 1</text>
+        <text x="125" y="92" text-anchor="middle" font-size="10" fill="#8a95a1">ครั้ง 2</text>
+        <text x="220" y="92" text-anchor="middle" font-size="10" fill="#8a95a1">ครั้ง 3</text>
+        <text x="310" y="92" text-anchor="middle" font-size="10" fill="#8a95a1">ครั้ง 4</text>
+      </svg>
+    </div>
+
+    <div style="background: #ffffff; border: 1px solid #e4e8ec; border-radius: 12px; padding: 15px 16px;">
+      <div style="display: flex; align-items: baseline; margin-bottom: 9px;">
+        <span style="font-weight: 600; font-size: 14px;">สถานะโปรแกรม</span>
+        <span style="margin-left: auto; font-size: 13px; color: #6b7885;" class="num">112 / 183 วัน</span>
+      </div>
+      <div style="height: 7px; border-radius: 999px; background: #eceff2; overflow: hidden; margin-bottom: 12px;">
+        <div style="width: 61%; height: 100%; background: #3fbbc0; border-radius: 999px;"></div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 8px; font-size: 13px;">
+        <div style="display: flex;"><span style="color: #6b7885;">วัน Start</span><span style="margin-left: auto;" class="num">27 ต.ค. 2568</span></div>
+        <div style="display: flex;"><span style="color: #6b7885;">ครบ 6 เดือน</span><span style="margin-left: auto;" class="num">28 เม.ย. 2569</span></div>
+        <div style="display: flex;"><span style="color: #6b7885;">ได้ PT แล้ว</span><span style="margin-left: auto;" class="num">6 ครั้ง</span></div>
+      </div>
+    </div>
+
+    <div style="background: #ffffff; border: 1px solid #e4e8ec; border-radius: 12px; padding: 15px 16px;">
+      <div style="display: flex; align-items: baseline; margin-bottom: 12px;">
+        <span style="font-weight: 600; font-size: 14px;">การติดตามล่าสุด</span>
+        <span style="margin-left: auto; font-size: 13px; color: #207175;">ดูทั้งหมด</span>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 12px;">
+        <div style="display: flex; gap: 11px;">
+          <div style="width: 9px; height: 9px; flex: none; border-radius: 50%; background: #3fbbc0; margin-top: 6px;"></div>
+          <div style="display: flex; flex-direction: column; gap: 2px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 13px; font-weight: 500;" class="num">16 ก.พ. 2569</span>
+              <span style="background: #ecf8f9; color: #207175; border-radius: 5px; padding: 1px 8px; font-size: 11px;">เยี่ยมบ้าน</span>
+            </div>
+            <span style="color: #6b7885; font-size: 13px; line-height: 1.5;">เดินด้วย walker ได้เอง ไม่มีแผลกดทับ</span>
+          </div>
+        </div>
+        <div style="display: flex; gap: 11px;">
+          <div style="width: 9px; height: 9px; flex: none; border-radius: 50%; background: #c9d2d9; margin-top: 6px;"></div>
+          <div style="display: flex; flex-direction: column; gap: 2px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 13px; font-weight: 500;" class="num">9 ธ.ค. 2568</span>
+              <span style="background: #eef1f4; color: #4b5763; border-radius: 5px; padding: 1px 8px; font-size: 11px;">PT</span>
+            </div>
+            <span style="color: #6b7885; font-size: 13px; line-height: 1.5;">ฝึกลุกนั่งและยืนทรงตัว ขาขวาแรงขึ้น</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div style="background: #ffffff; border-top: 1px solid #e4e8ec; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 8px 0 18px;">
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; color: #8a95a1; padding: 4px 0;">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect></svg>
+      <span style="font-size: 11px;">ภาพรวม</span>
+    </div>
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; color: #207175; font-weight: 500; padding: 4px 0;">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 20v-1.5a3.5 3.5 0 0 0-3.5-3.5h-5A3.5 3.5 0 0 0 4 18.5V20"></path><circle cx="10" cy="8" r="3.2"></circle><path d="M19 20v-1.4a3.2 3.2 0 0 0-2.4-3.1"></path><path d="M15.2 5.2a3.2 3.2 0 0 1 0 5.6"></path></svg>
+      <span style="font-size: 11px;">ผู้ป่วย</span>
+    </div>
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; color: #8a95a1; padding: 4px 0;">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4h6v2.5H9z"></path><path d="M15 5.2h2.2A1.8 1.8 0 0 1 19 7v11.2a1.8 1.8 0 0 1-1.8 1.8H6.8A1.8 1.8 0 0 1 5 18.2V7a1.8 1.8 0 0 1 1.8-1.8H9"></path><path d="m9 13 2 2 4-4"></path></svg>
+      <span style="font-size: 11px;">ประเมิน BI</span>
+    </div>
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; color: #8a95a1; padding: 4px 0;">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5.5" width="16" height="14.5" rx="2"></rect><path d="M4 10h16M9 3.5v4M15 3.5v4"></path></svg>
+      <span style="font-size: 11px;">ติดตาม</span>
+    </div>
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>

@@ -1,0 +1,17 @@
+{
+  "scriptId": "YOUR_SCRIPT_ID",
+  "rootDir": "apps-script",
+  "parentId": "YOUR_SPREADSHEET_ID",
+  "scriptExtensions": [
+    ".js",
+    ".gs"
+  ],
+  "htmlExtensions": [
+    ".html"
+  ],
+  "jsonExtensions": [
+    ".json"
+  ],
+  "filePushOrder": [],
+  "skipSubdirectories": false
+}

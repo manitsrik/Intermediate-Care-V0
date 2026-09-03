@@ -1,0 +1,616 @@
+<script>
+/* ------------------------------------------------------------ พื้นฐาน */
+
+var BOOT = null;
+var VIEW = { name: 'list', param: null };
+
+/**
+ * เรียกฟังก์ชันฝั่งเซิร์ฟเวอร์แบบ Promise
+ * ถ้าได้ null กลับมาแปลว่าแปลงข้อมูลข้ามฝั่งไม่สำเร็จ ให้บอกสาเหตุตรง ๆ
+ * ดีกว่าปล่อยให้ไปพังเป็น TypeError ที่อ่านไม่รู้เรื่องทีหลัง
+ */
+function call(fn) {
+  var args = Array.prototype.slice.call(arguments, 1);
+  return new Promise(function (resolve, reject) {
+    google.script.run
+      .withSuccessHandler(function (result) {
+        if (result === null || result === undefined) {
+          reject(new Error('เซิร์ฟเวอร์ส่งข้อมูลกลับมาไม่ได้ (' + fn + ') ' +
+            'อาจมีค่าผิดปกติในชีต กรุณาแจ้งผู้ดูแลระบบ'));
+          return;
+        }
+        resolve(result);
+      })
+      .withFailureHandler(function (e) { reject(e); })
+      [fn].apply(null, args);
+  });
+}
+
+function esc(s) {
+  return String(s === null || s === undefined ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function $(sel) { return document.querySelector(sel); }
+function main() { return document.getElementById('main'); }
+
+var toastTimer = null;
+function toast(msg, isError) {
+  var el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'toast' + (isError ? ' err' : '');
+  el.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function () { el.hidden = true; }, isError ? 7000 : 3000);
+}
+
+function fail(e) {
+  toast((e && e.message) ? e.message : String(e), true);
+}
+
+function busy(msg) {
+  main().innerHTML = '<div class="loading">' + esc(msg || 'กำลังโหลด…') + '</div>';
+}
+
+/* --------------------------------------------------------------- วันที่ */
+
+var TH_MONTHS = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.',
+  'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+
+/** yyyy-MM-dd เป็นวันที่แบบไทย พ.ศ. */
+function thDate(iso) {
+  if (!iso) return '—';
+  var p = String(iso).split('-');
+  if (p.length !== 3) return String(iso);
+  return parseInt(p[2], 10) + ' ' + TH_MONTHS[parseInt(p[1], 10) - 1] + ' ' + (parseInt(p[0], 10) + 543);
+}
+
+/* ----------------------------------------------------------- ตัวสร้างฟอร์ม */
+
+function field(f, value) {
+  var v = (value === undefined || value === null) ? '' : value;
+  var label = '<span>' + esc(f.l) + (f.req ? ' <em class="req">*</em>' : '') + '</span>';
+  var cls = 'field' + (f.full ? ' full' : '');
+  var input;
+
+  if (f.t === 'select') {
+    var opts = ['<option value="">— เลือก —</option>'].concat((f.o || []).map(function (o) {
+      var val = (typeof o === 'object') ? o.value : o;
+      return '<option value="' + esc(val) + '"' + (String(val) === String(v) ? ' selected' : '') + '>' +
+        esc(val) + '</option>';
+    }));
+    input = '<select name="' + f.k + '"' + (f.req ? ' required' : '') + '>' + opts.join('') + '</select>';
+  } else if (f.t === 'textarea') {
+    input = '<textarea name="' + f.k + '">' + esc(v) + '</textarea>';
+  } else if (f.t === 'checkbox') {
+    return '<label class="' + cls + '" style="flex-direction:row;align-items:center;gap:8px">' +
+      '<input type="checkbox" name="' + f.k + '" style="width:auto"' +
+      (String(v) === 'TRUE' || v === true ? ' checked' : '') + '>' +
+      '<span>' + esc(f.l) + '</span></label>';
+  } else {
+    input = '<input type="' + (f.t || 'text') + '" name="' + f.k + '" value="' + esc(v) + '"' +
+      (f.ph ? ' placeholder="' + esc(f.ph) + '"' : '') +
+      (f.req ? ' required' : '') + '>';
+  }
+  return '<label class="' + cls + '">' + label + input + '</label>';
+}
+
+function readForm(formEl) {
+  var out = {};
+  Array.prototype.forEach.call(formEl.elements, function (el) {
+    if (!el.name) return;
+    if (el.type === 'checkbox') out[el.name] = el.checked ? 'TRUE' : 'FALSE';
+    else if (el.type === 'radio') { if (el.checked) out[el.name] = el.value; }
+    else out[el.name] = el.value.trim();
+  });
+  return out;
+}
+
+/* ----------------------------------------------------------- โครงหน้าจอ */
+
+function go(name, param) {
+  VIEW = { name: name, param: param };
+  Array.prototype.forEach.call(document.querySelectorAll('[data-nav]'), function (b) {
+    b.classList.toggle('active', b.getAttribute('data-nav') === name);
+  });
+  window.scrollTo(0, 0);
+  var fn = ({
+    list: renderList,
+    dashboard: renderDashboard,
+    patient: renderPatientForm,
+    detail: renderDetail,
+    bi: renderBiForm,
+    fu: renderFuForm,
+    close: renderCloseForm
+  })[name];
+  fn(param);
+}
+
+function boot() {
+  call('apiBootstrap').then(function (b) {
+    BOOT = b;
+    document.getElementById('app-name').textContent = b.appName;
+    document.getElementById('app-org').textContent = b.org;
+    document.getElementById('who-email').textContent = b.user.email;
+    document.getElementById('mask-banner').hidden = !b.maskMode;
+    go('list');
+  }).catch(function (e) {
+    main().innerHTML = '<div class="card"><h2>เข้าใช้งานไม่ได้</h2><p>' +
+      esc(e && e.message ? e.message : e) + '</p></div>';
+  });
+}
+
+/* ------------------------------------------------------- หน้ารายชื่อผู้ป่วย */
+
+var listFilter = { q: '', status: '', screening: '' };
+
+function renderList() {
+  busy();
+  call('apiListPatients', listFilter).then(function (rows) {
+    var html = '' +
+      '<div class="page-head">' +
+      '  <h1>รายชื่อผู้ป่วย</h1>' +
+      '  <div class="spacer"></div>' +
+      '  <button class="btn btn-primary" onclick="go(\'patient\')">+ ลงทะเบียนเคสใหม่</button>' +
+      '</div>' +
+      // autocomplete=off กันเบราว์เซอร์จำค่าตัวกรองข้ามการโหลดหน้า
+      // ซึ่งทำให้ผู้ใช้เห็นรายชื่อไม่ครบโดยไม่รู้ตัว
+      '<div class="filters">' +
+      '  <input id="f-q" autocomplete="off" placeholder="ค้นหา HN ชื่อ ตำบล หรือ Dx" value="' + esc(listFilter.q) + '">' +
+      '  <select id="f-status" autocomplete="off">' +
+      '    <option value="">ทุกสถานะ</option>' +
+      '    <option value="active">อยู่ในโปรแกรม</option>' +
+      '    <option value="closed">จบโปรแกรมแล้ว</option>' +
+      '  </select>' +
+      '  <select id="f-screening" autocomplete="off">' +
+      '    <option value="">ทุกผลคัดกรอง</option>' +
+      '    <option value="IMC">เข้า IMC</option>' +
+      '    <option value="NoIMC">ไม่เข้า IMC</option>' +
+      '  </select>' +
+      '</div>';
+
+    if (!rows.length) {
+      html += '<div class="card"><div class="empty">ยังไม่มีข้อมูลตามเงื่อนไขนี้</div></div>';
+    } else {
+      // data-l ใช้เป็นป้ายกำกับตอนตารางกลายเป็นการ์ดบนมือถือ (ดู css.html)
+      html += '<div class="card list-card" style="padding:0"><div class="table-wrap"><table class="cards"><thead><tr>' +
+        '<th>HN</th><th>ชื่อ-สกุล</th><th>Dx</th><th>ward</th><th>วัน Start</th>' +
+        '<th>BI แรก</th><th>BI ล่าสุด</th><th>ผลคัดกรอง</th><th>สถานะ</th>' +
+        '</tr></thead><tbody>' +
+        rows.map(function (p) {
+          return '<tr onclick="go(\'detail\',\'' + esc(p.hn) + '\')">' +
+            // head ใช้เฉพาะบนมือถือ ส่วน hn-cell กับ name-cell ใช้เฉพาะบนจอใหญ่
+            // จำนวนช่องที่มองเห็นต้องเท่ากับจำนวนหัวตารางเสมอ ไม่งั้นข้อมูลจะเลื่อนคอลัมน์
+            '<td class="head"><strong>' + esc(p.hn) + '</strong> ' + esc(p.full_name || '') + '</td>' +
+            '<td data-l="HN" class="hn-cell"><strong>' + esc(p.hn) + '</strong></td>' +
+            '<td data-l="ชื่อ-สกุล" class="name-cell">' + esc(p.full_name || '—') + '</td>' +
+            '<td data-l="Dx">' + esc(p.dx || '—') + '</td>' +
+            '<td data-l="ward">' + esc(p.ward || '—') + '</td>' +
+            '<td data-l="วัน Start">' + esc(thDate(p.start_date)) + '</td>' +
+            '<td data-l="BI แรก">' + esc(p.first_bi === '' ? '—' : p.first_bi) + '</td>' +
+            '<td data-l="BI ล่าสุด">' + esc(p.latest_bi === '' ? '—' : p.latest_bi) + '</td>' +
+            '<td data-l="ผลคัดกรอง">' + screeningChip(p.screening_result) + '</td>' +
+            '<td data-l="สถานะ">' + statusChip(p.status) + '</td>' +
+            '</tr>';
+        }).join('') +
+        '</tbody></table></div></div>' +
+        '<p style="color:var(--muted);font-size:13px">ทั้งหมด ' + rows.length + ' ราย</p>';
+    }
+
+    main().innerHTML = html;
+    $('#f-status').value = listFilter.status;
+    $('#f-screening').value = listFilter.screening;
+
+    var t = null;
+    $('#f-q').addEventListener('input', function (e) {
+      clearTimeout(t);
+      var v = e.target.value;
+      t = setTimeout(function () { listFilter.q = v; renderList(); }, 350);
+    });
+    $('#f-status').addEventListener('change', function (e) { listFilter.status = e.target.value; renderList(); });
+    $('#f-screening').addEventListener('change', function (e) { listFilter.screening = e.target.value; renderList(); });
+  }).catch(fail);
+}
+
+function screeningChip(v) {
+  if (v === 'IMC') return '<span class="chip chip-imc">เข้า IMC</span>';
+  if (v === 'NoIMC') return '<span class="chip chip-no">ไม่เข้า</span>';
+  return '<span class="chip">ยังไม่ประเมิน</span>';
+}
+
+function statusChip(v) {
+  return v === 'closed'
+    ? '<span class="chip chip-closed">จบโปรแกรม</span>'
+    : '<span class="chip chip-imc">กำลังดูแล</span>';
+}
+
+/* ------------------------------------------------------ ฟอร์มข้อมูลผู้ป่วย */
+
+function patientSections() {
+  var V = BOOT.vocab;
+  return [
+    ['ข้อมูลผู้ป่วย', [
+      { k: 'hn', l: 'HN', t: 'text', req: true },
+      { k: 'cid', l: 'เลขประจำตัวประชาชน', t: 'text', ph: '13 หลัก' },
+      { k: 'prefix', l: 'คำนำหน้า', t: 'select', o: V.PREFIX },
+      { k: 'sex', l: 'เพศ', t: 'select', o: V.SEX },
+      { k: 'first_name', l: 'ชื่อ', t: 'text', req: true },
+      { k: 'last_name', l: 'นามสกุล', t: 'text' },
+      { k: 'age', l: 'อายุ (ปี)', t: 'number' },
+      { k: 'rights', l: 'สิทธิ์การรักษา', t: 'select', o: V.RIGHTS }
+    ]],
+    ['การวินิจฉัย', [
+      { k: 'dx', l: 'Dx', t: 'select', o: V.DX, req: true },
+      { k: 'hemiparesis_side', l: 'hemiparesis ข้าง', t: 'text', ph: 'เช่น right, left' },
+      { k: 'rt_pa', l: 'ได้รับ rt-PA', t: 'checkbox' },
+      { k: 'dx_detail', l: 'Diagnosis ร่วม / รายละเอียด', t: 'text' },
+      { k: 'ct_mri', l: 'CT / MRI / X-ray', t: 'textarea', full: true },
+      { k: 'operation', l: 'Operation', t: 'textarea', full: true },
+      { k: 'underlying', l: 'U/D (โรคประจำตัว)', t: 'textarea', full: true },
+      { k: 'other_problems', l: 'ปัญหาอื่น ๆ หรือภาวะแทรกซ้อนที่พบ', t: 'textarea', full: true }
+    ]],
+    ['การนอนโรงพยาบาล', [
+      { k: 'admit_date', l: 'วันที่ admit', t: 'date' },
+      { k: 'dc_date', l: 'วันที่ discharge', t: 'date' },
+      { k: 'ward', l: 'Ward', t: 'select', o: V.WARD }
+    ]],
+    ['ที่อยู่และการติดต่อ', [
+      { k: 'address', l: 'ที่อยู่', t: 'text', full: true },
+      { k: 'tambon', l: 'ตำบล', t: 'text' },
+      { k: 'phone1', l: 'เบอร์โทรศัพท์', t: 'text' },
+      { k: 'phone2', l: 'เบอร์โทรศัพท์สำรอง', t: 'text' }
+    ]],
+    ['โปรแกรม IMC', [
+      { k: 'imc_program', l: 'รูปแบบโปรแกรม', t: 'select', o: V.IMC_PROGRAM },
+      { k: 'start_date', l: 'วัน Start โปรแกรม', t: 'date' },
+      { k: 'kbh_appt_date', l: 'วันนัด OPD', t: 'date' },
+      { k: 'kbh_appt_time', l: 'เวลานัด', t: 'time' },
+      { k: 'kbh_hospital', l: 'โรงพยาบาลที่นัด', t: 'text' },
+      { k: 'screening_result', l: 'ผลคัดกรอง', t: 'select', o: V.SCREENING },
+      { k: 'note', l: 'หมายเหตุ', t: 'textarea', full: true }
+    ]]
+  ];
+}
+
+function renderPatientForm(hn) {
+  if (!hn) return drawPatientForm({});
+  busy();
+  call('apiGetPatient', hn)
+    .then(function (d) { drawPatientForm(d.patient); })
+    .catch(fail);
+}
+
+function drawPatientForm(p) {
+  var isNew = !p.patient_id;
+  var html = '<div class="page-head"><h1>' +
+    (isNew ? 'ลงทะเบียนเคสใหม่' : 'แก้ไขข้อมูล ' + esc(p.hn)) +
+    '</h1><div class="spacer"></div>' +
+    '<button class="btn" onclick="go(\'' + (isNew ? 'list' : 'detail') + '\'' +
+    (isNew ? '' : ',\'' + esc(p.hn) + '\'') + ')">ยกเลิก</button></div>' +
+    '<form id="patient-form">' +
+    '<input type="hidden" name="patient_id" value="' + esc(p.patient_id || '') + '">';
+
+  patientSections().forEach(function (sec) {
+    html += '<div class="card"><h2>' + esc(sec[0]) + '</h2><div class="grid">' +
+      sec[1].map(function (f) { return field(f, p[f.k]); }).join('') +
+      '</div></div>';
+  });
+
+  html += '<div class="btn-row"><button type="submit" class="btn btn-primary">บันทึก</button></div></form>';
+  main().innerHTML = html;
+
+  $('#patient-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var data = readForm(e.target);
+    var warn = validateCid(data.cid);
+    if (warn && !confirm(warn + '\n\nต้องการบันทึกต่อหรือไม่')) return;
+
+    var btn = e.target.querySelector('button[type=submit]');
+    btn.disabled = true; btn.textContent = 'กำลังบันทึก…';
+    call('apiSavePatient', data).then(function (r) {
+      toast('บันทึกเรียบร้อย');
+      go('detail', r.hn);
+    }).catch(function (err) {
+      btn.disabled = false; btn.textContent = 'บันทึก';
+      fail(err);
+    });
+  });
+}
+
+/** ตรวจเลขบัตรประชาชนแบบหลักตรวจสอบ คืนข้อความเตือนถ้าผิด */
+function validateCid(cid) {
+  var s = String(cid || '').replace(/\D/g, '');
+  if (!s) return '';
+  if (s.length !== 13) return 'เลขประจำตัวประชาชนมี ' + s.length + ' หลัก ไม่ใช่ 13 หลัก';
+  var sum = 0;
+  for (var i = 0; i < 12; i++) sum += parseInt(s.charAt(i), 10) * (13 - i);
+  var check = (11 - (sum % 11)) % 10;
+  if (check !== parseInt(s.charAt(12), 10)) return 'เลขประจำตัวประชาชนไม่ผ่านการตรวจสอบหลักสุดท้าย';
+  return '';
+}
+
+/* ---------------------------------------------------------- หน้าเวชระเบียน */
+
+function renderDetail(hn) {
+  busy();
+  call('apiGetPatient', hn).then(function (d) {
+    var p = d.patient;
+    var html = '<div class="page-head">' +
+      '<h1>' + esc(p.full_name || p.hn) + '</h1>' +
+      screeningChip(p.screening_result) + ' ' + statusChip(p.status) +
+      '<div class="spacer"></div>' +
+      '<button class="btn" onclick="go(\'list\')">กลับ</button>' +
+      '<button class="btn" onclick="go(\'patient\',\'' + esc(p.hn) + '\')">แก้ไขข้อมูล</button>' +
+      '</div>';
+
+    html += '<div class="card"><h2>ข้อมูลทั่วไป</h2><dl class="kv">' +
+      kv('HN', p.hn) + kv('เลขประจำตัวประชาชน', p.cid) +
+      kv('เพศ / อายุ', [p.sex, p.age ? p.age + ' ปี' : ''].filter(String).join(' · ')) +
+      kv('สิทธิ์', p.rights) + kv('Dx', p.dx) + kv('Diagnosis ร่วม', p.dx_detail) +
+      kv('U/D', p.underlying) +
+      kv('admit / discharge', thDate(p.admit_date) + ' – ' + thDate(p.dc_date)) +
+      kv('ward', p.ward) +
+      kv('ที่อยู่', [p.address, p.tambon].filter(String).join(' ต.')) +
+      kv('โทรศัพท์', [p.phone1, p.phone2].filter(String).join(' / ')) +
+      kv('โปรแกรม', p.imc_program) +
+      kv('วัน Start', thDate(p.start_date)) +
+      kv('ครบ 6 เดือน', (p.six_month_status || '—') +
+        (p.imc_end_date ? ' (ครบวันที่ ' + thDate(p.imc_end_date) + ')' : '')) +
+      kv('จำนวนครั้งที่ได้ PT', p.pt_visit_count) +
+      (p.status === 'closed' ? kv('เหตุจบโปรแกรม', p.dc_reason) : '') +
+      kv('หมายเหตุ', p.note) +
+      '</dl></div>';
+
+    html += '<div class="card"><h2>คะแนน Barthel Index</h2>' +
+      (d.assessments.length ? biChart(d.assessments) + biTable(d.assessments)
+        : '<div class="empty">ยังไม่มีการประเมิน</div>') +
+      '<div class="btn-row"><button class="btn btn-primary" onclick="go(\'bi\',\'' + esc(p.hn) + '\')">+ ประเมิน BI ครั้งใหม่</button></div>' +
+      '</div>';
+
+    html += '<div class="card"><h2>การติดตาม</h2>' +
+      (d.followups.length
+        ? '<div class="timeline">' + d.followups.map(function (f) {
+            return '<div class="tl-item">' +
+              '<div class="tl-date">ครั้งที่ ' + esc(f.seq) + ' · ' + esc(thDate(f.fu_date)) +
+              (f.fu_type ? ' · <span class="chip">' + esc(f.fu_type) + '</span>' : '') + '</div>' +
+              '<div>' + esc(f.complications || f.note || '—') + '</div>' +
+              '</div>';
+          }).join('') + '</div>'
+        : '<div class="empty">ยังไม่มีบันทึกการติดตาม</div>') +
+      '<div class="btn-row"><button class="btn btn-primary" onclick="go(\'fu\',\'' + esc(p.hn) + '\')">+ บันทึกการติดตาม</button>' +
+      (p.status === 'closed' ? ''
+        : '<button class="btn btn-danger" onclick="go(\'close\',\'' + esc(p.hn) + '\')">จบโปรแกรม</button>') +
+      '</div></div>';
+
+    main().innerHTML = html;
+  }).catch(fail);
+}
+
+function kv(k, v) {
+  return '<dt>' + esc(k) + '</dt><dd>' + esc(v === '' || v === undefined || v === null ? '—' : v) + '</dd>';
+}
+
+function biTable(list) {
+  return '<div class="table-wrap"><table><thead><tr>' +
+    '<th>ครั้งที่</th><th>วันที่ประเมิน</th><th>คะแนน</th><th>กลุ่ม CTF</th><th>เข้าเกณฑ์ IMC</th><th>ผู้ประเมิน</th>' +
+    '</tr></thead><tbody>' +
+    list.map(function (a) {
+      return '<tr style="cursor:default">' +
+        '<td>' + esc(a.seq) + '</td>' +
+        '<td>' + esc(thDate(a.assess_date)) + '</td>' +
+        '<td><strong>' + esc(a.total) + '</strong> / ' + BOOT.biMax + '</td>' +
+        '<td>' + esc(a.ctf_group) + '</td>' +
+        '<td>' + (String(a.imc_eligible).toUpperCase() === 'TRUE' ? 'ใช่' : '—') + '</td>' +
+        '<td style="font-size:12px;color:var(--muted)">' + esc(a.assessed_by) + '</td>' +
+        '</tr>';
+    }).join('') + '</tbody></table></div>';
+}
+
+/** กราฟเส้นแสดงพัฒนาการคะแนน BI */
+function biChart(list) {
+  if (list.length < 2) return '';
+  var w = 100, h = 40, max = BOOT.biMax;
+  var pts = list.map(function (a, i) {
+    var x = (i / (list.length - 1)) * w;
+    var y = h - (Number(a.total) / max) * h;
+    return x.toFixed(1) + ',' + y.toFixed(1);
+  }).join(' ');
+  return '<svg viewBox="-4 -4 ' + (w + 8) + ' ' + (h + 8) + '" ' +
+    'style="width:100%;max-width:420px;height:120px;margin-bottom:12px" ' +
+    'role="img" aria-label="กราฟคะแนน Barthel Index">' +
+    '<polyline points="' + pts + '" fill="none" stroke="#0b6b5e" stroke-width="1.5" ' +
+    'stroke-linejoin="round" stroke-linecap="round"/>' +
+    list.map(function (a, i) {
+      var x = (i / (list.length - 1)) * w;
+      var y = h - (Number(a.total) / max) * h;
+      return '<circle cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="1.8" fill="#0b6b5e"/>';
+    }).join('') +
+    '</svg>';
+}
+
+/* -------------------------------------------------------- ฟอร์มประเมิน BI */
+
+function renderBiForm(hn) {
+  var items = BOOT.biItems;
+  var html = '<div class="page-head"><h1>ประเมิน Barthel Index</h1>' +
+    '<div class="spacer"></div>' +
+    '<button class="btn" onclick="go(\'detail\',\'' + esc(hn) + '\')">ยกเลิก</button></div>' +
+    '<form id="bi-form"><input type="hidden" name="hn" value="' + esc(hn) + '">' +
+    '<div class="card"><div class="grid">' +
+    field({ k: 'assess_date', l: 'วันที่ประเมิน', t: 'date', req: true }, BOOT.today) +
+    '</div></div>';
+
+  items.forEach(function (item) {
+    html += '<div class="bi-item" id="bi-item-' + item.key + '">' +
+      '<div class="bi-head"><span class="bi-no">' + item.no + '</span>' +
+      '<span class="bi-title">' + esc(item.en) +
+      '<small>' + esc(item.th) + '</small></span></div>' +
+      '<div class="bi-options">' +
+      item.options.map(function (opt, score) {
+        return '<label class="bi-opt">' +
+          '<input type="radio" name="' + item.key + '" value="' + score + '">' +
+          '<span class="score">' + score + '</span>' +
+          '<span>' + esc(opt) + '</span></label>';
+      }).join('') +
+      '</div></div>';
+  });
+
+  html += '<div class="card"><div class="grid">' +
+    field({ k: 'multiple_impairment', l: 'มี multiple impairment', t: 'checkbox', full: true }) +
+    field({ k: 'note', l: 'หมายเหตุ', t: 'textarea', full: true }) +
+    '</div></div>' +
+    '<div class="bi-summary">' +
+    '<div><div class="bi-total"><span id="bi-total">0</span><small> / ' + BOOT.biMax + ' คะแนน</small></div>' +
+    '<div id="bi-progress" style="font-size:13px;color:var(--muted)">ประเมินแล้ว 0 จาก ' + items.length + ' ข้อ</div></div>' +
+    '<div id="bi-verdict"></div>' +
+    '<div class="spacer" style="margin-left:auto"></div>' +
+    '<button type="submit" class="btn btn-primary">บันทึกผลประเมิน</button>' +
+    '</div></form>';
+
+  main().innerHTML = html;
+
+  var form = $('#bi-form');
+  form.addEventListener('change', updateBiSummary);
+  updateBiSummary();
+
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    var data = readForm(form);
+    data.multiple_impairment = form.elements.multiple_impairment.checked;
+    var missing = BOOT.biItems.filter(function (i) { return !form.elements[i.key].value; });
+    if (missing.length) {
+      toast('ยังประเมินไม่ครบ ขาดข้อ ' + missing.map(function (i) { return i.no; }).join(', '), true);
+      document.getElementById('bi-item-' + missing[0].key).scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+    var btn = form.querySelector('button[type=submit]');
+    btn.disabled = true; btn.textContent = 'กำลังบันทึก…';
+    call('apiSaveBi', data).then(function () {
+      toast('บันทึกผลประเมินเรียบร้อย');
+      go('detail', data.hn);
+    }).catch(function (err) {
+      btn.disabled = false; btn.textContent = 'บันทึกผลประเมิน';
+      fail(err);
+    });
+  });
+}
+
+/** รวมคะแนนสดขณะกรอก และบอกทันทีว่าเข้าเกณฑ์ IMC หรือไม่ */
+function updateBiSummary() {
+  var form = $('#bi-form');
+  var total = 0, done = 0;
+  BOOT.biItems.forEach(function (item) {
+    var v = form.elements[item.key].value;
+    var box = document.getElementById('bi-item-' + item.key);
+    if (v !== '') { total += parseInt(v, 10); done++; box.classList.add('done'); }
+    else box.classList.remove('done');
+  });
+
+  document.getElementById('bi-total').textContent = total;
+  document.getElementById('bi-progress').textContent =
+    'ประเมินแล้ว ' + done + ' จาก ' + BOOT.biItems.length + ' ข้อ';
+
+  var el = document.getElementById('bi-verdict');
+  if (done < BOOT.biItems.length) { el.innerHTML = ''; return; }
+
+  var multi = form.elements.multiple_impairment.checked;
+  var eligible = total < 15 || multi;
+  var ctf = total >= 12 ? 'ติดสังคม' : (total >= 5 ? 'ติดบ้าน' : 'ติดเตียง');
+  el.innerHTML =
+    '<span class="chip ' + (eligible ? 'chip-imc' : 'chip-no') + '">' +
+    (eligible ? 'เข้าโปรแกรม IMC' : 'ไม่เข้าเกณฑ์ IMC') + '</span> ' +
+    '<span class="chip">CTF: ' + ctf + '</span>';
+}
+
+/* ------------------------------------------------------- ฟอร์มติดตามผล */
+
+function renderFuForm(hn) {
+  var html = '<div class="page-head"><h1>บันทึกการติดตาม</h1><div class="spacer"></div>' +
+    '<button class="btn" onclick="go(\'detail\',\'' + esc(hn) + '\')">ยกเลิก</button></div>' +
+    '<form id="fu-form"><input type="hidden" name="hn" value="' + esc(hn) + '">' +
+    '<div class="card"><div class="grid">' +
+    field({ k: 'fu_date', l: 'วัน เดือน ปี', t: 'date', req: true }, BOOT.today) +
+    field({ k: 'fu_type', l: 'ประเภทการติดตาม', t: 'select', o: BOOT.vocab.FU_TYPE, req: true }) +
+    field({ k: 'complications', l: 'ภาวะแทรกซ้อนที่พบ', t: 'textarea', full: true }) +
+    field({ k: 'note', l: 'หมายเหตุ', t: 'textarea', full: true }) +
+    '</div><div class="btn-row"><button type="submit" class="btn btn-primary">บันทึก</button></div></div></form>';
+
+  main().innerHTML = html;
+  $('#fu-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var data = readForm(e.target);
+    var btn = e.target.querySelector('button[type=submit]');
+    btn.disabled = true; btn.textContent = 'กำลังบันทึก…';
+    call('apiSaveFollowup', data).then(function () {
+      toast('บันทึกเรียบร้อย');
+      go('detail', data.hn);
+    }).catch(function (err) {
+      btn.disabled = false; btn.textContent = 'บันทึก';
+      fail(err);
+    });
+  });
+}
+
+/* --------------------------------------------------------- จบโปรแกรม */
+
+function renderCloseForm(hn) {
+  var html = '<div class="page-head"><h1>จบโปรแกรม IMC</h1><div class="spacer"></div>' +
+    '<button class="btn" onclick="go(\'detail\',\'' + esc(hn) + '\')">ยกเลิก</button></div>' +
+    '<form id="close-form"><input type="hidden" name="hn" value="' + esc(hn) + '">' +
+    '<div class="card"><div class="grid">' +
+    field({ k: 'end_date', l: 'วันที่จบโปรแกรม', t: 'date', req: true }, BOOT.today) +
+    field({ k: 'dc_reason', l: 'เหตุผล', t: 'select', o: BOOT.vocab.DC_REASON, req: true }) +
+    field({ k: 'note', l: 'หมายเหตุ', t: 'textarea', full: true }) +
+    '</div><div class="btn-row"><button type="submit" class="btn btn-primary">ยืนยันจบโปรแกรม</button></div></div></form>';
+
+  main().innerHTML = html;
+  $('#close-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var data = readForm(e.target);
+    call('apiClosePatient', data).then(function () {
+      toast('บันทึกการจบโปรแกรมแล้ว');
+      go('detail', data.hn);
+    }).catch(fail);
+  });
+}
+
+/* ---------------------------------------------------------- ภาพรวมงาน */
+
+function renderDashboard() {
+  busy();
+  call('apiDashboard').then(function (d) {
+    var maxCount = Math.max.apply(null, d.months.map(function (m) { return m.count; }).concat([1]));
+    var html = '<div class="page-head"><h1>ภาพรวมงาน IMC</h1></div>' +
+      '<div class="stats">' +
+      stat(d.total, 'ผู้ป่วยทั้งหมด') +
+      stat(d.imc, 'เข้าโปรแกรม IMC') +
+      stat(d.noImc, 'ไม่เข้าเกณฑ์') +
+      stat(d.active, 'กำลังดูแล') +
+      stat(d.closed, 'จบโปรแกรมแล้ว') +
+      stat(d.avgGain === null ? '—' : (d.avgGain > 0 ? '+' : '') + d.avgGain, 'BI เพิ่มเฉลี่ย') +
+      stat(d.improved, 'รายที่คะแนนดีขึ้น') +
+      '</div>';
+
+    if (d.months.length) {
+      html += '<div class="card" style="margin-top:16px"><h2>เคสใหม่รายเดือน</h2><div class="bars">' +
+        d.months.map(function (m) {
+          var p = m.month.split('-');
+          var label = TH_MONTHS[parseInt(p[1], 10) - 1] + ' ' + (parseInt(p[0], 10) + 543 - 2500);
+          return '<div class="bar" title="' + esc(m.count) + ' ราย">' +
+            '<div style="font-size:12px;font-variant-numeric:tabular-nums">' + m.count + '</div>' +
+            '<div class="fill" style="height:' + Math.round((m.count / maxCount) * 100) + '%"></div>' +
+            '<div class="lbl">' + esc(label) + '</div></div>';
+        }).join('') + '</div></div>';
+    }
+
+    main().innerHTML = html;
+  }).catch(fail);
+}
+
+function stat(v, k) {
+  return '<div class="stat"><div class="v">' + esc(v) + '</div><div class="k">' + esc(k) + '</div></div>';
+}
+
+boot();
+</script>

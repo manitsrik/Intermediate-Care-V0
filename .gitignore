@@ -1,0 +1,15 @@
+# ข้อมูลผู้ป่วยจริง ห้ามขึ้น GitHub เด็ดขาด
+# ไฟล์เหล่านี้มีเบอร์โทร HN และที่อยู่ของจริง
+*.xlsx
+migration-preview.csv
+
+# รหัสโปรเจกต์ Apps Script และ ID ของไฟล์ Sheet
+# ไม่ใช่กุญแจเข้าระบบ แต่ไม่มีเหตุผลต้องเปิดเผย
+.clasp.json
+
+# credential ของ clasp (ปกติอยู่ใน home ไม่ใช่ที่นี่ กันไว้เผื่อพลาด)
+.clasprc.json
+
+node_modules/
+.DS_Store
+Thumbs.db

@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <?!= include('css'); ?>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <button class="brand" onclick="go('list')">
+      <span class="brand-mark">IMC</span>
+      <span class="brand-text">
+        <strong id="app-name">Intermediate Care</strong>
+        <small id="app-org"></small>
+      </span>
+    </button>
+    <nav class="topnav">
+      <button onclick="go('list')" data-nav="list">รายชื่อผู้ป่วย</button>
+      <button onclick="go('dashboard')" data-nav="dashboard">ภาพรวม</button>
+    </nav>
+    <div class="who"><span id="who-email"></span></div>
+  </div>
+  <div id="mask-banner" class="mask-banner" hidden>
+    โหมดทดสอบ — ชื่อ HN เบอร์โทร และที่อยู่เป็นข้อมูลสมมติ ห้ามใช้กับผู้ป่วยจริง
+  </div>
+</header>
+
+<main id="main">
+  <div class="loading">กำลังโหลด…</div>
+</main>
+
+<div id="toast" class="toast" hidden></div>
+
+<?!= include('js'); ?>
+</body>
+</html>

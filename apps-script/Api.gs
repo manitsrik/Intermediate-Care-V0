@@ -124,12 +124,50 @@ function shareWithEditor_(email) {
   }
 }
 
+/**
+ * ถอนสิทธิ์แก้ไขไฟล์ Sheet
+ * ต้องทำคู่กับการปิดสิทธิ์ในแอปเสมอ ไม่งั้นคนที่ถูกปิดยังเปิดไฟล์ดิบอ่านข้อมูลผู้ป่วยได้
+ * เจ้าของไฟล์ถอนไม่ได้ และไม่ยอมให้ถอนสิทธิ์ตัวเอง
+ */
+function revokeEditor_(email) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var target = String(email).trim().toLowerCase();
+
+    var owner = ss.getOwner();
+    if (owner && String(owner.getEmail()).toLowerCase() === target) {
+      return { revoked: false, error: 'เป็นเจ้าของไฟล์ ถอนสิทธิ์ไม่ได้' };
+    }
+    var me = String(Session.getActiveUser().getEmail() || '').toLowerCase();
+    if (me === target) {
+      return { revoked: false, error: 'ถอนสิทธิ์ไฟล์ของตัวเองไม่ได้' };
+    }
+
+    var editors = ss.getEditors().map(function (u) { return String(u.getEmail()).toLowerCase(); });
+    if (editors.indexOf(target) === -1) return { revoked: true, already: true };
+
+    ss.removeEditor(email);
+    return { revoked: true, already: false };
+  } catch (e) {
+    return { revoked: false, error: e.message };
+  }
+}
+
 function apiShareFile(email) {
   requireAdmin_();
   var target = String(email || '').trim();
   if (!target) throw new Error('กรุณาระบุอีเมล');
   var r = shareWithEditor_(target);
   if (!r.shared) throw new Error('แชร์ไฟล์ให้ ' + target + ' ไม่สำเร็จ: ' + r.error);
+  return { ok: true, email: target, already: r.already };
+}
+
+function apiRevokeFile(email) {
+  requireAdmin_();
+  var target = String(email || '').trim();
+  if (!target) throw new Error('กรุณาระบุอีเมล');
+  var r = revokeEditor_(target);
+  if (!r.revoked) throw new Error('ถอนสิทธิ์ไฟล์ของ ' + target + ' ไม่สำเร็จ: ' + r.error);
   return { ok: true, email: target, already: r.already };
 }
 
@@ -201,12 +239,23 @@ function apiSaveUser(form) {
     if (existing) updateObject_(SHEETS.USERS, existing._row, rec);
     else appendObject_(SHEETS.USERS, rec);
 
-    // ให้สิทธิ์แก้ไขไฟล์ไปพร้อมกัน จะได้ไม่ต้องไปกดแชร์เองอีกที
-    var share = active ? shareWithEditor_(email) : { shared: false, error: 'ปิดการใช้งานอยู่' };
+    /*
+      สิทธิ์ในแอปกับสิทธิ์บนไฟล์ต้องเดินไปด้วยกันเสมอ
+      เปิดใช้งาน = แชร์ไฟล์ให้ / ปิดใช้งาน = ถอนสิทธิ์ไฟล์ออก
+      ถ้าปิดแค่ในแอปแต่ยังแชร์ไฟล์อยู่ เขาจะเปิดชีตดิบอ่านข้อมูลผู้ป่วยได้
+    */
+    if (active) {
+      var share = shareWithEditor_(email);
+      return {
+        ok: true, email: email, created: !existing, active: true,
+        shared: share.shared, alreadyShared: !!share.already, shareError: share.error || ''
+      };
+    }
 
+    var revoke = revokeEditor_(email);
     return {
-      ok: true, email: email, created: !existing,
-      shared: share.shared, alreadyShared: !!share.already, shareError: share.error || ''
+      ok: true, email: email, created: false, active: false,
+      revoked: revoke.revoked, alreadyRevoked: !!revoke.already, revokeError: revoke.error || ''
     };
   });
 }

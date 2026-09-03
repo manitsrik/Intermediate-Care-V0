@@ -809,10 +809,20 @@ function renderFollowups() {
 
 /* ------------------------------------------------------ ตั้งค่าผู้ใช้งาน */
 
-/** สิทธิ์แก้ไขไฟล์ Sheet เป็นคนละเรื่องกับสิทธิ์ในแอป ต้องมีทั้งคู่ถึงจะบันทึกได้ */
-function fileAccessCell(u) {
-  if (u.fileAccess === true) return '<span class="chip chip-ok">แชร์แล้ว</span>';
+/**
+ * สิทธิ์แก้ไขไฟล์ Sheet เป็นคนละเรื่องกับสิทธิ์ในแอป
+ * คนที่ถูกปิดสิทธิ์ในแอปแต่ยังแก้ไขไฟล์ได้ ถือว่าปิดไม่สำเร็จ ต้องเตือนให้เห็นชัด
+ */
+function fileAccessCell(u, isSelf) {
   if (u.fileAccess === null) return '<span class="chip">ตรวจสอบไม่ได้</span>';
+
+  if (u.fileAccess === true) {
+    if (u.active || isSelf) return '<span class="chip chip-ok">แชร์แล้ว</span>';
+    return '<span class="chip chip-warn">ปิดสิทธิ์แล้วแต่ยังเปิดไฟล์ได้</span> ' +
+      '<button class="btn btn-sm u-revoke" data-email="' + esc(u.email) + '">ถอนสิทธิ์ไฟล์</button>';
+  }
+
+  if (!u.active) return '<span class="chip">ถอนสิทธิ์แล้ว</span>';
   return '<span class="chip chip-warn">ยังไม่ได้แชร์</span> ' +
     '<button class="btn btn-sm u-share" data-email="' + esc(u.email) + '">แชร์ไฟล์ให้</button>';
 }
@@ -872,13 +882,15 @@ function renderSettings() {
                 'data-email="' + esc(u.email) + '"' + (u.active ? ' checked' : '') + '>' +
                 '<span>' + (u.active ? 'ใช้งานอยู่' : 'ปิดการใช้งาน') + '</span></label>') +
           '</td>' +
-          '<td data-l="ไฟล์">' + fileAccessCell(u) + '</td></tr>';
+          '<td data-l="ไฟล์">' + fileAccessCell(u, isSelf) + '</td></tr>';
       }).join('') +
       '</tbody></table></div></div>';
 
     html += '<div class="card"><h2>สิทธิ์แต่ละระดับ</h2><dl class="kv">' +
       kv('ผู้ใช้ทั่วไป', 'ลงทะเบียนเคส ประเมิน BI บันทึกการติดตาม และดูข้อมูลทั้งหมด') +
       kv('ผู้ดูแลระบบ', 'ทำได้ทุกอย่างเหมือนผู้ใช้ทั่วไป และเพิ่มหรือปิดสิทธิ์ผู้ใช้ในหน้านี้') +
+      kv('เปิดใช้งาน', 'ระบบแชร์ไฟล์ Google Sheet ให้ในสิทธิ์ผู้แก้ไขอัตโนมัติ') +
+      kv('ปิดการใช้งาน', 'ระบบถอนสิทธิ์ไฟล์ออกให้ด้วย เขาจะเปิดไฟล์ดิบดูข้อมูลผู้ป่วยไม่ได้อีก') +
       '</dl></div>';
 
     main().innerHTML = html;
@@ -926,6 +938,18 @@ function renderSettings() {
       });
     });
 
+    Array.prototype.forEach.call(document.querySelectorAll('.u-revoke'), function (el) {
+      el.addEventListener('click', function () {
+        var email = el.getAttribute('data-email');
+        if (!confirm('ถอนสิทธิ์แก้ไขไฟล์ Google Sheet ของ ' + email + ' ใช่หรือไม่')) return;
+        el.disabled = true; el.textContent = 'กำลังถอน…';
+        call('apiRevokeFile', email).then(function (r) {
+          toast('ถอนสิทธิ์ไฟล์ของ ' + r.email + ' แล้ว');
+          renderSettings();
+        }).catch(function (err) { el.disabled = false; el.textContent = 'ถอนสิทธิ์ไฟล์'; fail(err); });
+      });
+    });
+
     Array.prototype.forEach.call(document.querySelectorAll('.u-role, .u-active'), function (el) {
       el.addEventListener('change', function () {
         var email = el.getAttribute('data-email');
@@ -936,8 +960,14 @@ function renderSettings() {
           role: el.classList.contains('u-role') ? el.value : row.role,
           active: (el.classList.contains('u-active') ? el.checked : row.active) ? 'TRUE' : 'FALSE'
         };
-        call('apiSaveUser', data).then(function () {
-          toast('อัปเดต ' + email + ' แล้ว');
+        call('apiSaveUser', data).then(function (r) {
+          if (r.active === false && !r.revoked) {
+            toast('ปิดสิทธิ์ ' + email + ' แล้ว แต่ถอนสิทธิ์ไฟล์ไม่สำเร็จ: ' + r.revokeError, true);
+          } else if (r.active === false) {
+            toast('ปิดสิทธิ์ ' + email + ' และถอนสิทธิ์ไฟล์แล้ว');
+          } else {
+            toast('อัปเดต ' + email + ' แล้ว');
+          }
           renderSettings();
         }).catch(function (err) { fail(err); renderSettings(); });
       });

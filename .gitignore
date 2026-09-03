@@ -16,3 +16,6 @@ Thumbs.db
 
 # ไฟล์ mockup ที่ประกอบขึ้นใหม่ได้จาก .dc.html ทุกครั้ง ไม่ต้องเก็บใน repo
 mockup/imc-app-redesign.html
+
+# ไฟล์พรีวิวที่ประกอบขึ้นใหม่ได้ด้วย node tools/build-preview.js
+preview/

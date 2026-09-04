@@ -154,7 +154,10 @@ var API = {
   apiBootstrap: function () {
     return {
       user: { email: 'preview@local', name: 'พรีวิวบนเครื่อง', role: 'admin', isAdmin: true },
-      appName: CONFIG.APP_NAME, org: CONFIG.ORG, maskMode: true,
+      appName: CONFIG.APP_NAME, org: CONFIG.ORG,
+      orgUnit: CONFIG.ORG_UNIT, orgPlace: CONFIG.ORG_PLACE, maskMode: true,
+      patients: API.apiListPatients({}),
+      alerts: DB.patients.filter(function (x) { return x.kbh_appt_date; }).length,
       biItems: BI_ITEMS, biMax: BI_MAX, vocab: VOCAB,
       today: new Date().toISOString().slice(0, 10)
     };
@@ -242,11 +245,18 @@ var API = {
     var closed = DB.patients.filter(function (x) { return x.status === 'closed'; }).length;
     var gains = DB.patients.map(function (x) { return Number(x.latest_bi) - Number(x.first_bi); })
       .filter(function (v) { return !isNaN(v); });
-    var byMonth = {};
+    var byMonth = {}, byQuarter = {}, byYear = {};
     DB.patients.forEach(function (x) {
-      var k = String(x.start_date).slice(0, 7);
-      if (k) byMonth[k] = (byMonth[k] || 0) + 1;
+      var d = String(x.start_date || '');
+      if (d.length < 7) return;
+      var y = d.slice(0, 4), m = parseInt(d.slice(5, 7), 10);
+      byMonth[d.slice(0, 7)] = (byMonth[d.slice(0, 7)] || 0) + 1;
+      byQuarter[y + '-Q' + Math.ceil(m / 3)] = (byQuarter[y + '-Q' + Math.ceil(m / 3)] || 0) + 1;
+      byYear[y] = (byYear[y] || 0) + 1;
     });
+    var series = function (map) {
+      return Object.keys(map).sort().map(function (k) { return { key: k, count: map[k] }; });
+    };
     return {
       upcoming: DB.patients.filter(function (x) { return x.kbh_appt_date; })
         .map(function (x, i) {
@@ -257,12 +267,65 @@ var API = {
       active: DB.patients.length - closed, closed: closed,
       avgGain: Math.round(gains.reduce(function (s, v) { return s + v; }, 0) / gains.length * 10) / 10,
       improved: gains.filter(function (v) { return v > 0; }).length,
-      months: Object.keys(byMonth).sort().map(function (k) { return { month: k, count: byMonth[k] }; })
+      months: series(byMonth), quarters: series(byQuarter), years: series(byYear),
+      delta: { total: 5, imc: 3, active: -2, avgGain: 0.4 }
+    };
+  },
+
+  apiReport: function () {
+    var tally = function (pick) {
+      var map = {};
+      DB.patients.forEach(function (x) {
+        var k = String(pick(x) || '').trim() || 'ไม่ระบุ';
+        map[k] = (map[k] || 0) + 1;
+      });
+      return Object.keys(map)
+        .map(function (k) { return { name: k, count: map[k] }; })
+        .sort(function (a, b) { return b.count - a.count; });
+    };
+    var buckets = [
+      { label: '0–4 (ติดเตียง)', min: 0, max: 4, count: 0 },
+      { label: '5–11 (ติดบ้าน)', min: 5, max: 11, count: 0 },
+      { label: '12–19 (ติดสังคม)', min: 12, max: 19, count: 0 },
+      { label: '20 (เต็ม)', min: 20, max: 20, count: 0 }
+    ];
+    var progress = [];
+    DB.patients.forEach(function (x) {
+      var a = Number(x.first_bi), b = Number(x.latest_bi);
+      if (isNaN(b)) return;
+      buckets.forEach(function (k) { if (b >= k.min && b <= k.max) k.count++; });
+      if (isNaN(a)) return;
+      progress.push({
+        hn: x.hn, name: full_(x), dx: x.dx, ward: x.ward,
+        first: a, latest: b, gain: b - a,
+        ctf: b >= 12 ? 'ติดสังคม' : (b >= 5 ? 'ติดบ้าน' : 'ติดเตียง'),
+        status: x.status
+      });
+    });
+    progress.sort(function (m, n) { return n.gain - m.gain; });
+    return {
+      total: DB.patients.length,
+      assessed: progress.length,
+      ctf: tally(function (x) {
+        var b = Number(x.latest_bi);
+        if (isNaN(b)) return '';
+        return b >= 12 ? 'ติดสังคม' : (b >= 5 ? 'ติดบ้าน' : 'ติดเตียง');
+      }),
+      dxGroups: tally(function (x) { return x.dx_group || x.dx; }),
+      wards: tally(function (x) { return x.ward; }),
+      programs: tally(function (x) { return x.imc_program; }),
+      buckets: buckets,
+      progress: progress
     };
   }
 };
 
-/** เลียนแบบรูปแบบการเรียกของ Apps Script รวมถึงหน่วงเวลาให้เหมือนของจริง */
+/*
+  เลียนแบบรูปแบบการเรียกของ Apps Script รวมถึงหน่วงเวลาให้เหมือนของจริง
+  ของจริงหนึ่งรอบใช้เวลาประมาณ 1.5-3 วินาที ถ้าตั้งไว้เร็วกว่านี้
+  พรีวิวจะดูลื่นเกินจริงจนมองไม่เห็นปัญหาความช้าก่อน deploy
+*/
+var MOCK_DELAY_MS = 1800;
 var google = { script: { run: {} } };
 (function () {
   function make(success, failure) {
@@ -277,7 +340,7 @@ var google = { script: { run: {} } };
           } catch (e) {
             if (failure) failure(e); else console.error(e);
           }
-        }, 180);
+        }, MOCK_DELAY_MS);
       };
     });
     runner.withSuccessHandler = function (fn) { return make(fn, failure); };

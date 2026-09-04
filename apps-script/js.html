@@ -9,11 +9,24 @@ var VIEW = { name: 'list', param: null };
  * ถ้าได้ null กลับมาแปลว่าแปลงข้อมูลข้ามฝั่งไม่สำเร็จ ให้บอกสาเหตุตรง ๆ
  * ดีกว่าปล่อยให้ไปพังเป็น TypeError ที่อ่านไม่รู้เรื่องทีหลัง
  */
+/**
+ * ฟังก์ชันที่เขียนลงชีต ใช้ตัวบอกสถานะคนละแบบกับการอ่าน
+ * เขียน = กล่องคลุมทั้งจอ กันกดซ้ำจนได้ข้อมูลซ้อนกัน
+ * อ่าน  = แถบบางด้านบน ไม่บังจอ ผู้ใช้กดอย่างอื่นต่อได้ระหว่างรอ
+ */
+var WRITE_FNS = {
+  apiSavePatient: 1, apiSaveBi: 1, apiSaveFollowup: 1, apiClosePatient: 1,
+  apiSaveUser: 1, apiShareFile: 1, apiRevokeFile: 1, apiClaimAdmin: 1
+};
+
 function call(fn) {
   var args = Array.prototype.slice.call(arguments, 1);
+  var writing = !!WRITE_FNS[fn];
+  busyOn(writing);
   return new Promise(function (resolve, reject) {
     google.script.run
       .withSuccessHandler(function (result) {
+        busyOff(writing);
         if (result === null || result === undefined) {
           reject(new Error('เซิร์ฟเวอร์ส่งข้อมูลกลับมาไม่ได้ (' + fn + ') ' +
             'อาจมีค่าผิดปกติในชีต กรุณาแจ้งผู้ดูแลระบบ'));
@@ -21,9 +34,44 @@ function call(fn) {
         }
         resolve(result);
       })
-      .withFailureHandler(function (e) { reject(e); })
+      .withFailureHandler(function (e) { busyOff(writing); reject(e); })
       [fn].apply(null, args);
   });
+}
+
+/* --------------------------------------------------- ตัวบอกว่ากำลังโหลด */
+
+var pendingRead = 0;
+var pendingWrite = 0;
+var writeTimer = null;
+
+function busyOn(writing) {
+  if (!writing) {
+    pendingRead++;
+    document.getElementById('progress').hidden = false;
+    return;
+  }
+  pendingWrite++;
+  document.getElementById('loading-msg').textContent = 'กำลังบันทึก…';
+  // รอ 250ms ก่อนค่อยขึ้น ถ้าเซิร์ฟเวอร์ตอบเร็วกว่านั้นจะไม่ขึ้นเลย ไม่ให้กะพริบ
+  if (writeTimer) return;
+  writeTimer = setTimeout(function () {
+    writeTimer = null;
+    if (pendingWrite > 0) document.getElementById('loading').hidden = false;
+  }, 250);
+}
+
+function busyOff(writing) {
+  if (!writing) {
+    pendingRead = Math.max(0, pendingRead - 1);
+    if (!pendingRead) document.getElementById('progress').hidden = true;
+    return;
+  }
+  pendingWrite = Math.max(0, pendingWrite - 1);
+  if (pendingWrite > 0) return;
+  clearTimeout(writeTimer);
+  writeTimer = null;
+  document.getElementById('loading').hidden = true;
 }
 
 function esc(s) {
@@ -35,31 +83,136 @@ function esc(s) {
 function $(sel) { return document.querySelector(sel); }
 function main() { return document.getElementById('main'); }
 
-var toastTimer = null;
-function toast(msg, isError) {
-  var el = document.getElementById('toast');
-  el.textContent = msg;
-  el.className = 'toast' + (isError ? ' err' : '');
-  el.hidden = false;
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(function () { el.hidden = true; }, isError ? 7000 : 3000);
+/* ---------------------------------------------------------------- โมดัล */
+
+var MODAL_ICON = {
+  info: '<circle cx="12" cy="12" r="9"></circle><path d="M12 11v5M12 7.6v.4"></path>',
+  success: '<circle cx="12" cy="12" r="9"></circle><path d="m8 12.4 2.6 2.6L16 9.6"></path>',
+  warn: '<path d="M12 4.4 21.2 19.6H2.8z"></path><path d="M12 10.2v4M12 17v.4"></path>',
+  danger: '<circle cx="12" cy="12" r="9"></circle><path d="m9 9 6 6M15 9l-6 6"></path>'
+};
+
+var modalResolve = null;
+
+function closeModal(result) {
+  document.getElementById('modal').hidden = true;
+  document.removeEventListener('keydown', modalKeys);
+  var fn = modalResolve;
+  modalResolve = null;
+  if (fn) fn(result);
 }
 
-function fail(e) { toast((e && e.message) ? e.message : String(e), true); }
+function modalKeys(e) {
+  if (e.key === 'Escape') { e.preventDefault(); closeModal(false); }
+  else if (e.key === 'Enter') { e.preventDefault(); closeModal(true); }
+}
 
-function busy(msg) {
-  main().innerHTML = '<div class="loading">' + esc(msg || 'กำลังโหลด…') + '</div>';
+/** คืน Promise ที่ได้ true เมื่อกดปุ่มยืนยัน และ false เมื่อยกเลิกหรือกด Esc */
+function openModal(opts) {
+  var kind = opts.kind || 'info';
+  var el = document.getElementById('modal');
+
+  var iconBox = document.getElementById('modal-icon');
+  iconBox.className = 'modal-icon ' + kind;
+  iconBox.innerHTML = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" ' +
+    'stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" ' +
+    'aria-hidden="true">' + MODAL_ICON[kind] + '</svg>';
+
+  document.getElementById('modal-title').textContent = opts.title || '';
+  var msg = document.getElementById('modal-msg');
+  msg.textContent = opts.message || '';
+  msg.hidden = !opts.message;
+
+  var okClass = (kind === 'danger' || kind === 'warn') ? 'btn btn-solid-danger' : 'btn btn-primary';
+  document.getElementById('modal-actions').innerHTML =
+    (opts.cancelText ? '<button class="btn" id="modal-cancel">' + esc(opts.cancelText) + '</button>' : '') +
+    '<button class="' + okClass + '" id="modal-ok">' + esc(opts.confirmText || 'ตกลง') + '</button>';
+
+  el.hidden = false;
+  document.getElementById('modal-ok').onclick = function () { closeModal(true); };
+  var cancel = document.getElementById('modal-cancel');
+  if (cancel) cancel.onclick = function () { closeModal(false); };
+  el.onclick = function (e) { if (e.target === el) closeModal(false); };
+
+  document.addEventListener('keydown', modalKeys);
+  setTimeout(function () {
+    var ok = document.getElementById('modal-ok');
+    if (ok) ok.focus();
+  }, 30);
+
+  return new Promise(function (resolve) { modalResolve = resolve; });
+}
+
+function notify(title, message, kind) {
+  return openModal({ kind: kind || 'info', title: title, message: message, confirmText: 'ตกลง' });
+}
+
+function askConfirm(title, message, opts) {
+  opts = opts || {};
+  return openModal({
+    kind: opts.kind || 'warn',
+    title: title,
+    message: message,
+    confirmText: opts.confirmText || 'ยืนยัน',
+    cancelText: opts.cancelText || 'ยกเลิก'
+  });
+}
+
+/** ใช้ชื่อเดิมเพื่อไม่ต้องแก้จุดเรียกทั้งแอป แต่เปลี่ยนไปแสดงเป็นโมดัลแทน */
+function toast(msg, isError) {
+  return isError ? notify('ทำรายการไม่สำเร็จ', msg, 'danger')
+                 : notify('บันทึกเรียบร้อย', msg, 'success');
+}
+
+function fail(e) {
+  notify('เกิดข้อผิดพลาด', (e && e.message) ? e.message : String(e), 'danger');
+}
+
+/** โครงหน้าจอจาง ๆ ระหว่างรอข้อมูล ดูรู้ว่ากำลังมีอะไรมา ดีกว่าปล่อยจอว่าง */
+function busy(rows) {
+  var html = '<div class="skel-head"></div>';
+  for (var i = 0; i < (rows || 6); i++) html += '<div class="skel-row"></div>';
+  main().innerHTML = '<div class="skeleton">' + html + '</div>';
+}
+
+/* -------------------------------------------------- ข้อมูลที่เก็บไว้ในเครื่อง
+
+  หนึ่งครั้งที่คุยกับ Apps Script ใช้เวลาหลายวินาที การดึงซ้ำทุกครั้งที่เปลี่ยนหน้า
+  จึงทำให้รู้สึกช้ามาก เก็บผลไว้แล้ววาดจากของเก่าก่อน จากนั้นค่อยดึงใหม่เงียบ ๆ
+  ทุกจุดที่บันทึกข้อมูลต้องเรียก dropCache_ ไม่งั้นจะเห็นของเก่าค้าง
+*/
+var patientCache = null;
+var patientCacheAt = 0;
+var detailCache = {};
+
+/** ของเก่าเกินเท่านี้ถึงจะไปดึงใหม่ กันการยิงซ้ำตอนสลับหน้าไปมาเร็ว ๆ */
+var CACHE_FRESH_MS = 30000;
+
+function dropCache_(hn) {
+  patientCache = null;
+  patientCacheAt = 0;
+  dashCache = null;
+  reportCache = null;
+  if (hn) delete detailCache[hn]; else detailCache = {};
 }
 
 /* --------------------------------------------------------------- ไอคอน */
 
 var ICONS = {
-  dashboard: '<rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect>',
-  patients: '<path d="M16 20v-1.5a3.5 3.5 0 0 0-3.5-3.5h-5A3.5 3.5 0 0 0 4 18.5V20"></path><circle cx="10" cy="8" r="3.2"></circle><path d="M19 20v-1.4a3.2 3.2 0 0 0-2.4-3.1"></path><path d="M15.2 5.2a3.2 3.2 0 0 1 0 5.6"></path>',
-  followups: '<rect x="4" y="5.5" width="16" height="14.5" rx="2"></rect><path d="M4 10h16M9 3.5v4M15 3.5v4"></path>',
-  settings: '<path d="M4 7h16M4 12h16M4 17h16"></path><circle cx="9" cy="7" r="2.2" fill="currentColor" stroke="none"></circle><circle cx="15" cy="12" r="2.2" fill="currentColor" stroke="none"></circle><circle cx="8" cy="17" r="2.2" fill="currentColor" stroke="none"></circle>',
   back: '<path d="M19 12H5M11 6l-6 6 6 6"></path>',
-  arrow: '<path d="M5 12h14M13 6l6 6-6 6"></path>'
+  arrow: '<path d="M5 12h14M13 6l6 6-6 6"></path>',
+
+  home: '<path d="M3.5 10.4 12 3.5l8.5 6.9V20a1 1 0 0 1-1 1h-4.6v-6H9.1v6H4.5a1 1 0 0 1-1-1z"></path>',
+  report: '<path d="M6.5 2.8h7.7L19 7.6V20a1.2 1.2 0 0 1-1.2 1.2H6.5A1.2 1.2 0 0 1 5.3 20V4A1.2 1.2 0 0 1 6.5 2.8z"></path><path d="M13.8 2.9v5h5"></path><path d="M8.6 16.4v-2.6M12 16.4v-5M15.4 16.4v-3.6"></path>',
+  people: '<circle cx="9" cy="8" r="3.4"></circle><path d="M2.9 20v-1a5 5 0 0 1 5-5h2.2a5 5 0 0 1 5 5v1"></path><circle cx="17.4" cy="9.4" r="2.4"></circle><path d="M21.1 20v-.9a3.6 3.6 0 0 0-2.8-3.5"></path>',
+  userplus: '<circle cx="10" cy="8" r="3.4"></circle><path d="M3.4 20v-1a5 5 0 0 1 5-5h3.2a5 5 0 0 1 4 2"></path><path d="M18 15.6v5M15.5 18.1h5"></path>',
+  clock: '<circle cx="12" cy="12" r="8.6"></circle><path d="M12 7.3V12l3.1 1.9"></path>',
+  chart: '<path d="M5.4 19.4V11M12 19.4V5.2M18.6 19.4v-5.6"></path>',
+  target: '<circle cx="12" cy="12" r="8.4"></circle><circle cx="12" cy="12" r="4.2"></circle><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"></circle>',
+  pulse: '<path d="M2.8 12.4h4L9 7.6l3.4 9.2 2.4-5.2h6.4"></path>',
+  calendar: '<rect x="3.6" y="5.4" width="16.8" height="15" rx="2.4"></rect><path d="M3.6 10h16.8M8.4 3v4.4M15.6 3v4.4"></path>',
+  calplus: '<rect x="3.6" y="5.4" width="16.8" height="15" rx="2.4"></rect><path d="M3.6 10h16.8M8.4 3v4.4M15.6 3v4.4"></path><path d="M12 12.8v5M9.5 15.3h5"></path>',
+  gear: '<circle cx="12" cy="12" r="3.1"></circle><path d="M19.6 14.6a1.6 1.6 0 0 0 .32 1.76l.06.06a1.9 1.9 0 1 1-2.7 2.7l-.06-.06a1.6 1.6 0 0 0-1.76-.32 1.6 1.6 0 0 0-1 1.46v.17a1.9 1.9 0 1 1-3.8 0v-.09a1.6 1.6 0 0 0-1.05-1.46 1.6 1.6 0 0 0-1.76.32l-.06.06a1.9 1.9 0 1 1-2.7-2.7l.06-.06a1.6 1.6 0 0 0 .32-1.76 1.6 1.6 0 0 0-1.46-1H3.7a1.9 1.9 0 1 1 0-3.8h.09a1.6 1.6 0 0 0 1.46-1.05 1.6 1.6 0 0 0-.32-1.76l-.06-.06a1.9 1.9 0 1 1 2.7-2.7l.06.06a1.6 1.6 0 0 0 1.76.32h.08a1.6 1.6 0 0 0 1-1.46V3.7a1.9 1.9 0 1 1 3.8 0v.09a1.6 1.6 0 0 0 1 1.46 1.6 1.6 0 0 0 1.76-.32l.06-.06a1.9 1.9 0 1 1 2.7 2.7l-.06.06a1.6 1.6 0 0 0-.32 1.76v.08a1.6 1.6 0 0 0 1.46 1h.17a1.9 1.9 0 1 1 0 3.8h-.09a1.6 1.6 0 0 0-1.46 1z"></path>'
 };
 
 function icon(name, size, stroke) {
@@ -72,6 +225,20 @@ function icon(name, size, stroke) {
 
 var TH_MONTHS = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.',
   'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+
+var TH_MONTHS_FULL = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
+  'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
+
+var TH_DAYS = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
+
+function pad2(n) { return (n < 10 ? '0' : '') + n; }
+
+function thDayText(t) {
+  return 'วัน' + TH_DAYS[t.getDay()] + 'ที่ ' + t.getDate() + ' ' +
+    TH_MONTHS_FULL[t.getMonth()] + ' ' + (t.getFullYear() + 543);
+}
+
+function thTimeText(t) { return pad2(t.getHours()) + ':' + pad2(t.getMinutes()) + ' น.'; }
 
 /** yyyy-MM-dd เป็นวันที่แบบไทย พ.ศ. */
 function thDate(iso) {
@@ -125,22 +292,23 @@ function readForm(formEl) {
 /* ----------------------------------------------------------- โครงหน้าจอ */
 
 var NAV = [
-  { key: 'dashboard', icon: 'dashboard', label: 'ภาพรวม', short: 'ภาพรวม' },
-  { key: 'list', icon: 'patients', label: 'รายชื่อผู้ป่วย', short: 'ผู้ป่วย' },
-  { key: 'followups', icon: 'followups', label: 'การติดตาม', short: 'ติดตาม' },
-  { key: 'settings', icon: 'settings', label: 'ตั้งค่า', short: 'ตั้งค่า', adminOnly: true }
+  { key: 'dashboard', icon: 'home', label: 'ภาพรวม', short: 'ภาพรวม' },
+  { key: 'list', icon: 'people', label: 'รายชื่อผู้ป่วย', short: 'ผู้ป่วย' },
+  { key: 'followups', icon: 'calendar', label: 'การติดตาม', short: 'ติดตาม' },
+  { key: 'report', icon: 'report', label: 'รายงาน / BI', short: 'รายงาน' },
+  { key: 'settings', icon: 'gear', label: 'ตั้งค่า', short: 'ตั้งค่า', adminOnly: true }
 ];
 
 /** หน้าย่อยที่ควรทำให้เมนูหลักตัวไหนสว่างค้างไว้ */
 var NAV_OF_VIEW = {
   list: 'list', patient: 'list', detail: 'list', bi: 'list', fu: 'list', close: 'list',
-  dashboard: 'dashboard', followups: 'followups', settings: 'settings'
+  dashboard: 'dashboard', followups: 'followups', settings: 'settings', report: 'report'
 };
 
 var TITLE_OF_VIEW = {
   list: 'รายชื่อผู้ป่วย', patient: 'ข้อมูลผู้ป่วย', detail: 'เวชระเบียน',
   bi: 'ประเมิน BI', fu: 'บันทึกการติดตาม', close: 'จบโปรแกรม',
-  dashboard: 'ภาพรวมงาน', followups: 'การติดตาม', settings: 'ตั้งค่า'
+  dashboard: 'ภาพรวมงาน', followups: 'การติดตาม', settings: 'ตั้งค่า', report: 'รายงาน / BI'
 };
 
 function visibleNav() {
@@ -163,6 +331,7 @@ function renderNav() {
 
 function go(name, param) {
   VIEW = { name: name, param: param };
+  closeDropdown();
 
   var active = NAV_OF_VIEW[name] || '';
   Array.prototype.forEach.call(document.querySelectorAll('[data-nav]'), function (b) {
@@ -177,6 +346,7 @@ function go(name, param) {
     dashboard: renderDashboard,
     followups: renderFollowups,
     settings: renderSettings,
+    report: renderReport,
     patient: renderPatientForm,
     detail: renderDetail,
     bi: renderBiForm,
@@ -185,9 +355,122 @@ function go(name, param) {
   })[name](param);
 }
 
+/* ------------------------------------------------------------- แถบบนสุด */
+
+function setAlerts(n) {
+  var b = document.getElementById('alert-badge');
+  b.textContent = n > 9 ? '9+' : String(n);
+  b.hidden = !n;
+  document.getElementById('btn-alerts').title = n
+    ? 'มีนัดหมาย ' + n + ' รายใน 7 วันข้างหน้า' : 'ไม่มีนัดหมายใน 7 วันข้างหน้า';
+}
+
+var dropdownKind = '';
+
+function toggleDropdown(kind, html) {
+  var el = document.getElementById('dropdown');
+  if (dropdownKind === kind && !el.hidden) { closeDropdown(); return; }
+  el.innerHTML = html;
+  el.hidden = false;
+  dropdownKind = kind;
+}
+
+function closeDropdown() {
+  var el = document.getElementById('dropdown');
+  if (!el) return;
+  el.hidden = true;
+  dropdownKind = '';
+}
+
+function ddItem(iconName, label, onclick) {
+  return '<button class="dd-item" onclick="' + onclick + '">' + icon(iconName, 17) +
+    '<span>' + esc(label) + '</span></button>';
+}
+
+function wireTopbar() {
+  // พิมพ์ที่แถบบนแล้วกรองรายชื่อทันที ไม่ต้องรอเซิร์ฟเวอร์เพราะข้อมูลอยู่ในเครื่องแล้ว
+  document.getElementById('top-search').addEventListener('input', function (e) {
+    listFilter.q = e.target.value;
+    if (VIEW.name !== 'list') { go('list'); return; }
+    var f = document.getElementById('f-q');
+    if (f) f.value = listFilter.q;
+    paintRows();
+  });
+
+  document.getElementById('btn-quick').onclick = function (e) {
+    e.stopPropagation();
+    toggleDropdown('quick',
+      ddItem('userplus', 'ลงทะเบียนผู้ป่วยใหม่', "go('patient')") +
+      ddItem('calendar', 'ดูการติดตามล่าสุด', "go('followups')") +
+      ddItem('report', 'รายงาน / BI', "go('report')") +
+      (BOOT.user.isAdmin ? ddItem('gear', 'ตั้งค่าผู้ใช้', "go('settings')") : ''));
+  };
+
+  document.getElementById('btn-user').onclick = function (e) {
+    e.stopPropagation();
+    toggleDropdown('user',
+      '<div class="dd-head"><b>' + esc(displayName(BOOT.user)) + '</b>' +
+      '<small>' + esc(BOOT.user.email) + '</small></div>' +
+      ddItem('pulse', 'โหลดข้อมูลใหม่', 'reloadAll()'));
+  };
+
+  document.addEventListener('click', closeDropdown);
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') closeDropdown();
+  });
+}
+
+/** ทิ้งของที่เก็บไว้ทั้งหมดแล้ววาดหน้าปัจจุบันใหม่ ใช้ตอนสงสัยว่าเห็นข้อมูลเก่า */
+function reloadAll() {
+  dropCache_();
+  go(VIEW.name, VIEW.param);
+}
+
+/** อักษรย่อในวงกลม ใช้ตัวพิมพ์ใหญ่เสมอ ภาษาไทยไม่มีตัวพิมพ์ใหญ่จึงไม่เปลี่ยนอะไร */
 function initials(name) {
   var s = String(name || '').trim();
-  return s ? s.charAt(0) : '?';
+  return s ? s.charAt(0).toUpperCase() : '?';
+}
+
+/*
+  ขยายข้อความในกล่องแบรนด์ให้ชนขอบขวาของเมนูพอดี
+
+  วัดความกว้างจริงแล้วคำนวณขนาดตัวอักษรเอา เพราะชื่อหน่วยงานมาจาก Config
+  ถ้าใครแก้เป็นชื่อที่ยาวหรือสั้นกว่านี้ ขนาดที่ตั้งตายตัวไว้จะไม่พอดีทันที
+  สองบรรทัดหน่วยงานใช้ขนาดเดียวกัน คิดจากบรรทัดที่ยาวที่สุด
+  ถ้าให้แต่ละบรรทัดพอดีขอบของตัวเอง บรรทัดสั้นจะกลายเป็นตัวใหญ่กว่าบรรทัดยาว
+*/
+var BRAND_MAX = { full: 18, org: 16.5 };
+
+function fitLine_(el, boxWidth, maxSize, widest) {
+  if (!el) return;
+  el.style.fontSize = '';
+  var base = parseFloat(window.getComputedStyle(el).fontSize) || 16;
+  var w = widest || el.getBoundingClientRect().width;
+  if (!w || !boxWidth) return;
+  el.style.fontSize = Math.min(maxSize, base * boxWidth / w).toFixed(1) + 'px';
+}
+
+function fitBrandText() {
+  var box = document.querySelector('.brand-text');
+  if (!box) return;
+  var width = box.clientWidth;
+  if (!width) return;
+
+  fitLine_(document.getElementById('app-name'), width, BRAND_MAX.full);
+
+  var org = document.querySelector('.brand-org');
+  var unit = document.getElementById('app-org-unit');
+  var place = document.getElementById('app-org-place');
+  if (!org || !unit) return;
+  org.style.fontSize = '';
+  fitLine_(org, width, BRAND_MAX.org,
+    Math.max(unit.getBoundingClientRect().width, place.getBoundingClientRect().width));
+}
+
+/** ชื่อที่แสดงบนแถบบน ใช้ชื่อจริงถ้ามี ไม่งั้นใช้ส่วนหน้าของอีเมล */
+function displayName(u) {
+  return u.name || String(u.email || '').split('@')[0] || '—';
 }
 
 function boot() {
@@ -196,9 +479,22 @@ function boot() {
     document.getElementById('app-name').textContent = b.appName;
     document.getElementById('app-org-unit').textContent = b.orgUnit || b.org;
     document.getElementById('app-org-place').textContent = b.orgPlace || '';
-    document.getElementById('who-email').textContent = b.user.email;
-    document.getElementById('user-initial').textContent = initials(b.user.email);    document.getElementById('mask-banner').hidden = !b.maskMode;
+    document.getElementById('user-name').textContent = displayName(b.user);
+    document.getElementById('user-role').textContent = b.user.isAdmin ? 'ผู้ดูแลระบบ' : 'เจ้าหน้าที่ IMC';
+    document.getElementById('btn-user').title = b.user.email;
+    document.getElementById('user-initial').textContent = initials(displayName(b.user));
+    document.getElementById('mask-banner').hidden = !b.maskMode;
+    setAlerts(b.alerts || 0);
+    // apiBootstrap ส่งรายชื่อผู้ป่วยมาด้วยเลย หน้าแรกจึงคุยกับเซิร์ฟเวอร์รอบเดียว ไม่ใช่สองรอบ
+    if (b.patients) { patientCache = b.patients; patientCacheAt = Date.now(); }
     renderNav();
+    wireTopbar();
+
+    // ฟอนต์เว็บมาทีหลัง ถ้าวัดก่อนฟอนต์โหลดเสร็จจะได้ความกว้างของฟอนต์สำรอง
+    fitBrandText();
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitBrandText);
+    window.addEventListener('resize', fitBrandText);
+
     go('list');
   }).catch(function (e) {
     main().innerHTML = '<div class="card"><h2>เข้าใช้งานไม่ได้</h2><p>' +
@@ -210,61 +506,100 @@ function boot() {
 
 var listFilter = { q: '', status: '', screening: '' };
 
+/**
+ * ดึงรายชื่อทั้งหมดครั้งเดียวแล้วค้นหากับกรองในเครื่อง
+ * เดิมพิมพ์ค้นหาหนึ่งคำคือยิงไปเซิร์ฟเวอร์หนึ่งรอบ รอหลายวินาทีต่อคำ
+ * และหน้าจอถูกวาดใหม่ทั้งหน้าจนเคอร์เซอร์หลุดจากช่องค้นหาทุกครั้ง
+ */
 function renderList() {
-  busy();
-  call('apiListPatients', listFilter).then(function (rows) {
-    var active = rows.filter(function (p) { return String(p.status) !== 'closed'; }).length;
-
-    var html =
-      '<div class="page-head">' +
-      '  <div class="head-text">' +
-      '    <h1>รายชื่อผู้ป่วย</h1>' +
-      '    <span class="sub num">ทั้งหมด ' + rows.length + ' ราย · กำลังดูแล ' + active + ' ราย</span>' +
-      '  </div>' +
-      '  <div class="spacer"></div>' +
-      '  <button class="btn btn-primary" onclick="go(\'patient\')">+ ลงทะเบียนเคสใหม่</button>' +
-      '</div>' +
-      '<div class="filters">' +
-      '  <input id="f-q" autocomplete="off" placeholder="ค้นหา HN ชื่อ ตำบล หรือ Dx" value="' + esc(listFilter.q) + '">' +
-      '  <select id="f-status" autocomplete="off">' +
-      '    <option value="">ทุกสถานะ</option>' +
-      '    <option value="active">กำลังดูแล</option>' +
-      '    <option value="closed">จบโปรแกรมแล้ว</option>' +
-      '  </select>' +
-      '  <select id="f-screening" autocomplete="off">' +
-      '    <option value="">ทุกผลคัดกรอง</option>' +
-      '    <option value="IMC">เข้า IMC</option>' +
-      '    <option value="NoIMC">ไม่เข้าเกณฑ์</option>' +
-      '  </select>' +
-      '</div>';
-
-    if (!rows.length) {
-      html += '<div class="card"><div class="empty">ยังไม่มีข้อมูลตามเงื่อนไขนี้</div></div>';
-    } else {
-      // data-l ใช้เป็นป้ายกำกับตอนตารางกลายเป็นการ์ดบนมือถือ (ดู css.html)
-      // จำนวนช่องที่มองเห็นต้องเท่ากับจำนวนหัวตารางเสมอ ไม่งั้นข้อมูลจะเลื่อนคอลัมน์
-      html += '<div class="card flush"><div class="table-wrap"><table class="cards"><thead><tr>' +
-        '<th>ผู้ป่วย</th><th>การวินิจฉัย</th><th>Ward</th><th>วัน Start</th>' +
-        '<th>Barthel Index</th><th>ผลคัดกรอง</th><th>สถานะ</th>' +
-        '</tr></thead><tbody>' +
-        rows.map(patientRow).join('') +
-        '</tbody></table></div></div>' +
-        '<p class="count-line num">แสดง ' + rows.length + ' ราย</p>';
+  if (patientCache) {
+    drawList();
+    if (Date.now() - patientCacheAt > CACHE_FRESH_MS) {
+      loadPatients().then(paintRows).catch(function () { /* ของเก่ายังใช้ได้ ไม่ต้องรบกวน */ });
     }
+    return;
+  }
+  busy();
+  loadPatients().then(drawList).catch(fail);
+}
 
-    main().innerHTML = html;
-    $('#f-status').value = listFilter.status;
-    $('#f-screening').value = listFilter.screening;
+function loadPatients() {
+  return call('apiListPatients', {}).then(function (rows) {
+    patientCache = rows;
+    patientCacheAt = Date.now();
+    return rows;
+  });
+}
 
-    var t = null;
-    $('#f-q').addEventListener('input', function (e) {
-      clearTimeout(t);
-      var v = e.target.value;
-      t = setTimeout(function () { listFilter.q = v; renderList(); }, 350);
-    });
-    $('#f-status').addEventListener('change', function (e) { listFilter.status = e.target.value; renderList(); });
-    $('#f-screening').addEventListener('change', function (e) { listFilter.screening = e.target.value; renderList(); });
-  }).catch(fail);
+/** เงื่อนไขเดียวกับที่ apiListPatients เคยกรองให้ฝั่งเซิร์ฟเวอร์ */
+function matchesFilter(p) {
+  if (listFilter.status && String(p.status) !== listFilter.status) return false;
+  if (listFilter.screening && String(p.screening_result) !== listFilter.screening) return false;
+  var q = String(listFilter.q || '').trim().toLowerCase();
+  if (!q) return true;
+  return [p.hn, p.cid, p.first_name, p.last_name, p.tambon, p.dx]
+    .join(' ').toLowerCase().indexOf(q) !== -1;
+}
+
+function drawList() {
+  var html =
+    '<div class="page-head">' +
+    '  <div class="head-text">' +
+    '    <h1>รายชื่อผู้ป่วย</h1>' +
+    '    <span class="sub num" id="list-count"></span>' +
+    '  </div>' +
+    '  <div class="spacer"></div>' +
+    '  <button class="btn btn-primary" onclick="go(\'patient\')">+ ลงทะเบียนเคสใหม่</button>' +
+    '</div>' +
+    '<div class="filters">' +
+    '  <input id="f-q" autocomplete="off" placeholder="ค้นหา HN ชื่อ ตำบล หรือ Dx" value="' + esc(listFilter.q) + '">' +
+    '  <select id="f-status" autocomplete="off">' +
+    '    <option value="">ทุกสถานะ</option>' +
+    '    <option value="active">กำลังดูแล</option>' +
+    '    <option value="closed">จบโปรแกรมแล้ว</option>' +
+    '  </select>' +
+    '  <select id="f-screening" autocomplete="off">' +
+    '    <option value="">ทุกผลคัดกรอง</option>' +
+    '    <option value="IMC">เข้า IMC</option>' +
+    '    <option value="NoIMC">ไม่เข้าเกณฑ์</option>' +
+    '  </select>' +
+    '</div>' +
+    // data-l ใช้เป็นป้ายกำกับตอนตารางกลายเป็นการ์ดบนมือถือ (ดู css.html)
+    // จำนวนช่องที่มองเห็นต้องเท่ากับจำนวนหัวตารางเสมอ ไม่งั้นข้อมูลจะเลื่อนคอลัมน์
+    '<div class="card flush" id="list-card"><div class="table-wrap">' +
+    '<table class="cards"><thead><tr>' +
+    '<th>ผู้ป่วย</th><th>การวินิจฉัย</th><th>Ward</th><th>วัน Start</th>' +
+    '<th>Barthel Index</th><th>ผลคัดกรอง</th><th>สถานะ</th>' +
+    '</tr></thead><tbody id="list-body"></tbody></table></div></div>' +
+    '<div id="list-empty" hidden><div class="card"><div class="empty">ยังไม่มีข้อมูลตามเงื่อนไขนี้</div></div></div>' +
+    '<p class="count-line num" id="list-shown"></p>';
+
+  main().innerHTML = html;
+  $('#f-status').value = listFilter.status;
+  $('#f-screening').value = listFilter.screening;
+
+  // กรองในเครื่องแล้ววาดใหม่เฉพาะแถว ช่องค้นหาไม่ถูกสร้างใหม่ เคอร์เซอร์จึงอยู่ที่เดิม
+  $('#f-q').addEventListener('input', function (e) { listFilter.q = e.target.value; paintRows(); });
+  $('#f-status').addEventListener('change', function (e) { listFilter.status = e.target.value; paintRows(); });
+  $('#f-screening').addEventListener('change', function (e) { listFilter.screening = e.target.value; paintRows(); });
+
+  paintRows();
+}
+
+function paintRows() {
+  var body = document.getElementById('list-body');
+  if (!body) return;   // ผู้ใช้เปลี่ยนหน้าไปแล้วระหว่างรอข้อมูลรอบใหม่
+
+  var all = patientCache || [];
+  var rows = all.filter(matchesFilter);
+  var active = all.filter(function (p) { return String(p.status) !== 'closed'; }).length;
+
+  body.innerHTML = rows.map(patientRow).join('');
+  document.getElementById('list-card').hidden = !rows.length;
+  document.getElementById('list-empty').hidden = !!rows.length;
+  document.getElementById('list-shown').textContent = rows.length ? 'แสดง ' + rows.length + ' ราย' : '';
+  document.getElementById('list-count').textContent =
+    'ทั้งหมด ' + all.length + ' ราย · กำลังดูแล ' + active + ' ราย';
 }
 
 function patientRow(p) {
@@ -398,18 +733,25 @@ function drawPatientForm(p) {
 
   $('#patient-form').addEventListener('submit', function (e) {
     e.preventDefault();
-    var data = readForm(e.target);
-    var warn = validateCid(data.cid);
-    if (warn && !confirm(warn + '\n\nต้องการบันทึกต่อหรือไม่')) return;
+    var form = e.target;
+    var data = readForm(form);
 
-    var btn = e.target.querySelector('button[type=submit]');
-    btn.disabled = true; btn.textContent = 'กำลังบันทึก…';
-    call('apiSavePatient', data).then(function (r) {
-      toast('บันทึกเรียบร้อย');
-      go('detail', r.hn);
-    }).catch(function (err) {
-      btn.disabled = false; btn.textContent = 'บันทึก';
-      fail(err);
+    var warn = validateCid(data.cid);
+    var ask = warn
+      ? askConfirm('เลขประจำตัวประชาชนอาจไม่ถูกต้อง', warn, { confirmText: 'บันทึกต่อ' })
+      : Promise.resolve(true);
+
+    ask.then(function (ok) {
+      if (!ok) return;
+      var btn = form.querySelector('button[type=submit]');
+      btn.disabled = true; btn.textContent = 'กำลังบันทึก…';
+      call('apiSavePatient', data).then(function (r) {
+        dropCache_(r.hn);
+        return toast('บันทึกข้อมูล HN ' + r.hn + ' แล้ว').then(function () { go('detail', r.hn); });
+      }).catch(function (err) {
+        btn.disabled = false; btn.textContent = 'บันทึก';
+        fail(err);
+      });
     });
   });
 }
@@ -430,55 +772,72 @@ function validateCid(cid) {
 /* ---------------------------------------------------------- หน้าเวชระเบียน */
 
 function renderDetail(hn) {
-  busy();
-  call('apiGetPatient', hn).then(function (d) {
-    var p = d.patient;
+  if (detailCache[hn]) {
+    drawDetail(detailCache[hn]);
+    loadDetail(hn).then(function (d) {
+      // ผู้ใช้อาจเปลี่ยนหน้าไปแล้วระหว่างรอ อย่าวาดทับของที่กำลังดูอยู่
+      if (VIEW.name === 'detail' && VIEW.param === hn) drawDetail(d);
+    }).catch(function () { /* ของเก่ายังใช้ได้ ไม่ต้องรบกวน */ });
+    return;
+  }
+  busy(4);
+  loadDetail(hn).then(drawDetail).catch(fail);
+}
 
-    var html = backBtn('list') +
-      '<div class="card"><div class="patient-head">' +
-      '<span class="avatar lg">' + esc(initials(p.first_name)) + '</span>' +
-      '<div class="head-text">' +
-      '  <div class="patient-meta" style="gap:10px">' +
-      '    <h1>' + esc(p.full_name || p.hn) + '</h1>' +
-      '    <span class="chip chip-flat num">HN ' + esc(p.hn) + '</span>' +
-      screeningChip(p.screening_result) + statusChip(p.status) +
-      '  </div>' +
-      '  <div class="patient-meta">' +
-      [p.sex && p.age ? esc(p.sex) + ' · ' + esc(p.age) + ' ปี' : '',
-       p.rights ? 'สิทธิ์ ' + esc(p.rights) : '',
-       p.dx ? esc(p.dx) + (p.hemiparesis_side ? ' with ' + esc(p.hemiparesis_side) + ' hemiparesis' : '') : '',
-       p.ward ? 'Ward ' + esc(p.ward) : '']
-        .filter(String).join('<span class="dot">·</span>') +
-      '  </div>' +
-      '</div>' +
-      '<div class="spacer" style="margin-left:auto"></div>' +
-      '<div class="btn-row" style="margin:0">' +
-      '  <button class="btn" onclick="go(\'patient\',\'' + esc(p.hn) + '\')">แก้ไขข้อมูล</button>' +
-      '  <button class="btn" onclick="go(\'fu\',\'' + esc(p.hn) + '\')">บันทึกการติดตาม</button>' +
-      '  <button class="btn btn-primary" onclick="go(\'bi\',\'' + esc(p.hn) + '\')">ประเมิน BI ครั้งใหม่</button>' +
-      '</div></div></div>';
+function loadDetail(hn) {
+  return call('apiGetPatient', hn).then(function (d) {
+    detailCache[hn] = d;
+    return d;
+  });
+}
 
-    html += '<div class="cols"><div>';
+function drawDetail(d) {
+  var p = d.patient;
 
-    html += '<div class="card"><h2>คะแนน Barthel Index' +
-      '<span class="sub num">ประเมินแล้ว ' + d.assessments.length + ' ครั้ง · เต็ม ' + BOOT.biMax + ' คะแนน</span></h2>' +
-      (d.assessments.length ? biChart(d.assessments) + biTable(d.assessments)
-        : '<div class="empty">ยังไม่มีการประเมิน</div>') +
-      '</div>';
+  var html = backBtn('list') +
+    '<div class="card"><div class="patient-head">' +
+    '<span class="avatar lg">' + esc(initials(p.first_name)) + '</span>' +
+    '<div class="head-text">' +
+    '  <div class="patient-meta" style="gap:10px">' +
+    '    <h1>' + esc(p.full_name || p.hn) + '</h1>' +
+    '    <span class="chip chip-flat num">HN ' + esc(p.hn) + '</span>' +
+    screeningChip(p.screening_result) + statusChip(p.status) +
+    '  </div>' +
+    '  <div class="patient-meta">' +
+    [p.sex && p.age ? esc(p.sex) + ' · ' + esc(p.age) + ' ปี' : '',
+     p.rights ? 'สิทธิ์ ' + esc(p.rights) : '',
+     p.dx ? esc(p.dx) + (p.hemiparesis_side ? ' with ' + esc(p.hemiparesis_side) + ' hemiparesis' : '') : '',
+     p.ward ? 'Ward ' + esc(p.ward) : '']
+      .filter(String).join('<span class="dot">·</span>') +
+    '  </div>' +
+    '</div>' +
+    '<div class="spacer" style="margin-left:auto"></div>' +
+    '<div class="btn-row" style="margin:0">' +
+    '  <button class="btn" onclick="go(\'patient\',\'' + esc(p.hn) + '\')">แก้ไขข้อมูล</button>' +
+    '  <button class="btn" onclick="go(\'fu\',\'' + esc(p.hn) + '\')">บันทึกการติดตาม</button>' +
+    '  <button class="btn btn-primary" onclick="go(\'bi\',\'' + esc(p.hn) + '\')">ประเมิน BI ครั้งใหม่</button>' +
+    '</div></div></div>';
 
-    html += '<div class="card"><h2>การติดตาม' +
-      '<span class="sub num">' + d.followups.length + ' ครั้ง</span></h2>' +
-      (d.followups.length ? timeline(d.followups) : '<div class="empty">ยังไม่มีบันทึกการติดตาม</div>') +
-      '<div class="btn-row">' +
-      '<button class="btn" onclick="go(\'fu\',\'' + esc(p.hn) + '\')">+ บันทึกการติดตาม</button>' +
-      (p.status === 'closed' ? ''
-        : '<button class="btn btn-danger" onclick="go(\'close\',\'' + esc(p.hn) + '\')">จบโปรแกรม</button>') +
-      '</div></div>';
+  html += '<div class="cols"><div>';
 
-    html += '</div><div>' + programCard(p) + infoCard(p) + '</div></div>';
+  html += '<div class="card"><h2>คะแนน Barthel Index' +
+    '<span class="sub num">ประเมินแล้ว ' + d.assessments.length + ' ครั้ง · เต็ม ' + BOOT.biMax + ' คะแนน</span></h2>' +
+    (d.assessments.length ? biChart(d.assessments) + biTable(d.assessments)
+      : '<div class="empty">ยังไม่มีการประเมิน</div>') +
+    '</div>';
 
-    main().innerHTML = html;
-  }).catch(fail);
+  html += '<div class="card"><h2>การติดตาม' +
+    '<span class="sub num">' + d.followups.length + ' ครั้ง</span></h2>' +
+    (d.followups.length ? timeline(d.followups) : '<div class="empty">ยังไม่มีบันทึกการติดตาม</div>') +
+    '<div class="btn-row">' +
+    '<button class="btn" onclick="go(\'fu\',\'' + esc(p.hn) + '\')">+ บันทึกการติดตาม</button>' +
+    (p.status === 'closed' ? ''
+      : '<button class="btn btn-danger" onclick="go(\'close\',\'' + esc(p.hn) + '\')">จบโปรแกรม</button>') +
+    '</div></div>';
+
+  html += '</div><div>' + programCard(p) + infoCard(p) + '</div></div>';
+
+  main().innerHTML = html;
 }
 
 function programCard(p) {
@@ -661,16 +1020,21 @@ function renderBiForm(hn) {
 
     var missing = BOOT.biItems.filter(function (i) { return !form.elements[i.key].value; });
     if (missing.length) {
-      toast('ยังประเมินไม่ครบ ขาดข้อ ' + missing.map(function (i) { return i.no; }).join(', '), true);
-      document.getElementById('bi-item-' + missing[0].key).scrollIntoView({ behavior: 'smooth', block: 'center' });
+      notify('ยังประเมินไม่ครบ',
+        'ขาดข้อ ' + missing.map(function (i) { return i.no; }).join(', ') +
+        '\nกด ตกลง แล้วระบบจะพาไปที่ข้อแรกที่ยังไม่ได้เลือก', 'warn')
+        .then(function () {
+          document.getElementById('bi-item-' + missing[0].key)
+            .scrollIntoView({ behavior: 'smooth', block: 'center' });
+        });
       return;
     }
 
     var btn = document.getElementById('bi-save');
     btn.disabled = true; btn.textContent = 'กำลังบันทึก…';
     call('apiSaveBi', data).then(function () {
-      toast('บันทึกผลประเมินเรียบร้อย');
-      go('detail', data.hn);
+      dropCache_(data.hn);
+      return toast('บันทึกผลประเมินเรียบร้อย').then(function () { go('detail', data.hn); });
     }).catch(function (err) {
       btn.disabled = false; btn.textContent = 'บันทึกผลประเมิน';
       fail(err);
@@ -746,8 +1110,8 @@ function renderFuForm(hn) {
     var btn = e.target.querySelector('button[type=submit]');
     btn.disabled = true; btn.textContent = 'กำลังบันทึก…';
     call('apiSaveFollowup', data).then(function () {
-      toast('บันทึกเรียบร้อย');
-      go('detail', data.hn);
+      dropCache_(data.hn);
+      return toast('บันทึกการติดตามเรียบร้อย').then(function () { go('detail', data.hn); });
     }).catch(function (err) {
       btn.disabled = false; btn.textContent = 'บันทึก';
       fail(err);
@@ -772,8 +1136,8 @@ function renderCloseForm(hn) {
     e.preventDefault();
     var data = readForm(e.target);
     call('apiClosePatient', data).then(function () {
-      toast('บันทึกการจบโปรแกรมแล้ว');
-      go('detail', data.hn);
+      dropCache_(data.hn);
+      return toast('บันทึกการจบโปรแกรมแล้ว').then(function () { go('detail', data.hn); });
     }).catch(fail);
   });
 }
@@ -878,9 +1242,12 @@ function renderSettings() {
           '</td>' +
           '<td data-l="สถานะ">' +
             (isSelf ? '<span class="chip chip-brand">ใช้งานอยู่</span>'
+              // ป้ายกำกับต้องบอกว่าติ๊กแล้วได้อะไร ไม่ใช่บอกสถานะปัจจุบัน
+              // ไม่งั้นคนอ่านว่า "ติ๊กเพื่อปิด" ทั้งที่ความจริงคือติ๊กเพื่อเปิด
               : '<label class="check"><input type="checkbox" class="u-active" ' +
                 'data-email="' + esc(u.email) + '"' + (u.active ? ' checked' : '') + '>' +
-                '<span>' + (u.active ? 'ใช้งานอยู่' : 'ปิดการใช้งาน') + '</span></label>') +
+                '<span>เปิดใช้งาน</span></label>' +
+                (u.active ? '' : ' <span class="chip">ปิดอยู่</span>')) +
           '</td>' +
           '<td data-l="ไฟล์">' + fileAccessCell(u, isSelf) + '</td></tr>';
       }).join('') +
@@ -903,8 +1270,7 @@ function renderSettings() {
           BOOT.user.isAdmin = true;
           BOOT.user.noAdminYet = false;
           BOOT.user.role = 'admin';
-          toast('ตั้ง ' + r.email + ' เป็นผู้ดูแลระบบแล้ว');
-          renderSettings();
+          return toast('ตั้ง ' + r.email + ' เป็นผู้ดูแลระบบแล้ว').then(renderSettings);
         }).catch(function (err) { claim.disabled = false; fail(err); renderSettings(); });
       });
     }
@@ -916,12 +1282,10 @@ function renderSettings() {
       var btn = e.target.querySelector('button[type=submit]');
       btn.disabled = true; btn.textContent = 'กำลังบันทึก…';
       call('apiSaveUser', data).then(function (r) {
-        if (r.shared) {
-          toast('เพิ่ม ' + r.email + ' และแชร์ไฟล์ให้แล้ว');
-        } else {
-          toast('เพิ่ม ' + r.email + ' แล้ว แต่แชร์ไฟล์ไม่สำเร็จ: ' + r.shareError, true);
-        }
-        renderSettings();
+        var done = r.shared
+          ? toast('เพิ่ม ' + r.email + ' และแชร์ไฟล์ Google Sheet ให้แล้ว')
+          : toast('เพิ่ม ' + r.email + ' แล้ว แต่แชร์ไฟล์ไม่สำเร็จ\n' + r.shareError, true);
+        return done.then(renderSettings);
       }).catch(function (err) {
         btn.disabled = false; btn.textContent = 'เพิ่มผู้ใช้';
         fail(err);
@@ -932,8 +1296,7 @@ function renderSettings() {
       el.addEventListener('click', function () {
         el.disabled = true; el.textContent = 'กำลังแชร์…';
         call('apiShareFile', el.getAttribute('data-email')).then(function (r) {
-          toast('แชร์ไฟล์ให้ ' + r.email + ' แล้ว');
-          renderSettings();
+          return toast('แชร์ไฟล์ให้ ' + r.email + ' แล้ว').then(renderSettings);
         }).catch(function (err) { el.disabled = false; el.textContent = 'แชร์ไฟล์ให้'; fail(err); });
       });
     });
@@ -941,12 +1304,16 @@ function renderSettings() {
     Array.prototype.forEach.call(document.querySelectorAll('.u-revoke'), function (el) {
       el.addEventListener('click', function () {
         var email = el.getAttribute('data-email');
-        if (!confirm('ถอนสิทธิ์แก้ไขไฟล์ Google Sheet ของ ' + email + ' ใช่หรือไม่')) return;
-        el.disabled = true; el.textContent = 'กำลังถอน…';
-        call('apiRevokeFile', email).then(function (r) {
-          toast('ถอนสิทธิ์ไฟล์ของ ' + r.email + ' แล้ว');
-          renderSettings();
-        }).catch(function (err) { el.disabled = false; el.textContent = 'ถอนสิทธิ์ไฟล์'; fail(err); });
+        askConfirm('ถอนสิทธิ์ไฟล์',
+          email + ' จะเปิดไฟล์ Google Sheet ไม่ได้อีก\nแต่ประวัติที่เคยบันทึกไว้ยังอยู่ครบ',
+          { confirmText: 'ถอนสิทธิ์' }
+        ).then(function (ok) {
+          if (!ok) return;
+          el.disabled = true; el.textContent = 'กำลังถอน…';
+          call('apiRevokeFile', email).then(function (r) {
+            return toast('ถอนสิทธิ์ไฟล์ของ ' + r.email + ' แล้ว').then(renderSettings);
+          }).catch(function (err) { el.disabled = false; el.textContent = 'ถอนสิทธิ์ไฟล์'; fail(err); });
+        });
       });
     });
 
@@ -954,22 +1321,35 @@ function renderSettings() {
       el.addEventListener('change', function () {
         var email = el.getAttribute('data-email');
         var row = users.filter(function (u) { return u.email === email; })[0];
+        var willDisable = el.classList.contains('u-active') && !el.checked;
         var data = {
           email: email,
           name: row.name,
           role: el.classList.contains('u-role') ? el.value : row.role,
           active: (el.classList.contains('u-active') ? el.checked : row.active) ? 'TRUE' : 'FALSE'
         };
-        call('apiSaveUser', data).then(function (r) {
-          if (r.active === false && !r.revoked) {
-            toast('ปิดสิทธิ์ ' + email + ' แล้ว แต่ถอนสิทธิ์ไฟล์ไม่สำเร็จ: ' + r.revokeError, true);
-          } else if (r.active === false) {
-            toast('ปิดสิทธิ์ ' + email + ' และถอนสิทธิ์ไฟล์แล้ว');
-          } else {
-            toast('อัปเดต ' + email + ' แล้ว');
-          }
-          renderSettings();
-        }).catch(function (err) { fail(err); renderSettings(); });
+
+        // ปิดการใช้งานเป็นการตัดสิทธิ์คนอื่นออกจากทั้งแอปและไฟล์ ควรถามก่อน
+        var ask = willDisable
+          ? askConfirm('ปิดการใช้งาน ' + email,
+              'เขาจะเข้าแอปไม่ได้ และระบบจะถอนสิทธิ์แก้ไขไฟล์ Google Sheet ออกด้วย\nเปิดกลับมาใหม่ได้ทุกเมื่อ',
+              { confirmText: 'ปิดการใช้งาน' })
+          : Promise.resolve(true);
+
+        ask.then(function (ok) {
+          if (!ok) { renderSettings(); return; }
+          call('apiSaveUser', data).then(function (r) {
+            var done;
+            if (r.active === false && !r.revoked) {
+              done = toast('ปิดสิทธิ์ ' + email + ' แล้ว แต่ถอนสิทธิ์ไฟล์ไม่สำเร็จ\n' + r.revokeError, true);
+            } else if (r.active === false) {
+              done = toast('ปิดสิทธิ์ ' + email + ' และถอนสิทธิ์ไฟล์แล้ว');
+            } else {
+              done = toast('อัปเดต ' + email + ' แล้ว');
+            }
+            return done.then(renderSettings);
+          }).catch(function (err) { fail(err); renderSettings(); });
+        });
       });
     });
   }).catch(fail);
@@ -977,84 +1357,286 @@ function renderSettings() {
 
 /* ---------------------------------------------------------- ภาพรวมงาน */
 
+var dashCache = null;
+var reportCache = null;
+var chartMode = 'months';
+
 function renderDashboard() {
-  busy();
+  if (dashCache) { drawDashboard(dashCache); return; }
+  busy(3);
   call('apiDashboard').then(function (d) {
-    var html = '<div class="page-head"><div class="head-text"><h1>ภาพรวมงาน IMC</h1>' +
-      '<span class="sub">' + esc(BOOT.org) + '</span></div></div>';
-
-    html += '<div class="stats">' +
-      stat(d.total, 'ผู้ป่วยทั้งหมด') +
-      stat(d.imc, 'เข้าโปรแกรม IMC', d.total ? Math.round(d.imc / d.total * 100) + '% ของทั้งหมด' : '') +
-      stat(d.active, 'กำลังดูแล', 'จบแล้ว ' + d.closed) +
-      stat(d.avgGain === null ? '—' : (d.avgGain > 0 ? '+' : '') + d.avgGain, 'คะแนน BI เพิ่มเฉลี่ย',
-        'ดีขึ้น ' + d.improved + ' ราย') +
-      '</div>';
-
-    html += '<div class="cols"><div>';
-
-    if (d.months.length) {
-      var maxCount = Math.max.apply(null, d.months.map(function (m) { return m.count; }).concat([1]));
-      html += '<div class="card"><h2>ผู้ป่วยเข้าโปรแกรมใหม่รายเดือน' +
-        '<span class="sub">นับจากวัน Start</span></h2><div class="bars">' +
-        d.months.map(function (m) {
-          var p = m.month.split('-');
-          var label = TH_MONTHS[parseInt(p[1], 10) - 1] + ' ' + String(parseInt(p[0], 10) + 543).slice(-2);
-          return '<div class="bar" title="' + esc(label) + ' · ' + m.count + ' ราย">' +
-            '<span class="val num">' + m.count + '</span>' +
-            '<div class="track"><div class="fill" style="height:' +
-              Math.max(Math.round((m.count / maxCount) * 100), 2) + '%"></div></div>' +
-            '<span class="lbl">' + esc(label) + '</span></div>';
-        }).join('') + '</div></div>';
-    }
-
-    html += '</div><div>';
-
-    var sum = d.imc + d.noImc;
-    html += '<div class="card"><h2>ผลการคัดกรอง</h2>' +
-      (sum ?
-        '<div class="split">' +
-        '<i style="width:' + (d.imc / sum * 100) + '%"></i>' +
-        '<i style="width:' + (d.noImc / sum * 100) + '%"></i>' +
-        '</div>' +
-        '<div class="legend">' +
-        legendRow('var(--brand)', 'เข้าเกณฑ์ IMC', d.imc, sum) +
-        legendRow('#c9d2d9', 'ไม่เข้าเกณฑ์', d.noImc, sum) +
-        '</div>'
-        : '<div class="empty">ยังไม่มีผลคัดกรอง</div>') +
-      '</div>';
-
-    html += '<div class="card"><h2>นัดหมายที่ใกล้ถึง</h2>' +
-      (d.upcoming && d.upcoming.length
-        ? d.upcoming.map(function (u) {
-            var when = u.days_left === 0 ? 'วันนี้' : (u.days_left === 1 ? 'พรุ่งนี้' : thDate(u.date));
-            return '<div class="list-row" onclick="go(\'detail\',\'' + esc(u.hn) + '\')">' +
-              '<span class="avatar row">' + esc(initials(u.name)) + '</span>' +
-              '<span class="who"><b>' + esc(u.name || u.hn) + '</b>' +
-              '<small>' + esc(u.program || 'นัดติดตาม') + '</small></span>' +
-              '<span class="when num' + (u.days_left <= 1 ? ' soon' : '') + '">' + esc(when) + '</span>' +
-              '</div>';
-          }).join('')
-        : '<div class="empty">ไม่มีนัดหมายที่บันทึกไว้ล่วงหน้า</div>') +
-      '</div>';
-
-    html += '</div></div>';
-
-    main().innerHTML = html;
+    dashCache = d;
+    drawDashboard(d);
   }).catch(fail);
 }
 
-function stat(v, k, side) {
-  return '<div class="stat">' +
-    '<div class="k">' + esc(k) + '</div>' +
-    '<div><span class="v num">' + esc(v) + '</span>' +
-    (side ? '<span class="side num">' + esc(side) + '</span>' : '') + '</div></div>';
+function setChartMode(mode) {
+  chartMode = mode;
+  if (dashCache) drawDashboard(dashCache);   // ข้อมูลทุกช่วงเวลาส่งมาพร้อมกันแล้ว ไม่ต้องถามเซิร์ฟเวอร์ซ้ำ
+}
+
+function drawDashboard(d) {
+  main().innerHTML = dashHead() + statCards(d) +
+    '<div class="cols"><div>' + chartPanel(d) + '</div><div>' +
+    screeningPanel(d) + upcomingPanel(d) +
+    '</div></div>';
+  startClock();
+}
+
+function dashHead() {
+  var t = new Date();
+  return '<div class="page-head">' +
+    '<div class="head-text"><h1>ภาพรวมงาน IMC</h1>' +
+    '<span class="sub">' + esc(BOOT.org) + '</span></div>' +
+    '<div class="dash-date">' + icon('calendar', 17, 1.8) + '<span>' +
+    '<span id="hero-day">' + esc(thDayText(t)) + '</span>' +
+    '<span class="time num" id="hero-time">' + thTimeText(t) + '</span>' +
+    '</span></div></div>';
+}
+
+/*
+  เดินนาฬิกาต่อขณะเปิดหน้าค้างไว้ ถ้าวาดครั้งเดียวแล้วปล่อย
+  เวลาบนหน้าจอจะค้างอยู่ที่ตอนเปิด ซึ่งอ่านผิดได้ง่ายกว่าไม่แสดงเลย
+*/
+var clockTimer = null;
+
+function startClock() {
+  if (clockTimer) clearInterval(clockTimer);
+  clockTimer = setInterval(function () {
+    var el = document.getElementById('hero-time');
+    if (!el) { clearInterval(clockTimer); clockTimer = null; return; }
+    var t = new Date();
+    el.textContent = thTimeText(t);
+    document.getElementById('hero-day').textContent = thDayText(t);
+  }, 30000);
+}
+
+/* ----------------------------------------------------------- การ์ดสถิติ */
+
+/** ป้ายเทียบกับเดือนก่อน ว่างไว้ถ้าคำนวณไม่ได้ ดีกว่าโชว์เลขที่ไม่มีความหมาย */
+function deltaChip(n) {
+  if (n === null || n === undefined || isNaN(n)) return '';
+  var head = n > 0 ? '↑ +' + n : (n < 0 ? '↓ ' + n : '± 0');
+  return '<div class="stat-foot"><span class="stat-chip num">' + head + '</span>' +
+    '<span class="stat-after">จากเดือนก่อน</span></div>';
+}
+
+function statCard(cls, ico, art, label, value, sub, chip) {
+  return '<div class="stat-card ' + cls + '">' +
+    '<div class="stat-top">' +
+    '<span class="ico">' + icon(ico, 24, 1.9) + '</span>' +
+    '<div class="stat-figure"><div class="k">' + esc(label) + '</div>' +
+    '<div class="v num">' + esc(value) + '</div></div>' +
+    '<span class="stat-art">' + icon(art, 38, 1.9) + '</span>' +
+    '</div>' +
+    (sub ? '<div class="sub num">' + esc(sub) + '</div>' : '') +
+    (chip || '') +
+    '</div>';
+}
+
+function statCards(d) {
+  var pct = d.total ? Math.round(d.imc / d.total * 100) + '% ของทั้งหมด' : '';
+  var gain = d.avgGain === null ? '—' : (d.avgGain > 0 ? '+' : '') + d.avgGain;
+
+  return '<div class="stat-grid">' +
+    statCard('s1', 'people', 'people', 'ผู้ป่วยทั้งหมด', d.total, '', deltaChip(d.delta.total)) +
+    statCard('s2', 'userplus', 'chart', 'เข้าโปรแกรม IMC', d.imc, pct, deltaChip(d.delta.imc)) +
+    statCard('s3', 'clock', 'pulse', 'กำลังดูแล', d.active, 'จบแล้ว ' + d.closed, deltaChip(d.delta.active)) +
+    statCard('s4', 'chart', 'target', 'คะแนน BI เพิ่มเฉลี่ย', gain,
+      'ดีขึ้น ' + d.improved + ' ราย', deltaChip(d.delta.avgGain)) +
+    '</div>';
+}
+
+/* ------------------------------------------------------------- กราฟแท่ง */
+
+var CHART_MODES = [
+  { key: 'months', label: 'รายเดือน' },
+  { key: 'quarters', label: 'รายไตรมาส' },
+  { key: 'years', label: 'รายปี' }
+];
+
+function seriesLabel(key) {
+  if (chartMode === 'years') return String(parseInt(key, 10) + 543);
+  if (chartMode === 'quarters') {
+    var q = String(key).split('-Q');
+    return 'Q' + q[1] + '/' + String(parseInt(q[0], 10) + 543).slice(-2);
+  }
+  var m = String(key).split('-');
+  return TH_MONTHS[parseInt(m[1], 10) - 1] + ' ' + String(parseInt(m[0], 10) + 543).slice(-2);
+}
+
+/** เพดานแกนตั้งที่หารสี่ลงตัว เส้นแบ่งจะได้เป็นเลขกลม ๆ อ่านง่าย */
+function niceTop(max) {
+  var steps = [1, 2, 5, 10, 20, 25, 50, 100, 200, 500, 1000];
+  for (var i = 0; i < steps.length; i++) {
+    if (steps[i] * 4 >= max) return steps[i] * 4;
+  }
+  return Math.ceil(max / 4) * 4;
+}
+
+function chartPanel(d) {
+  var rows = d[chartMode] || [];
+  var seg = '<div class="seg">' + CHART_MODES.map(function (m) {
+    return '<button class="' + (m.key === chartMode ? 'on' : '') +
+      '" onclick="setChartMode(\'' + m.key + '\')">' + m.label + '</button>';
+  }).join('') + '</div>';
+
+  var head = '<div class="panel-head"><span class="panel-ico">' + icon('chart', 20, 1.9) + '</span>' +
+    '<h2>ผู้ป่วยเข้าโปรแกรมใหม่' +
+    (chartMode === 'years' ? 'รายปี' : (chartMode === 'quarters' ? 'รายไตรมาส' : 'รายเดือน')) +
+    '<span class="sub">นับจากวัน Start</span></h2>' + seg + '</div>';
+
+  if (!rows.length) {
+    return '<div class="panel">' + head + '<div class="empty">ยังไม่มีข้อมูลวัน Start</div></div>';
+  }
+
+  var top = niceTop(Math.max.apply(null, rows.map(function (r) { return r.count; }).concat([1])));
+  var step = top / 4;
+  var yLabels = [4, 3, 2, 1, 0].map(function (i) { return step * i; });
+
+  return '<div class="panel">' + head +
+    '<div class="chart">' +
+    '<div class="y-axis num">' + yLabels.map(function (v) { return '<span>' + v + '</span>'; }).join('') + '</div>' +
+    '<div class="plot">' +
+    '<div class="gridlines"><i></i><i></i><i></i><i></i><i></i></div>' +
+    '<div class="bars">' + rows.map(function (r) {
+      return '<div class="bcol"><div class="bar" style="height:' +
+        Math.max(Math.round(r.count / top * 100), 1) + '%">' +
+        '<span class="val num">' + r.count + '</span></div></div>';
+    }).join('') + '</div>' +
+    '<div class="x-axis">' + rows.map(function (r) {
+      return '<span>' + esc(seriesLabel(r.key)) + '</span>';
+    }).join('') + '</div>' +
+    '</div></div></div>';
+}
+
+/* ------------------------------------------------------------ ผลคัดกรอง */
+
+function screeningPanel(d) {
+  var sum = d.imc + d.noImc;
+  var pct = sum ? (d.imc / sum * 100) : 0;
+
+  return '<div class="panel"><div class="panel-head">' +
+    '<span class="panel-ico">' + icon('target', 20, 1.9) + '</span><h2>ผลการคัดกรอง</h2></div>' +
+    (sum
+      ? '<div class="donut-wrap">' +
+        '<div class="donut" style="background:conic-gradient(var(--brand) 0 ' + pct + '%, #e3e9ec ' + pct + '% 100%)">' +
+        '<div class="donut-mid"><b class="num">' + sum + '</b><small>ทั้งหมด</small></div></div>' +
+        '<div class="legend">' +
+        legendRow('var(--brand)', 'เข้าเกณฑ์ IMC', d.imc, sum) +
+        legendRow('#c9d2d9', 'ไม่เข้าเกณฑ์', d.noImc, sum) +
+        '</div></div>'
+      : '<div class="empty">ยังไม่มีผลคัดกรอง</div>') +
+    '</div>';
+}
+
+/* -------------------------------------------------------------- นัดหมาย */
+
+function upcomingPanel(d) {
+  var head = '<div class="panel-head"><span class="panel-ico">' + icon('calendar', 20, 1.9) + '</span>' +
+    '<h2>นัดหมายที่ใกล้ถึง</h2>' +
+    '<button class="panel-link" onclick="go(\'list\')">ดูทั้งหมด ' + icon('arrow', 14, 2) + '</button></div>';
+
+  var body = (d.upcoming && d.upcoming.length)
+    ? d.upcoming.map(function (u) {
+        var when = u.days_left === 0 ? 'วันนี้' : (u.days_left === 1 ? 'พรุ่งนี้' : thDate(u.date));
+        return '<div class="list-row" onclick="go(\'detail\',\'' + esc(u.hn) + '\')">' +
+          '<span class="avatar row">' + esc(initials(u.name)) + '</span>' +
+          '<span class="who"><b>' + esc(u.name || u.hn) + '</b>' +
+          '<small>' + esc(u.program || 'นัดติดตาม') + '</small></span>' +
+          '<span class="when num' + (u.days_left <= 1 ? ' soon' : '') + '">' + esc(when) + '</span>' +
+          '</div>';
+      }).join('')
+    : '<div class="empty-art">' + icon('calplus', 46, 1.3) +
+      '<p>ไม่มีนัดหมายที่บันทึกไว้ล่วงหน้า</p>' +
+      '<button class="btn" onclick="go(\'list\')">+ เพิ่มนัดหมาย</button></div>';
+
+  return '<div class="panel">' + head + body + '</div>';
+}
+
+/* ---------------------------------------------------------- หน้ารายงาน */
+
+function renderReport() {
+  if (reportCache) { drawReport(reportCache); return; }
+  busy(4);
+  call('apiReport').then(function (r) {
+    reportCache = r;
+    drawReport(r);
+  }).catch(fail);
+}
+
+function drawReport(r) {
+  var html = '<div class="page-head"><div class="head-text"><h1>รายงาน / BI</h1>' +
+    '<span class="sub num">ประเมิน Barthel Index แล้ว ' + r.assessed + ' จาก ' + r.total + ' ราย</span>' +
+    '</div></div>';
+
+  html += '<div class="rep-grid">' +
+    hbarPanel('การกระจายคะแนน BI ล่าสุด', 'chart', r.buckets) +
+    hbarPanel('กลุ่ม CTF จากผลประเมินล่าสุด', 'target', r.ctf) +
+    hbarPanel('กลุ่มการวินิจฉัย', 'pulse', r.dxGroups) +
+    hbarPanel('หอผู้ป่วย', 'people', r.wards) +
+    hbarPanel('รูปแบบโปรแกรม', 'calendar', r.programs) +
+    '</div>';
+
+  html += progressPanel(r.progress);
+  main().innerHTML = html;
+}
+
+function hbarPanel(title, ico, rows) {
+  rows = rows || [];
+  var max = Math.max.apply(null, rows.map(function (x) { return x.count; }).concat([1]));
+  var sum = rows.reduce(function (a, x) { return a + x.count; }, 0);
+
+  return '<div class="panel"><div class="panel-head">' +
+    '<span class="panel-ico">' + icon(ico, 20, 1.9) + '</span><h2>' + esc(title) + '</h2></div>' +
+    (sum
+      ? '<div class="hbars">' + rows.map(function (x) {
+          return '<div class="hbar-row">' +
+            '<span class="lbl">' + esc(x.label || x.name) + '</span>' +
+            '<span class="n num">' + x.count + ' ราย · ' + Math.round(x.count / sum * 100) + '%</span>' +
+            '<span class="hbar-track"><span class="hbar-fill" style="width:' +
+              Math.round(x.count / max * 100) + '%"></span></span></div>';
+        }).join('') + '</div>'
+      : '<div class="empty">ยังไม่มีข้อมูล</div>') +
+    '</div>';
+}
+
+/* จำนวนช่องที่มองเห็นต้องเท่ากับจำนวนหัวตารางเสมอ ไม่งั้นข้อมูลจะเลื่อนคอลัมน์ */
+function progressPanel(rows) {
+  var head = '<div class="panel-head"><span class="panel-ico">' + icon('pulse', 20, 1.9) + '</span>' +
+    '<h2>ความคืบหน้ารายบุคคล<span class="sub">เรียงจากคะแนนที่เพิ่มขึ้นมากที่สุด</span></h2></div>';
+
+  if (!rows.length) {
+    return '<div class="panel">' + head + '<div class="empty">ยังไม่มีผู้ป่วยที่ประเมินครบสองครั้ง</div></div>';
+  }
+
+  return '<div class="panel" style="padding:20px 0 0">' +
+    '<div style="padding:0 22px">' + head + '</div>' +
+    '<div class="table-wrap"><table class="cards"><thead><tr>' +
+    '<th>ผู้ป่วย</th><th>การวินิจฉัย</th><th>Ward</th>' +
+    '<th>Barthel Index</th><th>กลุ่ม CTF</th><th>สถานะ</th>' +
+    '</tr></thead><tbody>' +
+    rows.map(function (x) {
+      return '<tr onclick="go(\'detail\',\'' + esc(x.hn) + '\')">' +
+        '<td class="head"><strong>' + esc(x.hn) + '</strong> ' + esc(x.name || '') + '</td>' +
+        '<td data-l="ผู้ป่วย" class="name-cell"><div class="cell-person">' +
+          '<span class="avatar row">' + esc(initials(x.name)) + '</span>' +
+          '<span class="who"><b>' + esc(x.name || '—') + '</b>' +
+          '<small class="num">' + esc(x.hn) + '</small></span></div></td>' +
+        '<td data-l="Dx">' + esc(x.dx || '—') + '</td>' +
+        '<td data-l="Ward">' + esc(x.ward || '—') + '</td>' +
+        '<td data-l="BI">' + biCell(x.first, x.latest) + '</td>' +
+        '<td data-l="กลุ่ม CTF">' + (x.ctf ? '<span class="chip chip-brand">' + esc(x.ctf) + '</span>' : '—') + '</td>' +
+        '<td data-l="สถานะ">' + statusChip(x.status) + '</td>' +
+        '</tr>';
+    }).join('') +
+    '</tbody></table></div></div>';
 }
 
 function legendRow(color, label, n, sum) {
   return '<div class="legend-row">' +
     '<span class="sw" style="background:' + color + '"></span>' +
-    '<span>' + esc(label) + '</span>' +
+    '<span class="lbl">' + esc(label) + '</span>' +
     '<b class="num">' + n + '</b>' +
     '<span class="pct num">' + Math.round(n / sum * 100) + '%</span></div>';
 }

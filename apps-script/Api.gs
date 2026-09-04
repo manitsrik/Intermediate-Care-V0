@@ -263,10 +263,95 @@ function apiSaveUser(form) {
 /* ---------------------------------------------------------------- ตั้งต้น */
 
 /** ข้อมูลชุดแรกที่หน้าเว็บต้องใช้ เรียกครั้งเดียวตอนเปิดแอป */
+/**
+ * ส่งรายชื่อผู้ป่วยกลับไปพร้อมข้อมูลตั้งต้นด้วย
+ * การคุยกับ Apps Script หนึ่งรอบใช้เวลาหลายวินาที การรวมสองรอบเป็นรอบเดียว
+ * ทำให้หน้าแรกขึ้นเร็วขึ้นเท่าตัว ส่วนที่เพิ่มมาคืออ่านชีตอีกใบเดียว
+ */
+/**
+ * ข้อมูลหน้ารายงาน สรุปตามกลุ่มที่ใช้ตัดสินใจงานจริง
+ * กลุ่ม CTF มาจากผลประเมินครั้งล่าสุดของแต่ละคน ไม่ใช่ครั้งแรก
+ */
+function apiReport() {
+  currentUser_();
+  var patients = readAll_(SHEETS.PATIENTS);
+  var latest = {};
+  readAll_(SHEETS.BI).forEach(function (r) {
+    var hn = String(r.hn), d = String(r.assess_date || '');
+    if (!latest[hn] || d >= latest[hn].date) latest[hn] = { date: d, ctf: String(r.ctf_group || ''), total: r.total };
+  });
+
+  var tally = function (list, pick) {
+    var map = {};
+    list.forEach(function (p) {
+      var k = String(pick(p) || '').trim() || 'ไม่ระบุ';
+      map[k] = (map[k] || 0) + 1;
+    });
+    return Object.keys(map)
+      .map(function (k) { return { name: k, count: map[k] }; })
+      .sort(function (a, b) { return b.count - a.count; });
+  };
+
+  // ช่วงคะแนนตามเกณฑ์ CTF ที่ใช้แบ่งกลุ่มผู้สูงอายุ ติดเตียง 0-4 ติดบ้าน 5-11 ติดสังคม 12 ขึ้นไป
+  var buckets = [
+    { label: '0–4 (ติดเตียง)', min: 0, max: 4, count: 0 },
+    { label: '5–11 (ติดบ้าน)', min: 5, max: 11, count: 0 },
+    { label: '12–19 (ติดสังคม)', min: 12, max: 19, count: 0 },
+    { label: '20 (เต็ม)', min: 20, max: 20, count: 0 }
+  ];
+
+  var progress = [];
+  patients.forEach(function (p) {
+    var a = parseFloat(p.first_bi), b = parseFloat(p.latest_bi);
+    if (isNaN(b)) return;
+    buckets.forEach(function (k) { if (b >= k.min && b <= k.max) k.count++; });
+    if (isNaN(a)) return;
+    progress.push({
+      hn: p.hn,
+      name: [p.prefix, p.first_name, p.last_name].filter(String).join(' ').trim(),
+      dx: p.dx,
+      ward: p.ward,
+      first: a,
+      latest: b,
+      gain: b - a,
+      ctf: (latest[String(p.hn)] || {}).ctf || '',
+      status: p.status
+    });
+  });
+  progress.sort(function (x, y) { return y.gain - x.gain; });
+
+  var assessed = patients.filter(function (p) { return latest[String(p.hn)]; });
+
+  return {
+    total: patients.length,
+    assessed: assessed.length,
+    ctf: tally(assessed, function (p) { return (latest[String(p.hn)] || {}).ctf; }),
+    dxGroups: tally(patients, function (p) { return p.dx_group || p.dx; }),
+    wards: tally(patients, function (p) { return p.ward; }),
+    programs: tally(patients, function (p) { return p.imc_program; }),
+    buckets: buckets,
+    progress: progress
+  };
+}
+
 function apiBootstrap() {
   var user = currentUser_();
+  var today = todayIso_();
+  var weekAhead = addDaysIso_(today, 7);
+  var patients = readAll_(SHEETS.PATIENTS).map(displayPatient_).sort(function (a, b) {
+    return String(b.start_date || '').localeCompare(String(a.start_date || ''));
+  });
+
+  // ตัวเลขบนกระดิ่ง คือนัดหมายที่ถึงกำหนดใน 7 วันข้างหน้า ไม่ใช่ข้อความแจ้งเตือนลอย ๆ
+  var alerts = patients.filter(function (p) {
+    var d = String(p.kbh_appt_date || '');
+    return d && d >= today && d <= weekAhead && String(p.status) !== 'closed';
+  }).length;
+
   return {
     user: user,
+    patients: patients,
+    alerts: alerts,
     appName: CONFIG.APP_NAME,
     org: CONFIG.ORG,
     orgUnit: CONFIG.ORG_UNIT,
@@ -567,11 +652,44 @@ function apiClosePatient(form) {
 
 /* ------------------------------------------------------------ ภาพรวมงาน */
 
+/** วันสุดท้ายของเดือนก่อนหน้าวันที่ที่ให้มา ใช้เป็นเส้นเทียบของตัวเลข "จากเดือนก่อน" */
+function prevMonthEnd_(iso) {
+  var y = parseInt(String(iso).substring(0, 4), 10);
+  var m = parseInt(String(iso).substring(5, 7), 10);
+  return dateToIso_(new Date(y, m - 1, 0));   // วันที่ 0 ของเดือนนี้คือวันสุดท้ายของเดือนก่อน
+}
+
+/**
+ * จำนวนคนที่ยังอยู่ในโปรแกรม ณ วันที่ที่กำหนด
+ * เคสที่ปิดไปแล้วแต่ไม่ได้บันทึกวันจบ ถือว่าปิดมาตั้งแต่แรก เพราะเดาวันแทนไม่ได้
+ */
+function activeAsOf_(patients, iso) {
+  return patients.filter(function (p) {
+    var s = String(p.start_date || '');
+    if (!s || s > iso) return false;
+    if (String(p.status) !== 'closed') return true;
+    var e = String(p.end_date || '');
+    return !!e && e > iso;
+  }).length;
+}
+
+/** ค่าเฉลี่ยของผลต่างคะแนน BI ปัดหนึ่งตำแหน่ง คืน null ถ้ายังไม่มีข้อมูลพอ */
+function avgOf_(list) {
+  if (!list.length) return null;
+  var sum = list.reduce(function (s, v) { return s + v; }, 0);
+  return Math.round((sum / list.length) * 10) / 10;
+}
+
 function apiDashboard() {
   currentUser_();
   var patients = readAll_(SHEETS.PATIENTS);
-  var byMonth = {};
+  var today = todayIso_();
+  var thisMonth = today.substring(0, 7);
+  var cutoff = prevMonthEnd_(today);
+
+  var byMonth = {}, byQuarter = {}, byYear = {};
   var imc = 0, noImc = 0, active = 0, closed = 0;
+  var newThisMonth = 0, newImcThisMonth = 0;
   var gains = [];
 
   patients.forEach(function (p) {
@@ -581,19 +699,51 @@ function apiDashboard() {
 
     var d = String(p.start_date || '');
     if (d.length >= 7) {
-      var key = d.substring(0, 7);
-      byMonth[key] = (byMonth[key] || 0) + 1;
+      var year = d.substring(0, 4);
+      var month = parseInt(d.substring(5, 7), 10);
+      byMonth[d.substring(0, 7)] = (byMonth[d.substring(0, 7)] || 0) + 1;
+      byQuarter[year + '-Q' + Math.ceil(month / 3)] = (byQuarter[year + '-Q' + Math.ceil(month / 3)] || 0) + 1;
+      byYear[year] = (byYear[year] || 0) + 1;
+
+      if (d.substring(0, 7) === thisMonth) {
+        newThisMonth++;
+        if (String(p.screening_result) === 'IMC') newImcThisMonth++;
+      }
     }
+
     var a = parseFloat(p.first_bi), b = parseFloat(p.latest_bi);
     if (!isNaN(a) && !isNaN(b)) gains.push(b - a);
   });
 
-  var months = Object.keys(byMonth).sort().slice(-12).map(function (k) {
-    return { month: k, count: byMonth[k] };
+  var series = function (map, keep) {
+    return Object.keys(map).sort().slice(-keep).map(function (k) {
+      return { key: k, count: map[k] };
+    });
+  };
+
+  /*
+    คะแนนเฉลี่ยเมื่อสิ้นเดือนก่อน คิดจากผลประเมินที่บันทึกไว้ก่อนวันนั้นจริง ๆ
+    ไม่ใช่เอา latest_bi ปัจจุบันมาใช้ ไม่งั้นตัวเลขเทียบจะเท่ากันเสมอ
+  */
+  var byHn = {};
+  readAll_(SHEETS.BI).forEach(function (r) {
+    var d = String(r.assess_date || '');
+    var v = parseFloat(r.total);
+    if (!d || isNaN(v) || d > cutoff) return;
+    var k = String(r.hn);
+    if (!byHn[k]) byHn[k] = { first: null, last: null, firstDate: '', lastDate: '' };
+    var e = byHn[k];
+    if (!e.firstDate || d < e.firstDate) { e.firstDate = d; e.first = v; }
+    if (!e.lastDate || d >= e.lastDate) { e.lastDate = d; e.last = v; }
   });
+  var gainsBefore = Object.keys(byHn)
+    .map(function (k) { return byHn[k].last - byHn[k].first; })
+    .filter(function (v) { return !isNaN(v); });
+
+  var avgGain = avgOf_(gains);
+  var avgGainBefore = avgOf_(gainsBefore);
 
   // นัดหมายที่ยังมาไม่ถึง เรียงจากใกล้ที่สุด ใช้เตือนงานที่ต้องทำ
-  var today = todayIso_();
   var upcoming = patients
     .filter(function (p) {
       return p.kbh_appt_date && String(p.kbh_appt_date) >= today && String(p.status) !== 'closed';
@@ -617,10 +767,17 @@ function apiDashboard() {
     noImc: noImc,
     active: active,
     closed: closed,
-    avgGain: gains.length
-      ? Math.round((gains.reduce(function (s, v) { return s + v; }, 0) / gains.length) * 10) / 10
-      : null,
+    avgGain: avgGain,
     improved: gains.filter(function (v) { return v > 0; }).length,
-    months: months
+    months: series(byMonth, 12),
+    quarters: series(byQuarter, 8),
+    years: series(byYear, 6),
+    delta: {
+      total: newThisMonth,
+      imc: newImcThisMonth,
+      active: active - activeAsOf_(patients, cutoff),
+      avgGain: (avgGain === null || avgGainBefore === null)
+        ? null : Math.round((avgGain - avgGainBefore) * 10) / 10
+    }
   };
 }

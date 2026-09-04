@@ -7,13 +7,21 @@
 </head>
 <body>
 
+<div class="progress-top" id="progress" hidden><span></span></div>
+
 <div class="shell">
 
   <aside class="sidebar">
-    <button class="brand" onclick="go('list')">
-      <span class="brand-mark">IMC</span>
+    <button class="brand" onclick="go('dashboard')">
+      <span class="brand-mark">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M9.6 2.6h4.8v4.2h4.2v4.8h-4.2v4.2H9.6v-4.2H5.4V6.8h4.2z" fill="currentColor"/>
+          <path d="M6.2 17.4h11.6v4H6.2z" fill="currentColor" opacity=".45"/>
+        </svg>
+      </span>
       <span class="brand-text">
-        <strong id="app-name">Intermediate Care</strong>
+        <strong id="app-abbr">IMC</strong>
+        <small class="brand-full" id="app-name">Intermediate Care</small>
         <small class="brand-org">
           <span id="app-org-unit"></span>
           <span id="app-org-place"></span>
@@ -23,15 +31,58 @@
 
     <nav class="sidenav" id="sidenav"></nav>
 
-    <div class="side-foot">
-      <div class="user">
-        <span class="avatar" id="user-initial">?</span>
-        <span class="user-mail" id="who-email"></span>
-      </div>
+    <div class="side-art" aria-hidden="true">
+      <p class="art-script">Better<br>Recovery<br>Brighter Lives</p>
+      <p class="art-sub">ฟื้นฟูวันนี้ เพื่อคุณภาพชีวิตที่ดีกว่า</p>
     </div>
   </aside>
 
   <div class="content">
+
+    <header class="topbar">
+      <div class="search">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" aria-hidden="true">
+          <circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.6-3.6"></path>
+        </svg>
+        <input id="top-search" autocomplete="off" placeholder="ค้นหาผู้ป่วย (HN / ชื่อ-สกุล) ...">
+      </div>
+
+      <div class="top-actions">
+        <button class="ic-btn" id="btn-alerts" onclick="go('dashboard')" aria-label="นัดหมายใน 7 วันข้างหน้า">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M18 8.6a6 6 0 1 0-12 0c0 6-2.2 7.4-2.2 7.4h16.4S18 14.6 18 8.6"></path>
+            <path d="M13.7 19.5a2 2 0 0 1-3.4 0"></path>
+          </svg>
+          <span class="badge num" id="alert-badge" hidden>0</span>
+        </button>
+
+        <button class="ic-btn" id="btn-quick" aria-label="เมนูด่วน">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <rect x="3" y="3" width="7.5" height="7.5" rx="2"></rect>
+            <rect x="13.5" y="3" width="7.5" height="7.5" rx="2"></rect>
+            <rect x="3" y="13.5" width="7.5" height="7.5" rx="2"></rect>
+            <rect x="13.5" y="13.5" width="7.5" height="7.5" rx="2"></rect>
+          </svg>
+        </button>
+
+        <button class="userchip" id="btn-user">
+          <span class="avatar" id="user-initial">?</span>
+          <span class="uc-text">
+            <b id="user-name">—</b>
+            <small id="user-role"></small>
+          </span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="m6 9 6 6 6-6"></path>
+          </svg>
+        </button>
+
+        <div class="dropdown" id="dropdown" hidden></div>
+      </div>
+    </header>
+
     <header class="mobilebar">
       <span class="brand-mark sm">IMC</span>
       <span class="mobilebar-title" id="mobile-title">รายชื่อผู้ป่วย</span>
@@ -43,12 +94,28 @@
     <div class="mask-banner" id="mask-banner" hidden>โหมดทดสอบ</div>
 
     <main id="main"><div class="loading">กำลังโหลด…</div></main>
+
+    <footer class="app-foot">Care &nbsp;•&nbsp; Recover &nbsp;•&nbsp; Return to Life</footer>
   </div>
 
   <nav class="bottomnav" id="bottomnav"></nav>
 </div>
 
-<div id="toast" class="toast" hidden></div>
+<div class="scrim" id="modal" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="modal-icon" id="modal-icon"></div>
+    <h2 class="modal-title" id="modal-title"></h2>
+    <p class="modal-msg" id="modal-msg"></p>
+    <div class="modal-actions" id="modal-actions"></div>
+  </div>
+</div>
+
+<div class="scrim scrim-load" id="loading" hidden>
+  <div class="loading-box">
+    <span class="spinner" aria-hidden="true"></span>
+    <span id="loading-msg">กำลังโหลด…</span>
+  </div>
+</div>
 
 <?!= include('js'); ?>
 </body>

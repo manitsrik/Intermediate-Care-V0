@@ -426,7 +426,7 @@ tbody tr:last-child td { border-bottom: 0; }
 
 /* ------------------------------------------------------------- dashboard */
 
-/* กล่องวันที่ ใช้เฉพาะหัวหน้าภาพรวม */
+/* กล่องวันที่ ใช้เฉพาะหัวหน้าแดชบอร์ด */
 .dash-date {
   margin-left: auto; flex: none;
   display: flex; align-items: center; gap: 9px;
@@ -636,6 +636,50 @@ tbody tr:last-child td { border-bottom: 0; }
 .btn-solid-danger { background: var(--warn); border-color: var(--warn); color: #fff; font-weight: 500; }
 .btn-solid-danger:hover { background: #a72c0a; }
 
+/* ------------------------------------------------- โมดัลรายการผู้ป่วย */
+
+.sheet {
+  background: var(--surface); border-radius: 16px;
+  width: 100%; max-width: 660px; max-height: 84vh;
+  display: flex; flex-direction: column; overflow: hidden;
+  box-shadow: 0 18px 50px rgba(16, 24, 40, .22);
+}
+.sheet-head {
+  display: flex; align-items: center; gap: 11px;
+  padding: 15px 16px 15px 20px; border-bottom: 1px solid var(--line); flex: none;
+}
+.sheet-head h2 { margin: 0; font-size: 17px; font-weight: 600; }
+.sheet-count { color: var(--muted); font-size: 15px; }
+.sheet-head .btn { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; }
+.sheet-x {
+  width: 34px; height: 34px; flex: none; border: 0; background: none; border-radius: 9px;
+  cursor: pointer; color: var(--muted);
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.sheet-x:hover { background: var(--bg); color: var(--text); }
+
+.sheet-body { overflow-y: auto; overscroll-behavior: contain; }
+.sheet-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 11px 20px; cursor: pointer; border-bottom: 1px solid var(--line-soft);
+}
+.sheet-row:hover { background: var(--brand-tint); }
+.sheet-who { display: flex; flex-direction: column; line-height: 1.4; min-width: 0; }
+.sheet-who b { font-size: 14px; font-weight: 500; }
+.sheet-who small { font-size: 12px; color: var(--faint); }
+.sheet-side { margin-left: auto; display: flex; align-items: center; gap: 10px; flex: none; }
+.sheet-foot {
+  padding: 10px 18px; border-top: 1px solid var(--line); flex: none;
+  color: var(--faint); font-size: 12px; text-align: center;
+}
+
+/* บอกให้รู้ว่ากดได้ ไม่งั้นไม่มีใครรู้ว่ากราฟคลิกได้ */
+.bcol { cursor: pointer; }
+.bcol:hover .bar { filter: brightness(1.08); }
+.donut { cursor: pointer; }
+.legend-row { cursor: pointer; border-radius: 8px; padding: 3px 5px; margin: -3px -5px; }
+.legend-row:hover { background: var(--brand-tint); }
+
 /* ------------------------------------------------------- ตัวบอกว่ากำลังรอ
 
   งานอ่านใช้แถบบางด้านบนสุด ไม่บังจอ เพราะกดอย่างอื่นต่อได้ระหว่างรอ
@@ -758,6 +802,11 @@ table.cards td.head { display: none; }
   .bi-summary { margin: 16px -16px 0; border-radius: 0; border-left: 0; border-right: 0; padding: 14px 16px 22px; }
   .bi-summary .btn { width: 100%; }
 
+  .sheet { max-height: 90vh; border-radius: 14px; }
+  .sheet-head { padding: 12px 12px 12px 15px; gap: 8px; }
+  .sheet-head h2 { font-size: 15px; }
+  .sheet-row { padding: 10px 15px; }
+
   .modal { padding: 22px 20px 18px; }
   .modal-actions { flex-direction: column-reverse; }
   .modal-actions .btn { width: 100%; }
@@ -785,6 +834,68 @@ table.cards td.head { display: none; }
   .x-axis span { font-size: 10.5px; }
   .y-axis, .plot { height: 200px; }
   .donut-wrap { justify-content: center; }
+}
+
+/* ================================================================= พิมพ์
+
+  ใช้ตอนกดปุ่มบันทึก PDF ตัดส่วนที่กดไม่ได้บนกระดาษออกให้หมด
+  แล้วบีบทุกอย่างให้ลงกระดาษ A4 แนวนอนแผ่นเดียว
+*/
+@media print {
+  @page { size: A4 landscape; margin: 8mm; }
+
+  .sidebar, .topbar, .mobilebar, .bottomnav, .app-foot,
+  .progress-top, .scrim, .panel-link, .seg { display: none !important; }
+
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+  body { background: #fff; font-size: 11px; }
+  .shell, .content { display: block; }
+  main { padding: 0; max-width: none; }
+
+  /* แถบโหมดทดสอบต้องติดไปกับกระดาษด้วย ไม่งั้นเอกสารจะดูเหมือนข้อมูลผู้ป่วยจริง */
+  .mask-banner { border: 1px solid #f7dbd1; border-radius: 6px; margin-bottom: 8px; padding: 4px; font-size: 11px; }
+
+  .page-head { min-height: 0; padding: 9px 14px; margin-bottom: 10px; border-radius: 10px; }
+  .page-head h1 { font-size: 16px; }
+  .dash-date { padding: 5px 10px; font-size: 11px; }
+
+  .stat-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 10px; }
+  .stat-card { padding: 10px 12px; border-radius: 12px; }
+  /* บนกระดาษการ์ดกว้างพอให้ป้ายชื่ออยู่บรรทัดเดียวเสมอ ไม่ต้องจองที่สองบรรทัด */
+  .stat-card .k { min-height: 0; }
+  .stat-card .v { font-size: 24px; letter-spacing: -.8px; }
+  .stat-card .ico { width: 34px; height: 34px; }
+  .stat-card .ico svg { width: 17px; height: 17px; }
+  .stat-art { display: none; }
+  .stat-foot { padding-top: 6px; }
+
+  /*
+    เรียงสามการ์ดล่างให้อยู่แถวเดียวกัน
+    display: contents ละลายกล่องครอบสองใบทิ้ง การ์ดข้างในจึงกลายเป็นช่องของตารางเอง
+    ถ้าปล่อยเป็นสองคอลัมน์แบบบนจอ คอลัมน์ขวาจะสูงเกินหน้าจนนัดหมายตกไปแผ่นสอง
+  */
+  .cols { display: grid; grid-template-columns: 1.5fr 1fr 1fr; gap: 10px; align-items: start; }
+  .cols > div { display: contents; }
+
+  .panel { padding: 11px 13px; margin-bottom: 0; border-radius: 12px; box-shadow: none; }
+  .panel-head { margin-bottom: 8px; gap: 8px; }
+  .panel-head h2 { font-size: 13px; }
+
+  .y-axis, .plot { height: 168px; }
+  .bar .val { font-size: 10px; top: -15px; }
+  .x-axis span { font-size: 10px; }
+
+  .donut-wrap { gap: 10px; }
+  .donut-mid b { font-size: 18px; }
+  .legend { gap: 8px; }
+  .legend-row { font-size: 11px; }
+
+  .list-row { padding: 5px 0; }
+  .empty-art { padding: 6px; }
+  .empty-art svg { width: 30px; height: 30px; }
+
+  .page-head, .panel, .stat-card { break-inside: avoid; }
 }
 
 </style>

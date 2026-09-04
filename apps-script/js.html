@@ -292,7 +292,7 @@ function readForm(formEl) {
 /* ----------------------------------------------------------- โครงหน้าจอ */
 
 var NAV = [
-  { key: 'dashboard', icon: 'home', label: 'ภาพรวม', short: 'ภาพรวม' },
+  { key: 'dashboard', icon: 'home', label: 'แดชบอร์ด', short: 'แดชบอร์ด' },
   { key: 'list', icon: 'people', label: 'รายชื่อผู้ป่วย', short: 'ผู้ป่วย' },
   { key: 'followups', icon: 'calendar', label: 'การติดตาม', short: 'ติดตาม' },
   { key: 'report', icon: 'report', label: 'รายงาน / BI', short: 'รายงาน' },
@@ -308,7 +308,7 @@ var NAV_OF_VIEW = {
 var TITLE_OF_VIEW = {
   list: 'รายชื่อผู้ป่วย', patient: 'ข้อมูลผู้ป่วย', detail: 'เวชระเบียน',
   bi: 'ประเมิน BI', fu: 'บันทึกการติดตาม', close: 'จบโปรแกรม',
-  dashboard: 'ภาพรวมงาน', followups: 'การติดตาม', settings: 'ตั้งค่า', report: 'รายงาน / BI'
+  dashboard: 'แดชบอร์ด', followups: 'การติดตาม', settings: 'ตั้งค่า', report: 'รายงาน / BI'
 };
 
 function visibleNav() {
@@ -332,6 +332,7 @@ function renderNav() {
 function go(name, param) {
   VIEW = { name: name, param: param };
   closeDropdown();
+  closeList();
 
   var active = NAV_OF_VIEW[name] || '';
   Array.prototype.forEach.call(document.querySelectorAll('[data-nav]'), function (b) {
@@ -341,7 +342,7 @@ function go(name, param) {
   document.body.classList.toggle('hide-tabs', name === 'bi');
 
   window.scrollTo(0, 0);
-  ({
+  return ({
     list: renderList,
     dashboard: renderDashboard,
     followups: renderFollowups,
@@ -414,9 +415,32 @@ function wireTopbar() {
       ddItem('pulse', 'โหลดข้อมูลใหม่', 'reloadAll()'));
   };
 
+  document.getElementById('btn-pdf').onclick = savePdf;
+  document.getElementById('sheet-close').onclick = closeList;
+  document.getElementById('sheet-excel').onclick = exportSheet;
+  document.getElementById('listmodal').onclick = function (e) {
+    if (e.target.id === 'listmodal') closeList();
+  };
+
   document.addEventListener('click', closeDropdown);
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape') closeDropdown();
+  });
+}
+
+/*
+  บันทึกหน้าแดชบอร์ดเป็น PDF ผ่านหน้าต่างพิมพ์ของเบราว์เซอร์
+
+  ไม่ใช้ไลบรารีจับภาพหน้าจอ เพราะโดนัทผลการคัดกรองวาดด้วย conic-gradient
+  ซึ่งไลบรารีพวกนั้นวาดไม่ออก จะได้วงว่างเปล่า ส่วนการพิมพ์ใช้ตัวเบราว์เซอร์เอง
+  จึงได้ทุกอย่างตรงกับที่เห็นบนจอ และตัวหนังสือใน PDF ยังคัดลอกกับค้นหาได้
+*/
+function savePdf() {
+  closeDropdown();
+  var ready = (VIEW.name === 'dashboard') ? Promise.resolve() : go('dashboard');
+  Promise.resolve(ready).then(function () {
+    // เผื่อเวลาให้จัดหน้าเสร็จก่อน ไม่งั้นบางทีได้กระดาษที่ยังวางของไม่ครบ
+    setTimeout(function () { window.print(); }, 120);
   });
 }
 
@@ -1355,16 +1379,16 @@ function renderSettings() {
   }).catch(fail);
 }
 
-/* ---------------------------------------------------------- ภาพรวมงาน */
+/* ---------------------------------------------------------- แดชบอร์ด */
 
 var dashCache = null;
 var reportCache = null;
 var chartMode = 'months';
 
 function renderDashboard() {
-  if (dashCache) { drawDashboard(dashCache); return; }
+  if (dashCache) { drawDashboard(dashCache); return Promise.resolve(); }
   busy(3);
-  call('apiDashboard').then(function (d) {
+  return call('apiDashboard').then(function (d) {
     dashCache = d;
     drawDashboard(d);
   }).catch(fail);
@@ -1386,7 +1410,7 @@ function drawDashboard(d) {
 function dashHead() {
   var t = new Date();
   return '<div class="page-head">' +
-    '<div class="head-text"><h1>ภาพรวมงาน IMC</h1>' +
+    '<div class="head-text"><h1>แดชบอร์ด IMC</h1>' +
     '<span class="sub">' + esc(BOOT.org) + '</span></div>' +
     '<div class="dash-date">' + icon('calendar', 17, 1.8) + '<span>' +
     '<span id="hero-day">' + esc(thDayText(t)) + '</span>' +
@@ -1500,8 +1524,8 @@ function chartPanel(d) {
     '<div class="plot">' +
     '<div class="gridlines"><i></i><i></i><i></i><i></i><i></i></div>' +
     '<div class="bars">' + rows.map(function (r) {
-      return '<div class="bcol"><div class="bar" style="height:' +
-        Math.max(Math.round(r.count / top * 100), 1) + '%">' +
+      return '<div class="bcol" title="ดูรายชื่อ" onclick="openPeriod(\'' + esc(r.key) + '\')">' +
+        '<div class="bar" style="height:' + Math.max(Math.round(r.count / top * 100), 1) + '%">' +
         '<span class="val num">' + r.count + '</span></div></div>';
     }).join('') + '</div>' +
     '<div class="x-axis">' + rows.map(function (r) {
@@ -1520,11 +1544,12 @@ function screeningPanel(d) {
     '<span class="panel-ico">' + icon('target', 20, 1.9) + '</span><h2>ผลการคัดกรอง</h2></div>' +
     (sum
       ? '<div class="donut-wrap">' +
-        '<div class="donut" style="background:conic-gradient(var(--brand) 0 ' + pct + '%, #e3e9ec ' + pct + '% 100%)">' +
+        '<div class="donut" title="คลิกที่วงเพื่อดูรายชื่อ" onclick="donutClick(event, ' + pct + ')" ' +
+        'style="background:conic-gradient(var(--brand) 0 ' + pct + '%, #e3e9ec ' + pct + '% 100%)">' +
         '<div class="donut-mid"><b class="num">' + sum + '</b><small>ทั้งหมด</small></div></div>' +
         '<div class="legend">' +
-        legendRow('var(--brand)', 'เข้าเกณฑ์ IMC', d.imc, sum) +
-        legendRow('#c9d2d9', 'ไม่เข้าเกณฑ์', d.noImc, sum) +
+        legendRow('var(--brand)', 'เข้าเกณฑ์ IMC', d.imc, sum, 'IMC') +
+        legendRow('#c9d2d9', 'ไม่เข้าเกณฑ์', d.noImc, sum, 'NoIMC') +
         '</div></div>'
       : '<div class="empty">ยังไม่มีผลคัดกรอง</div>') +
     '</div>';
@@ -1552,6 +1577,134 @@ function upcomingPanel(d) {
       '<button class="btn" onclick="go(\'list\')">+ เพิ่มนัดหมาย</button></div>';
 
   return '<div class="panel">' + head + body + '</div>';
+}
+
+/* ------------------------------------------------- โมดัลรายการผู้ป่วย
+
+  กดที่แท่งกราฟหรือวงโดนัทแล้วเห็นว่าตัวเลขนั้นมาจากใครบ้าง
+  ข้อมูลทั้งหมดอยู่ในเครื่องอยู่แล้ว จึงเปิดได้ทันทีโดยไม่ต้องถามเซิร์ฟเวอร์
+*/
+var sheetRows = [];
+var sheetFile = 'imc';
+
+function openList(title, rows, fileName) {
+  sheetRows = rows;
+  sheetFile = fileName || 'imc';
+
+  document.getElementById('sheet-title').textContent = title;
+  document.getElementById('sheet-count').textContent = '(' + rows.length + ')';
+  document.getElementById('sheet-body').innerHTML = rows.length
+    ? rows.map(sheetRow).join('')
+    : '<div class="empty">ไม่มีผู้ป่วยในกลุ่มนี้</div>';
+
+  document.getElementById('listmodal').hidden = false;
+  document.addEventListener('keydown', listKeys);
+}
+
+function sheetRow(p) {
+  return '<div class="sheet-row" onclick="fromList(\'' + esc(p.hn) + '\')">' +
+    '<span class="avatar row">' + esc(initials(p.first_name)) + '</span>' +
+    '<span class="sheet-who"><b>' + esc(p.full_name || p.hn) + '</b>' +
+    '<small class="num">HN ' + esc(p.hn) + ' · ' + esc(p.dx || 'ไม่ระบุ Dx') +
+    ' · Start ' + esc(thDate(p.start_date)) + '</small></span>' +
+    '<span class="sheet-side">' + biCell(p.first_bi, p.latest_bi) +
+    statusChip(p.status) + '</span></div>';
+}
+
+function fromList(hn) {
+  closeList();
+  go('detail', hn);
+}
+
+function closeList() {
+  document.getElementById('listmodal').hidden = true;
+  document.removeEventListener('keydown', listKeys);
+}
+
+function listKeys(e) {
+  if (e.key === 'Escape') { e.preventDefault(); closeList(); }
+}
+
+/** ผู้ป่วยที่เริ่มโปรแกรมในช่วงเวลาที่กด ตรงกับวิธีนับของกราฟแท่ง */
+function matchPeriod(p, key) {
+  var d = String(p.start_date || '');
+  if (d.length < 7) return false;
+  if (chartMode === 'years') return d.substring(0, 4) === key;
+  if (chartMode === 'quarters') {
+    var q = Math.ceil(parseInt(d.substring(5, 7), 10) / 3);
+    return d.substring(0, 4) + '-Q' + q === key;
+  }
+  return d.substring(0, 7) === key;
+}
+
+function openPeriod(key) {
+  var rows = (patientCache || []).filter(function (p) { return matchPeriod(p, key); });
+  openList('เริ่มโปรแกรม ' + seriesLabel(key), rows, 'imc-start-' + key);
+}
+
+function openScreening(kind) {
+  var rows = (patientCache || []).filter(function (p) {
+    return String(p.screening_result) === kind;
+  });
+  openList(kind === 'IMC' ? 'เข้าเกณฑ์ IMC' : 'ไม่เข้าเกณฑ์ IMC', rows, 'imc-screening-' + kind);
+}
+
+/*
+  โดนัทเป็นก้อนเดียว ไม่ใช่สองชิ้นแยกกัน จึงต้องคำนวณเองว่าคลิกโดนส่วนไหน
+  วัดมุมจากจุดกึ่งกลางโดยเริ่มนับที่เที่ยงตรงแล้ววนตามเข็ม ให้ตรงกับที่ conic-gradient วาด
+  คลิกรูตรงกลางถือว่าเลือกทั้งหมด เพราะตรงนั้นเขียนยอดรวมอยู่
+*/
+function donutClick(e, pct) {
+  var box = e.currentTarget.getBoundingClientRect();
+  var dx = e.clientX - (box.left + box.width / 2);
+  var dy = e.clientY - (box.top + box.height / 2);
+  var r = Math.sqrt(dx * dx + dy * dy) / (box.width / 2);
+
+  if (r < 0.42) {
+    openList('ผู้ป่วยทั้งหมด', patientCache || [], 'imc-all');
+    return;
+  }
+  var deg = (Math.atan2(dx, -dy) * 180 / Math.PI + 360) % 360;
+  openScreening(deg < pct * 3.6 ? 'IMC' : 'NoIMC');
+}
+
+/* --------------------------------------------------------- ออกเป็น Excel
+
+  เขียนเป็น CSV แล้วนำหน้าด้วย BOM ถ้าไม่มี BOM Excel บนวินโดวส์จะอ่านไทยเป็นตัวขยะ
+*/
+var EXPORT_COLS = [
+  ['hn', 'HN'], ['full_name', 'ชื่อ-สกุล'], ['sex', 'เพศ'], ['age', 'อายุ'],
+  ['dx', 'การวินิจฉัย'], ['ward', 'Ward'], ['start_date', 'วัน Start'],
+  ['first_bi', 'BI แรกรับ'], ['latest_bi', 'BI ล่าสุด'],
+  ['screening_result', 'ผลคัดกรอง'], ['status', 'สถานะ'],
+  ['kbh_appt_date', 'วันนัด OPD'], ['imc_program', 'รูปแบบโปรแกรม']
+];
+
+function csvCell(v) {
+  var t = String(v === null || v === undefined ? '' : v);
+  return '"' + t.replace(/"/g, '""') + '"';
+}
+
+function exportSheet() {
+  if (!sheetRows.length) {
+    notify('ไม่มีข้อมูลให้บันทึก', 'กลุ่มนี้ยังไม่มีผู้ป่วย', 'warn');
+    return;
+  }
+
+  var lines = [EXPORT_COLS.map(function (c) { return csvCell(c[1]); }).join(',')];
+  sheetRows.forEach(function (p) {
+    lines.push(EXPORT_COLS.map(function (c) { return csvCell(p[c[0]]); }).join(','));
+  });
+
+  var blob = new Blob(['\ufeff' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = sheetFile + '.csv';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
 }
 
 /* ---------------------------------------------------------- หน้ารายงาน */
@@ -1633,8 +1786,9 @@ function progressPanel(rows) {
     '</tbody></table></div></div>';
 }
 
-function legendRow(color, label, n, sum) {
-  return '<div class="legend-row">' +
+function legendRow(color, label, n, sum, kind) {
+  return '<div class="legend-row"' +
+    (kind ? ' title="ดูรายชื่อ" onclick="openScreening(\'' + kind + '\')"' : '') + '>' +
     '<span class="sw" style="background:' + color + '"></span>' +
     '<span class="lbl">' + esc(label) + '</span>' +
     '<b class="num">' + n + '</b>' +

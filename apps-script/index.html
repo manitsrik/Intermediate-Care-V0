@@ -49,6 +49,15 @@
       </div>
 
       <div class="top-actions">
+        <button class="ic-btn" id="btn-pdf" aria-label="บันทึกหน้าแดชบอร์ดเป็น PDF">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M14 3H7.4A1.4 1.4 0 0 0 6 4.4v15.2A1.4 1.4 0 0 0 7.4 21h9.2a1.4 1.4 0 0 0 1.4-1.4V7z"></path>
+            <path d="M13.8 3.1v4.1h4.1"></path>
+            <path d="M12 11.4v5.2M9.7 14.3l2.3 2.3 2.3-2.3"></path>
+          </svg>
+        </button>
+
         <button class="ic-btn" id="btn-alerts" onclick="go('dashboard')" aria-label="นัดหมายใน 7 วันข้างหน้า">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -107,6 +116,30 @@
     <h2 class="modal-title" id="modal-title"></h2>
     <p class="modal-msg" id="modal-msg"></p>
     <div class="modal-actions" id="modal-actions"></div>
+  </div>
+</div>
+
+<div class="scrim" id="listmodal" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
+    <div class="sheet-head">
+      <h2 id="sheet-title"></h2>
+      <span class="sheet-count num" id="sheet-count"></span>
+      <button class="btn btn-sm" id="sheet-excel">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M12 3.6v10.8M8.2 11l3.8 3.8 3.8-3.8M4.4 18.4v1.2a.8.8 0 0 0 .8.8h13.6a.8.8 0 0 0 .8-.8v-1.2"></path>
+        </svg>
+        <span>Excel</span>
+      </button>
+      <button class="sheet-x" id="sheet-close" aria-label="ปิด">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" aria-hidden="true">
+          <path d="m6 6 12 12M18 6 6 18"></path>
+        </svg>
+      </button>
+    </div>
+    <div class="sheet-body" id="sheet-body"></div>
+    <div class="sheet-foot">คลิกที่ชื่อเพื่อเปิดเวชระเบียน</div>
   </div>
 </div>
 

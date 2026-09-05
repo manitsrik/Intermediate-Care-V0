@@ -34,7 +34,11 @@ function call(fn) {
         }
         resolve(result);
       })
-      .withFailureHandler(function (e) { busyOff(writing); reject(e); })
+      .withFailureHandler(function (e) {
+        busyOff(writing);
+        paintNetwork_();
+        reject(netError_(e, fn));
+      })
       [fn].apply(null, args);
   });
 }
@@ -497,9 +501,110 @@ function displayName(u) {
   return u.name || String(u.email || '').split('@')[0] || '—';
 }
 
+/* --------------------------------------------- ทำตัวให้เหมือนแอปติดเครื่อง
+
+  ทำ PWA เต็มรูปแบบบน Apps Script ไม่ได้ หน้าจอจริงถูกฝังใน iframe คนละโดเมน
+  กับหน้าบนสุด เบราว์เซอร์จึงไม่อ่าน manifest ให้ และ service worker ก็วางไม่ได้
+  เพราะต้องเป็นไฟล์ .js แยกบนโดเมนเดียวกัน ซึ่ง HtmlService เสิร์ฟให้ไม่ได้
+  ที่ทำได้คือแก้สองอาการที่ทำให้รู้สึกว่าไม่ใช่แอป คือเปิดมาแล้วจอว่างรอนาน
+  กับเน็ตหลุดแล้วจอค้างโดยไม่บอกอะไร
+*/
+
+/*
+  เก็บแค่ชื่อหน่วยงานที่ใช้วาดแถบข้าง ไม่เก็บข้อมูลผู้ป่วยและไม่เก็บว่าใครล็อกอิน
+  เครื่องในวอร์ดเป็นเครื่องที่ใช้ร่วมกัน ข้อมูลคนไข้ค้างอยู่ในเครื่องไม่ได้
+  และถ้าเก็บชื่อผู้ใช้ไว้ พอสลับบัญชีจะวาบให้เห็นชื่อคนก่อนหน้าก่อนของจริงจะมา
+*/
+var SHELL_KEY = 'imc.shell.v1';
+
+function readShell_() {
+  try { return JSON.parse(localStorage.getItem(SHELL_KEY)) || null; } catch (e) { return null; }
+}
+
+function saveShell_(b) {
+  try {
+    localStorage.setItem(SHELL_KEY, JSON.stringify({
+      appName: b.appName, org: b.org, orgUnit: b.orgUnit, orgPlace: b.orgPlace
+    }));
+  } catch (e) { /* บางเบราว์เซอร์ปิด storage ใน iframe ข้ามโดเมน แค่ไม่ได้ของเร็วขึ้น */ }
+}
+
+function isOffline_() {
+  return typeof navigator !== 'undefined' && navigator.onLine === false;
+}
+
+function paintNetwork_() {
+  var el = document.getElementById('net-banner');
+  if (el) el.hidden = !isOffline_();
+}
+
+var netWatched = false;
+
+/** ขึ้นแถบเตือนค้างไว้ตลอดที่ยังออฟไลน์ ไม่ใช่เด้งแล้วหาย จะได้ไม่กดบันทึกลอย ๆ */
+function watchNetwork_() {
+  paintNetwork_();
+  if (netWatched) return;
+  netWatched = true;
+  window.addEventListener('online', paintNetwork_);
+  window.addEventListener('offline', paintNetwork_);
+}
+
+/**
+ * ข้อความที่ Apps Script ส่งกลับมาตอนเรียกไม่สำเร็จเพราะเน็ตหลุดนั้นอ่านไม่รู้เรื่อง
+ * เปลี่ยนเป็นบอกตรง ๆ ว่ายังไม่ได้บันทึก ให้ต่อเน็ตแล้วทำใหม่
+ */
+function netError_(e, fn) {
+  if (!isOffline_()) return e;
+  return new Error(WRITE_FNS[fn]
+    ? 'ตอนนี้ไม่ได้ต่ออินเทอร์เน็ต ข้อมูลยังไม่ถูกบันทึก กรุณาต่อเน็ตแล้วกดบันทึกอีกครั้ง'
+    : 'ตอนนี้ไม่ได้ต่ออินเทอร์เน็ต ดึงข้อมูลใหม่ไม่ได้ กรุณาต่อเน็ตแล้วลองอีกครั้ง');
+}
+
+/**
+ * วาดโครงหน้าจอทันทีที่เปิด ไม่ต้องรอ apiBootstrap ที่กินเวลาหลายวินาที
+ * เมนูวาดเฉพาะรายการที่ทุกคนเห็น ของผู้ดูแลระบบรอจนรู้สิทธิ์จริงก่อน
+ * จะได้ไม่วาบให้เห็นเมนูที่ตัวเองกดไม่ได้
+ */
+function preboot() {
+  var s = readShell_();
+  if (s) {
+    document.getElementById('app-name').textContent = s.appName || '';
+    document.getElementById('app-org-unit').textContent = s.orgUnit || s.org || '';
+    document.getElementById('app-org-place').textContent = s.orgPlace || '';
+    fitBrandText();
+  }
+
+  renderNav();
+  // boot() จบแล้วไปหน้ารายชื่อเสมอ ทำเมนูให้สว่างตรงกันไว้ก่อน จะได้ไม่ขยับทีหลัง
+  Array.prototype.forEach.call(document.querySelectorAll('[data-nav="list"]'), function (b) {
+    b.classList.add('active');
+  });
+  document.getElementById('mobile-title').textContent = TITLE_OF_VIEW.list;
+
+  busy();
+  watchNetwork_();
+}
+
+/**
+ * เปิดแอปไม่ขึ้นเลยต้องมีปุ่มให้ลองใหม่ ไม่งั้นต้องปิดแท็บเปิดใหม่เอง
+ * ซึ่งตอนเปิดจากไอคอนบนจอโฮมของ iOS ไม่มีแถบที่อยู่เว็บให้กดโหลดซ้ำด้วย
+ */
+function bootFailed(e) {
+  var offline = isOffline_();
+  main().innerHTML = '<div class="card">' +
+    '<h2>' + (offline ? 'ไม่ได้ต่ออินเทอร์เน็ต' : 'เข้าใช้งานไม่ได้') + '</h2>' +
+    '<p>' + esc(offline
+      ? 'แอปต้องต่อเน็ตเพื่อดึงข้อมูลจาก Google Sheet ต่อเน็ตแล้วกดลองใหม่ได้เลย'
+      : ((e && e.message) ? e.message : String(e))) + '</p>' +
+    '<div class="retry-row"><button class="btn btn-primary" onclick="boot()">ลองใหม่</button></div>' +
+    '</div>';
+}
+
 function boot() {
+  preboot();
   call('apiBootstrap').then(function (b) {
     BOOT = b;
+    saveShell_(b);
     document.getElementById('app-name').textContent = b.appName;
     document.getElementById('app-org-unit').textContent = b.orgUnit || b.org;
     document.getElementById('app-org-place').textContent = b.orgPlace || '';
@@ -520,10 +625,7 @@ function boot() {
     window.addEventListener('resize', fitBrandText);
 
     go('list');
-  }).catch(function (e) {
-    main().innerHTML = '<div class="card"><h2>เข้าใช้งานไม่ได้</h2><p>' +
-      esc(e && e.message ? e.message : e) + '</p></div>';
-  });
+  }).catch(bootFailed);
 }
 
 /* ------------------------------------------------------- หน้ารายชื่อผู้ป่วย */

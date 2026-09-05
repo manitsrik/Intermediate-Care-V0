@@ -251,6 +251,22 @@ main { flex-grow: 1; padding: 26px 32px 48px; max-width: 1240px; width: 100%; }
   border-bottom: 1px solid #f7dbd1;
 }
 
+/*
+  แถบบอกว่าเน็ตหลุด ใช้สีเดียวกับแถบโหมดทดสอบเพราะเป็นคำเตือนเหมือนกัน
+  ขึ้นค้างไว้ตลอดที่ยังออฟไลน์ ไม่ใช่เด้งแล้วหาย ผู้ใช้จะได้ไม่กดบันทึกทิ้งไว้
+  แล้วเข้าใจว่าข้อมูลลงชีตแล้ว
+*/
+.net-banner {
+  background: var(--warn-soft); color: var(--warn);
+  font-size: 13px; text-align: center; padding: 6px 16px;
+  border-bottom: 1px solid #f7dbd1;
+  display: flex; align-items: center; justify-content: center; gap: 7px;
+}
+.net-banner::before {
+  content: ''; width: 7px; height: 7px; border-radius: 50%;
+  background: currentColor; flex: none;
+}
+
 /* --------------------------------------------------------------- bottomnav */
 
 .bottomnav { display: none; }
@@ -282,6 +298,7 @@ main { flex-grow: 1; padding: 26px 32px 48px; max-width: 1240px; width: 100%; }
 .card > h2 { font-size: 15px; font-weight: 600; margin: 0 0 14px; }
 .card > h2 .sub { font-weight: 400; color: var(--faint); font-size: 12px; margin-left: 8px; }
 .card.flush { padding: 0; overflow: hidden; }
+.retry-row { margin-top: 14px; }
 
 .back {
   display: inline-flex; align-items: center; gap: 7px;
@@ -855,6 +872,7 @@ table.cards td.head { display: none; }
 
   /* แถบโหมดทดสอบต้องติดไปกับกระดาษด้วย ไม่งั้นเอกสารจะดูเหมือนข้อมูลผู้ป่วยจริง */
   .mask-banner { border: 1px solid #f7dbd1; border-radius: 6px; margin-bottom: 8px; padding: 4px; font-size: 11px; }
+  .net-banner { border: 1px solid #f7dbd1; border-radius: 6px; margin-bottom: 8px; padding: 4px; font-size: 11px; }
 
   .page-head { min-height: 0; padding: 9px 14px; margin-bottom: 10px; border-radius: 10px; }
   .page-head h1 { font-size: 16px; }

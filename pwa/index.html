@@ -70,6 +70,23 @@ h1 { font-size: 19px; font-weight: 600; margin: 0 0 4px; }
 }
 .btn:hover { background: var(--brand-ink); }
 
+.btn-install {
+  background: var(--brand-ink);
+  margin-bottom: 10px;
+}
+.btn-install:hover { background: var(--brand-deep); }
+
+/*
+  บรรทัดตรวจสภาพ มีไว้ให้ถ่ายรูปส่งมาตอนติดตั้งไม่ได้
+  จะได้รู้ทันทีว่าติดที่ service worker หรือที่ตัวเบราว์เซอร์ไม่ยอมแจ้งว่าติดตั้งได้
+*/
+.diag {
+  margin: 14px 0 0;
+  font-size: 11.5px; line-height: 1.5;
+  color: #93a0ab; text-align: left;
+  word-break: break-word;
+}
+
 .hint {
   margin: 22px 0 0; padding-top: 18px;
   border-top: 1px solid #e9eef1;
@@ -112,6 +129,7 @@ h1 { font-size: 19px; font-weight: 600; margin: 0 0 4px; }
     ต่อเน็ตแล้วกดเปิดอีกครั้งได้เลย
   </div>
 
+  <button class="btn btn-install" id="install" hidden>ติดตั้งลงหน้าจอโฮม</button>
   <a class="btn" id="open" href="#">เปิดระบบ IMC</a>
   <div class="spinner" id="spinner" hidden></div>
 
@@ -122,6 +140,8 @@ h1 { font-size: 19px; font-weight: 600; margin: 0 0 4px; }
       <li>iPhone — ปุ่มแชร์ของ Safari แล้วเลือก <b>เพิ่มไปยังหน้าจอโฮม</b></li>
     </ol>
   </div>
+
+  <p class="diag" id="diag"></p>
 </main>
 
 <script>
@@ -141,6 +161,8 @@ var open_ = document.getElementById('open');
 var offline = document.getElementById('offline');
 var spinner = document.getElementById('spinner');
 var hint = document.getElementById('hint');
+var installBtn = document.getElementById('install');
+var diag = document.getElementById('diag');
 
 open_.href = APP_URL;
 
@@ -154,17 +176,70 @@ function isOffline() {
   return navigator.onLine === false;
 }
 
+/* --------------------------------------------------------- บรรทัดตรวจสภาพ
+
+  Chrome จะยอมให้ติดตั้งก็ต่อเมื่อ service worker ลงทะเบียนเสร็จแล้วเท่านั้น
+  ถ้าเปิดหน้ามาแล้วรีบกดเมนูทันที มันยังไม่ทัน เมนูจะขึ้นแค่ทางลัดธรรมดา
+  ซึ่งดูจากภายนอกไม่ออกเลยว่าติดเพราะอะไร จึงเขียนสถานะออกมาให้เห็นตรง ๆ
+*/
+var swState = 'กำลังลงทะเบียน';
+var canInstall = false;
+
+function installState() {
+  if (installed()) return 'ติดตั้งแล้ว';
+  return canInstall ? 'พร้อมติดตั้ง' : 'เบราว์เซอร์ยังไม่แจ้งว่าติดตั้งได้';
+}
+
+function paintDiag() {
+  diag.textContent = 'ตรวจสภาพ · service worker: ' + swState +
+    ' · การติดตั้ง: ' + installState() +
+    ' · เปิดจาก: ' + (installed() ? 'ไอคอนหน้าจอโฮม' : 'แท็บเบราว์เซอร์');
+}
+
 function paint() {
   var off = isOffline();
   offline.hidden = !off;
   open_.textContent = off ? 'ลองเปิดอีกครั้ง' : 'เปิดระบบ IMC';
   // ติดตั้งไปแล้วไม่ต้องสอนวิธีติดตั้งซ้ำ
   hint.hidden = installed();
+  paintDiag();
 }
 
 paint();
 window.addEventListener('online', paint);
 window.addEventListener('offline', paint);
+
+/*
+  ดักสัญญาณที่ Chrome ส่งมาบอกว่าหน้านี้ติดตั้งได้ แล้วทำเป็นปุ่มของเราเอง
+  ดีกว่าปล่อยให้ผู้ใช้ไปหาเมนูสามจุดเอง เพราะเมนูนั้นอยู่คนละที่ในแต่ละรุ่น
+  และถ้าปุ่มนี้ไม่โผล่ ก็แปลว่าเบราว์เซอร์ไม่ยอมให้ติดตั้ง ซึ่งเป็นข้อมูลที่ใช้ไล่ปัญหาได้
+*/
+var deferredPrompt = null;
+
+window.addEventListener('beforeinstallprompt', function (e) {
+  e.preventDefault();
+  deferredPrompt = e;
+  canInstall = true;
+  installBtn.hidden = false;
+  paintDiag();
+});
+
+installBtn.addEventListener('click', function () {
+  if (!deferredPrompt) return;
+  deferredPrompt.prompt();
+  deferredPrompt.userChoice.then(function () {
+    deferredPrompt = null;
+    installBtn.hidden = true;
+    paintDiag();
+  });
+});
+
+window.addEventListener('appinstalled', function () {
+  deferredPrompt = null;
+  canInstall = false;
+  installBtn.hidden = true;
+  paintDiag();
+});
 
 /*
   เปิดจากไอคอนแล้วเด้งเข้าระบบให้เลย ไม่ต้องกดซ้ำอีกที
@@ -176,12 +251,22 @@ if (installed() && !isOffline()) {
   window.location.replace(APP_URL);
 }
 
+/*
+  ลงทะเบียนทันที ไม่รอ event load
+  ของเดิมรอ load ทำให้บนมือถือที่เน็ตช้า กว่าจะลงทะเบียนเสร็จผู้ใช้กดเมนูไปแล้ว
+  แล้วเจอแค่ทางลัดเพราะ Chrome ยังไม่เห็น service worker
+*/
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', function () {
-    navigator.serviceWorker.register('./sw.js').catch(function () {
-      // ไม่มี service worker ก็ยังใช้ได้ แค่เปิดตอนไม่มีเน็ตแล้วจะไม่เห็นหน้านี้
-    });
+  navigator.serviceWorker.register('./sw.js').then(function () {
+    swState = 'พร้อม';
+    paintDiag();
+  }).catch(function (e) {
+    swState = 'ไม่สำเร็จ (' + ((e && e.name) ? e.name : 'error') + ')';
+    paintDiag();
   });
+} else {
+  swState = 'เบราว์เซอร์นี้ไม่รองรับ';
+  paintDiag();
 }
 </script>
 </body>

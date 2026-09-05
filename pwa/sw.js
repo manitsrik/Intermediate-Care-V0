@@ -9,7 +9,7 @@
   จะยังเปิดของเก่าค้างอยู่
 */
 
-var CACHE = 'imc-shell-v1';
+var CACHE = 'imc-shell-v2';
 
 var SHELL = [
   './',

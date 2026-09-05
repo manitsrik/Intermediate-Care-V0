@@ -1,0 +1,840 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ศัพท์เทคนิคในแอป IMC</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root {
+  --ground: #f6faf9;
+  --surface: #ffffff;
+  --ink: #12312f;
+  --body: #33474a;
+  --muted: #62787a;
+  --faint: #8ba0a1;
+  --rule: #dde8e7;
+  --rule-soft: #eaf2f1;
+  --brand: #2f8f92;
+  --brand-deep: #175f63;
+  --brand-soft: #e4f2f2;
+  --caution: #a5551a;
+  --caution-soft: #fbf0e6;
+  --code-bg: #eef5f4;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground: #0d1a1b;
+    --surface: #142526;
+    --ink: #e6f2f1;
+    --body: #c2d5d4;
+    --muted: #90a8a8;
+    --faint: #6d8586;
+    --rule: #22393a;
+    --rule-soft: #1b2f30;
+    --brand: #63c3c4;
+    --brand-deep: #8ad6d5;
+    --brand-soft: #16302f;
+    --caution: #e0a06a;
+    --caution-soft: #2a2119;
+    --code-bg: #1a2e2f;
+  }
+}
+
+:root[data-theme="dark"] {
+  --ground: #0d1a1b;
+  --surface: #142526;
+  --ink: #e6f2f1;
+  --body: #c2d5d4;
+  --muted: #90a8a8;
+  --faint: #6d8586;
+  --rule: #22393a;
+  --rule-soft: #1b2f30;
+  --brand: #63c3c4;
+  --brand-deep: #8ad6d5;
+  --brand-soft: #16302f;
+  --caution: #e0a06a;
+  --caution-soft: #2a2119;
+  --code-bg: #1a2e2f;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--body);
+  font-family: "IBM Plex Sans Thai", "Sarabun", "Leelawadee UI", "Noto Sans Thai", Tahoma, sans-serif;
+  font-size: 16px;
+  line-height: 1.75;
+}
+
+.wrap { max-width: 940px; margin: 0 auto; padding: 0 24px 96px; }
+
+/* ------------------------------------------------------------------ หัวเรื่อง */
+
+header {
+  padding: 64px 0 34px;
+  border-bottom: 2px solid var(--ink);
+}
+.eyebrow {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 12px; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--brand); margin: 0 0 14px;
+}
+h1 {
+  margin: 0; color: var(--ink);
+  font-size: clamp(30px, 5vw, 42px); font-weight: 700; line-height: 1.25;
+  letter-spacing: -.4px; text-wrap: balance;
+}
+.lede {
+  margin: 14px 0 0; max-width: 58ch;
+  font-size: 17px; color: var(--muted);
+}
+.meta {
+  display: flex; flex-wrap: wrap; gap: 8px 22px;
+  margin-top: 22px;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 12.5px; color: var(--faint);
+}
+.meta span::before { content: "· "; color: var(--rule); }
+.meta span:first-child::before { content: none; }
+
+/* --------------------------------------------------------------------- สารบัญ */
+
+nav.toc {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 2px 26px; padding: 22px 0 4px; border-bottom: 1px solid var(--rule);
+}
+nav.toc a {
+  display: flex; align-items: baseline; gap: 10px;
+  padding: 9px 0; color: var(--body); text-decoration: none;
+  border-bottom: 1px solid var(--rule-soft);
+}
+nav.toc a:hover, nav.toc a:focus-visible { color: var(--brand); }
+nav.toc a:focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; }
+nav.toc .n {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 12px; color: var(--faint); flex: none;
+}
+
+/* ---------------------------------------------------------------------- หมวด */
+
+section { padding-top: 54px; }
+.sec-head { margin-bottom: 6px; }
+.sec-num {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 12px; letter-spacing: .1em; color: var(--brand);
+}
+h2 {
+  margin: 4px 0 0; color: var(--ink);
+  font-size: 25px; font-weight: 600; letter-spacing: -.2px; text-wrap: balance;
+}
+.sec-note { margin: 8px 0 0; max-width: 62ch; color: var(--muted); font-size: 15px; }
+
+/* -------------------------------------------------------------------- คำศัพท์ */
+
+.terms { margin-top: 26px; border-top: 1px solid var(--rule); }
+
+.term {
+  display: grid; grid-template-columns: minmax(0, 15.5rem) minmax(0, 1fr);
+  gap: 6px 34px; padding: 22px 0;
+  border-bottom: 1px solid var(--rule-soft);
+}
+.term-key { min-width: 0; }
+.term-key h3 {
+  margin: 0; color: var(--ink);
+  font-size: 17px; font-weight: 600; line-height: 1.45;
+}
+.term-key .alt {
+  display: block; margin-top: 3px;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 12.5px; color: var(--brand); word-break: break-word;
+}
+.term-body { min-width: 0; }
+.term-body p { margin: 0; max-width: 62ch; }
+.term-body p + p { margin-top: 9px; }
+
+.where {
+  display: inline-block; margin-top: 11px !important;
+  padding: 3px 11px; border-radius: 999px;
+  background: var(--brand-soft); color: var(--brand-deep);
+  font-size: 13px; line-height: 1.6;
+}
+
+code {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: .88em; background: var(--code-bg); color: var(--brand-deep);
+  padding: 1px 6px; border-radius: 5px; word-break: break-word;
+}
+
+/* -------------------------------------------------------------------- หมายเหตุ */
+
+.note {
+  margin: 26px 0 0; padding: 16px 20px;
+  background: var(--caution-soft); border-left: 3px solid var(--caution);
+  border-radius: 0 8px 8px 0;
+}
+.note b { display: block; color: var(--caution); font-weight: 600; margin-bottom: 3px; }
+.note p { margin: 0; max-width: 62ch; font-size: 15px; }
+
+/* --------------------------------------------------------------------- ตาราง */
+
+.table-wrap { overflow-x: auto; margin-top: 22px; }
+table { width: 100%; border-collapse: collapse; font-size: 15px; min-width: 480px; }
+caption {
+  text-align: left; color: var(--muted); font-size: 14px; padding-bottom: 10px;
+}
+th, td { text-align: left; padding: 11px 16px 11px 0; border-bottom: 1px solid var(--rule-soft); }
+th {
+  color: var(--faint); font-weight: 500; font-size: 12.5px;
+  letter-spacing: .06em; text-transform: uppercase; white-space: nowrap;
+}
+td:first-child {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  color: var(--brand-deep); white-space: nowrap;
+}
+.num { font-variant-numeric: tabular-nums; }
+
+/* ---------------------------------------------------------------------- ท้าย */
+
+footer {
+  margin-top: 64px; padding-top: 22px; border-top: 1px solid var(--rule);
+  color: var(--faint); font-size: 14px;
+}
+
+@media (max-width: 680px) {
+  body { font-size: 15.5px; }
+  .wrap { padding: 0 18px 64px; }
+  header { padding-top: 42px; }
+  .term { grid-template-columns: 1fr; gap: 8px; }
+}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+<header>
+  <p class="eyebrow">Intermediate Care · โรงพยาบาลกระบี่</p>
+  <h1>ศัพท์ที่โผล่ในระบบ แปลเป็นภาษาคน</h1>
+  <p class="lede">
+    รวมคำที่เจอในแอป ในชีต และในบทสนทนาเรื่องระบบ อธิบายว่าแต่ละคำหมายถึงอะไร
+    ทำไมต้องมี และไปเจอมันได้ที่ไหน สำหรับคนที่ใช้งานจริงโดยไม่ต้องเขียนโปรแกรม
+  </p>
+  <div class="meta">
+    <span>เวอร์ชันที่ใช้อยู่ v27</span>
+    <span>ผู้ใช้ 5 คน</span>
+    <span>เคสใหม่ราว 20 รายต่อเดือน</span>
+    <span>ยังเป็นโหมดทดสอบ</span>
+  </div>
+</header>
+
+<nav class="toc">
+  <a href="#clinic"><span class="n">01</span><span>ศัพท์ทางคลินิก</span></a>
+  <a href="#google"><span class="n">02</span><span>Google กับ Apps Script</span></a>
+  <a href="#web"><span class="n">03</span><span>หน้าจอและการแสดงผล</span></a>
+  <a href="#data"><span class="n">04</span><span>ข้อมูลและการทำงาน</span></a>
+</nav>
+
+<!-- ============================================================ ๑ คลินิก -->
+
+<section id="clinic">
+  <div class="sec-head">
+    <span class="sec-num">01</span>
+    <h2>ศัพท์ทางคลินิก</h2>
+    <p class="sec-note">
+      คำที่มาจากงานเวชกรรมฟื้นฟูโดยตรง ระบบแค่หยิบมาใช้ตามที่ทีมใช้กันอยู่แล้ว
+      แต่บางคำระบบคำนวณให้เองอัตโนมัติ ซึ่งต้องรู้ว่ามันคิดจากอะไร
+    </p>
+  </div>
+
+  <div class="terms">
+
+    <div class="term">
+      <div class="term-key">
+        <h3>Intermediate Care</h3>
+        <span class="alt">IMC · การดูแลระยะกลาง</span>
+      </div>
+      <div class="term-body">
+        <p>
+          ช่วงการดูแลผู้ป่วยหลังพ้นภาวะวิกฤต แต่ยังฟื้นฟูไม่เสร็จ
+          เป็นสะพานเชื่อมระหว่างการนอนโรงพยาบาลกับการกลับไปใช้ชีวิตที่บ้าน
+          ทั้งระบบนี้สร้างมาเพื่อติดตามผู้ป่วยในช่วงนี้โดยเฉพาะ
+        </p>
+      </div>
+    </div>
+
+    <div class="term">
+      <div class="term-key">
+        <h3>Barthel Index</h3>
+        <span class="alt">BI</span>
+      </div>
+      <div class="term-body">
+        <p>
+          แบบประเมินว่าผู้ป่วยทำกิจวัตรประจำวันเองได้แค่ไหน มี 10 หัวข้อ
+          เช่น กินข้าว อาบน้ำ แต่งตัว ขึ้นบันได กลั้นปัสสาวะ
+          รวมกันได้เต็ม 20 คะแนน ยิ่งมากยิ่งช่วยเหลือตัวเองได้ดี
+        </p>
+        <p>
+          ระบบเก็บทุกครั้งที่ประเมิน ไม่จำกัดจำนวนครั้ง แล้วเทียบให้เห็นว่า
+          จากครั้งแรกรับถึงครั้งล่าสุดเปลี่ยนไปกี่คะแนน
+        </p>
+        <p class="where">เจอที่ เมนูเวชระเบียน → ปุ่มประเมิน BI</p>
+      </div>
+    </div>
+
+    <div class="term">
+      <div class="term-key">
+        <h3>กลุ่ม CTF</h3>
+        <span class="alt">ติดสังคม · ติดบ้าน · ติดเตียง</span>
+      </div>
+      <div class="term-body">
+        <p>
+          การแบ่งกลุ่มผู้สูงอายุตามความสามารถในการช่วยเหลือตัวเอง
+          ระบบคิดให้เองจากคะแนน BI ครั้งล่าสุด ไม่ต้องกรอกเอง
+        </p>
+        <div class="table-wrap">
+          <table>
+            <caption>เกณฑ์ที่ระบบใช้แบ่งกลุ่ม</caption>
+            <thead>
+              <tr><th>คะแนน BI</th><th>กลุ่ม</th><th>ความหมาย</th></tr>
+            </thead>
+            <tbody>
+              <tr><td class="num">12–20</td><td>ติดสังคม</td><td>ออกนอกบ้านและเข้าสังคมได้</td></tr>
+              <tr><td class="num">5–11</td><td>ติดบ้าน</td><td>ช่วยตัวเองได้บ้างแต่ออกนอกบ้านลำบาก</td></tr>
+              <tr><td class="num">0–4</td><td>ติดเตียง</td><td>ต้องมีคนดูแลเกือบตลอด</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="where">เจอที่ หน้ารายงาน / BI</p>
+      </div>
+    </div>
+
+    <div class="term">
+      <div class="term-key">
+        <h3>ผลคัดกรอง</h3>
+        <span class="alt">เข้าเกณฑ์ IMC · ไม่เข้าเกณฑ์</span>
+      </div>
+      <div class="term-body">
+        <p>
+          ระบบตัดสินให้เองว่าผู้ป่วยรายนี้ควรเข้าโปรแกรม IMC หรือไม่
+          จากสองเงื่อนไข คือคะแนน BI ต่ำกว่า 15
+          หรือได้ 15 ขึ้นไปแต่มีความบกพร่องหลายด้านร่วมกัน
+          (multiple impairment เช่น ทั้งเดินลำบากและกลืนลำบาก)
+        </p>
+      </div>
+    </div>
+
+    <div class="term">
+      <div class="term-key">
+        <h3>ครบ 6 เดือน</h3>
+        <span class="alt">183 วันนับจากวัน Start</span>
+      </div>
+      <div class="term-body">
+        <p>
+          ระยะเวลาของโปรแกรม IMC ระบบนับจากวันที่เริ่มโปรแกรมไป 183 วันพอดี
+          แล้วบอกวันที่จะครบให้อัตโนมัติ ไม่ต้องนั่งนับปฏิทินเอง
+        </p>
+      </div>
+    </div>
+
+    <div class="term">
+      <div class="term-key">
+        <h3>วัน Start</h3>
+        <span class="alt">คนละวันกับวัน admit</span>
+      </div>
+      <div class="term-body">
+        <p>
+          วันที่เริ่มเข้าโปรแกรม IMC ซึ่งไม่ใช่วันที่เข้านอนโรงพยาบาล (admit)
+          และไม่ใช่วันจำหน่าย (discharge หรือ D/C) ระบบใช้วันนี้เป็นตัวตั้ง
+          ทั้งการเรียงลำดับรายชื่อ การนับกราฟรายเดือน และการนับครบ 6 เดือน
+        </p>
+      </div>
+    </div>
+
+    <div class="term">
+      <div class="term-key">
+        <h3>Dx</h3>
+        <span class="alt">Diagnosis · การวินิจฉัย</span>
+      </div>
+      <div class="term-body">
+        <p>
+          โรคหรือภาวะที่เป็นเหตุให้เข้าโปรแกรม ในระบบมีให้เลือกเป็นรายการ
+          เช่น Ischemic stroke (สมองขาดเลือด), Hemorrhagic stroke (เลือดออกในสมอง),
+          TBI (บาดเจ็บสมอง), SCI (บาดเจ็บไขสันหลัง)
+        </p>
+        <p>
+          ที่ต้องเลือกจากรายการแทนการพิมพ์เอง เพราะถ้าคนหนึ่งพิมพ์ว่า
+          "Ischemic stroke" อีกคนพิมพ์ "ischemic Stroke" ระบบจะนับเป็นคนละโรค
+          แล้วรายงานจะผิด
+        </p>
+      </div>
+    </div>
+
+    <div class="term">
+      <div class="term-key">
+        <h3>HN</h3>
+        <span class="alt">Hospital Number</span>
+      </div>
+      <div class="term-body">
+        <p>
+          เลขประจำตัวผู้ป่วยของโรงพยาบาล ระบบใช้เลขนี้เป็นตัวเชื่อมข้อมูลทุกอย่าง
+          ทั้งประวัติ ผลประเมิน BI และบันทึกการติดตาม จึงห้ามซ้ำกันเด็ดขาด
+          ถ้าลงทะเบียน HN ที่มีอยู่แล้ว ระบบจะเตือนและไม่ให้บันทึก
+        </p>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ==================================================== ๒ Google Apps Script -->
+
+<section id="google">
+  <div class="sec-head">
+    <span class="sec-num">02</span>
+    <h2>Google กับ Apps Script</h2>
+    <p class="sec-note">
+      หมวดนี้คือคำที่จะได้ยินตอนคุยกับฝ่าย IT หรือตอนที่มีอะไรพัง
+      รู้ไว้พอให้อธิบายอาการได้ถูกจุด
+    </p>
+  </div>
+
+  <div class="terms">
+
+    <div class="term">
+      <div class="term-key">
+        <h3>Google Apps Script</h3>
+        <span class="alt">ตัวรันโปรแกรมของ Google</span>
+      </div>
+      <div class="term-body">
+        <p>
+          บริการฟรีของ Google ที่ให้เขียนโปรแกรมผูกกับไฟล์ Google Sheets ได้
+          แอปนี้ทั้งแอปรันอยู่บนนี้ ไม่มีเซิร์ฟเวอร์ของตัวเอง ไม่มีค่าเช่ารายเดือน
+          และไม่ต้องมีคนคอยดูแลเครื่อง
+        </p>
+      </div>
+    </div>
+
+    <div class="term">
+      <div class="term-key">
+        <h3>Web App</h3>
+        <span class="alt">หน้าเว็บที่ทีมเปิดใช้</span>
+      </div>
+      <div class="term-body">
+        <p>
+          หน้าจอที่เห็นทั้งหมดคือ Web App ที่ Apps Script สร้างขึ้นมา
+          ทีมเปิดผ่านลิงก์เดียวกันทุกคน ไม่ต้องติดตั้งอะไรลงเครื่อง
+          ใช้ได้ทั้งคอมพิวเตอร์และมือถือ
+        </p>
+      </div>
+    </div>
+
+    <div class="term">
+      <div class="term-key">
+        <h3>Deploy</h3>
+        <span class="alt">การเผยแพร่เวอร์ชันใหม่</span>
+      </div>
+      <div class="term-body">
+        <p>
+          การทำให้ของที่แก้เสร็จแล้วขึ้นไปอยู่บนลิงก์ที่ทีมใช้จริง
+          ทุกครั้งที่ deploy จะได้เลขเวอร์ชันใหม่ ตอนนี้อยู่ที่ v27
+        </p>
+        <p>
+          <b>สำคัญ:</b> แก้โค้ดเสร็จแล้วยังไม่พอ ถ้ายังไม่ deploy ทีมจะยังเห็นของเก่าอยู่
+          และหลัง deploy บางครั้งต้องกด <code>Ctrl+Shift+R</code> หนึ่งครั้ง
+          เพื่อบังคับให้เบราว์เซอร์โหลดไฟล์ใหม่ ไม่ใช้ของที่จำไว้
+        </p>
+      </div>
+    </div>
+
+    <div class="term">
+      <div class="term-key">
+        <h3>ลิงก์ /exec กับ /dev</h3>
+        <span class="alt">ตัวจริง กับ ตัวทดลอง</span>
+      </div>
+      <div class="term-body">
+        <p>
+          ลิงก์ที่ลงท้ายด้วย <code>/exec</code> คือตัวจริงที่ทีมใช้ เห็นเฉพาะเวอร์ชันที่ deploy แล้ว
+          ส่วน <code>/dev</code> คือตัวทดลอง เห็นโค้ดล่าสุดทันทีโดยไม่ต้อง deploy
+          แต่เปิดได้เฉพาะเจ้าของสคริปต์
+        </p>
+        <p class="where">ลิงก์ที่แจกทีมต้องเป็น /exec เสมอ</p>
+      </div>
+    </div>
+
+    <div class="term">
+      <div class="term-key">
+        <h3>สิทธิ์สองชั้น</h3>
+        <span class="alt">สิทธิ์ในแอป · สิทธิ์แก้ไขไฟล์</span>
+      </div>
+      <div class="term-body">
+        <p>
+          ผู้ใช้แต่ละคนต้องมีสองอย่างพร้อมกันถึงจะทำงานได้
+          หนึ่งคือมีชื่ออยู่ในรายชื่อผู้ใช้ของแอป สองคือมีสิทธิ์แก้ไขไฟล์ Sheet
+          เพราะแอปสั่งให้แต่ละคนเขียนข้อมูลด้วยบัญชีของตัวเอง
+        </p>
+        <p>
+          ระบบจัดการสองอย่างนี้พร้อมกันให้แล้ว กดเพิ่มผู้ใช้จะแชร์ไฟล์ให้อัตโนมัติ
+          กดปิดการใช้งานจะถอนสิทธิ์ไฟล์ให้ด้วย ถ้าไม่ถอน คนที่ถูกปิดยังเปิดไฟล์ดิบ
+          อ่านข้อมูลผู้ป่วยได้อยู่
+        </p>
+        <p class="where">เจอที่ เมนูตั้งค่า (เฉพาะผู้ดูแลระบบ)</p>
+      </div>
+    </div>
+
+    <div class="term">
+      <div class="term-key">
+        <h3>OAuth scope</h3>
+        <span class="alt">ขอบเขตสิทธิ์ที่แอปขอ</span>
+      </div>
+      <div class="term-body">
+        <p>
+          รายการสิทธิ์ที่แอปขอจากบัญชี Google ตอนเปิดใช้ครั้งแรก
+          แอปนี้ขอไว้แค่ 3 อย่าง คือเข้าถึงเฉพาะไฟล์ Sheet ของตัวเอง
+          แสดงหน้าเว็บ และอ่านอีเมลผู้ใช้เพื่อรู้ว่าใครกำลังใช้อยู่
+        </p>
+        <p>
+          จงใจไม่ขอสิทธิ์เข้าถึง Google Drive ทั้งหมด ทั้งที่ขอได้
+          เพราะไม่จำเป็นต้องใช้ ยิ่งขอน้อยยิ่งเสียหายน้อยถ้าวันหนึ่งมีอะไรผิดพลาด
+        </p>
+      </div>
+    </div>
+
+    <div class="term">
+      <div class="term-key">
+        <h3>หน้าจอ "Google hasn't verified this app"</h3>
+        <span class="alt">ไม่ใช่ความผิดพลาด</span>
+      </div>
+      <div class="term-body">
+        <p>
+          หน้าเตือนที่ขึ้นตอนเปิดแอปครั้งแรก เพราะแอปยังไม่ผ่านการตรวจสอบของ Google
+          ซึ่งเป็นเรื่องปกติของแอปที่ทำใช้กันเองภายใน ไม่ได้แปลว่ามีอันตราย
+          กด Advanced แล้วเลือกไปต่อได้
+        </p>
+      </div>
+    </div>
+
+    <div class="term">
+      <div class="term-key">
+        <h3>clasp</h3>
+        <span class="alt">เครื่องมือของคนพัฒนา</span>
+      </div>
+      <div class="term-body">
+        <p>
+          โปรแกรมที่ใช้ส่งไฟล์โค้ดจากเครื่องขึ้นไปที่ Apps Script
+          และสั่ง deploy จากเครื่องได้เลยโดยไม่ต้องเปิดหน้าเว็บของ Google
+          คนใช้งานทั่วไปไม่ต้องยุ่งกับตัวนี้
+        </p>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="note">
+    <b>ถ้าเปิดแอปแล้วขึ้นว่าไม่มีสิทธิ์</b>
+    <p>
+      เช็กสองอย่างตามลำดับ หนึ่ง อีเมลที่ล็อกอินอยู่ตอนนี้ใช่อันเดียวกับที่ผู้ดูแลเพิ่มไว้ไหม
+      (Chrome ที่ล็อกอินหลายบัญชีมักสลับให้เอง) สอง ผู้ดูแลเพิ่มชื่อในเมนูตั้งค่าแล้วหรือยัง
+    </p>
+  </div>
+</section>
+
+<!-- ======================================================== ๓ หน้าจอ -->
+
+<section id="web">
+  <div class="sec-head">
+    <span class="sec-num">03</span>
+    <h2>หน้าจอและการแสดงผล</h2>
+    <p class="sec-note">
+      คำที่อธิบายพฤติกรรมของหน้าจอ ว่าทำไมบางอย่างเร็ว บางอย่างช้า
+      และทำไมหน้าตาถึงเปลี่ยนไปตามขนาดจอ
+    </p>
+  </div>
+
+  <div class="terms">
+
+    <div class="term">
+      <div class="term-key">
+        <h3>รอบที่คุยกับเซิร์ฟเวอร์</h3>
+        <span class="alt">round trip</span>
+      </div>
+      <div class="term-body">
+        <p>
+          หนึ่งครั้งที่หน้าจอส่งคำถามไปหา Google แล้วรอคำตอบกลับมา
+          รอบหนึ่งกินเวลาราว 1.5 ถึง 3 วินาที ซึ่งช้ากว่าที่หลายคนคิด
+          และเป็นสาเหตุหลักที่ทำให้แอปรู้สึกหน่วง
+        </p>
+        <p>
+          ระบบจึงถูกปรับให้คุยกับเซิร์ฟเวอร์น้อยที่สุด เช่น
+          พิมพ์ค้นหารายชื่อผู้ป่วยตอนนี้ไม่ยิงไปเซิร์ฟเวอร์เลยสักครั้ง
+        </p>
+      </div>
+    </div>
+
+    <div class="term">
+      <div class="term-key">
+        <h3>เก็บข้อมูลไว้ในเครื่อง</h3>
+        <span class="alt">cache</span>
+      </div>
+      <div class="term-body">
+        <p>
+          การจำข้อมูลที่โหลดมาแล้วไว้ในเบราว์เซอร์ชั่วคราว เพื่อไม่ต้องไปขอใหม่ทุกครั้ง
+          เช่น กดเข้าเวชระเบียนแล้วกดย้อนกลับ รายชื่อจะขึ้นทันทีโดยไม่ต้องรอ
+        </p>
+        <p>
+          ระบบล้างของที่จำไว้ทุกครั้งที่มีการบันทึกข้อมูล จึงไม่มีทางเห็นข้อมูลเก่าค้าง
+          แต่ถ้าสงสัยว่าเห็นของไม่อัปเดต กดชื่อตัวเองมุมขวาบนแล้วเลือก "โหลดข้อมูลใหม่" ได้
+        </p>
+      </div>
+    </div>
+
+    <div class="term">
+      <div class="term-key">
+        <h3>Modal</h3>
+        <span class="alt">กล่องข้อความกลางจอ</span>
+      </div>
+      <div class="term-body">
+        <p>
+          กล่องที่เด้งขึ้นมากลางหน้าจอแล้วต้องกดตอบก่อนถึงจะทำอย่างอื่นต่อได้
+          ระบบใช้แจ้งผลบันทึก แจ้งข้อผิดพลาด และถามยืนยันก่อนทำเรื่องสำคัญ
+          เช่น ก่อนปิดการใช้งานผู้ใช้
+        </p>
+        <p>
+          งานที่แค่อ่านข้อมูลจะไม่ใช้กล่องบังจอ แต่ขึ้นเป็นแถบบาง ๆ ขอบบนแทน
+          เพื่อให้ยังกดอย่างอื่นต่อได้ระหว่างรอ
+        </p>
+      </div>
+    </div>
+
+    <div class="term">
+      <div class="term-key">
+        <h3>รองรับหลายขนาดจอ</h3>
+        <span class="alt">responsive</span>
+      </div>
+      <div class="term-body">
+        <p>
+          หน้าจอเดียวกันจัดวางใหม่เองตามความกว้างของอุปกรณ์
+          บนคอมพิวเตอร์เมนูอยู่ซ้าย ตารางเป็นตารางเต็ม
+          บนมือถือเมนูย้ายลงไปเป็นแถบล่าง และตารางเปลี่ยนเป็นการ์ดเรียงลงมา
+          เพราะตาราง 7 คอลัมน์เลื่อนซ้ายขวาบนมือถืออ่านไม่ไหว
+        </p>
+      </div>
+    </div>
+
+    <div class="term">
+      <div class="term-key">
+        <h3>ค่าความต่างของสี</h3>
+        <span class="alt">contrast ratio</span>
+      </div>
+      <div class="term-body">
+        <p>
+          ตัวเลขบอกว่าตัวหนังสืออ่านออกง่ายแค่ไหนบนพื้นหลังนั้น เกณฑ์สากลคือ 4.5:1 ขึ้นไป
+          สีหลักของเว็บโรงพยาบาล <code>#3fbbc0</code> ถ้าใส่ตัวหนังสือขาวลงไปจะได้แค่ 2.4:1
+          ซึ่งอ่านยากสำหรับคนสายตาไม่ดี
+        </p>
+        <p>
+          แอปนี้จึงใช้สีเดียวกันแต่เข้มขึ้นในที่ที่มีตัวหนังสือขาว เช่น เมนูซ้าย
+          ยังเป็นสีของโรงพยาบาลอยู่ แต่อ่านได้จริง
+        </p>
+      </div>
+    </div>
+
+    <div class="term">
+      <div class="term-key">
+        <h3>สไตล์สำหรับกระดาษ</h3>
+        <span class="alt">print stylesheet</span>
+      </div>
+      <div class="term-body">
+        <p>
+          ชุดคำสั่งที่บอกว่าตอนสั่งพิมพ์ให้หน้าตาเปลี่ยนเป็นแบบไหน
+          เพราะของที่ดีบนจอไม่เหมือนของที่ดีบนกระดาษ เช่น เมนูกับปุ่มไม่ควรพิมพ์ออกมา
+          และทุกอย่างต้องบีบให้ลง A4 แผ่นเดียว
+        </p>
+        <p class="where">เจอที่ ปุ่ม PDF บนแถบบน</p>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ========================================================== ๔ ข้อมูล -->
+
+<section id="data">
+  <div class="sec-head">
+    <span class="sec-num">04</span>
+    <h2>ข้อมูลและการทำงาน</h2>
+    <p class="sec-note">
+      โครงสร้างข้อมูลหลังบ้าน และคำที่เกี่ยวกับการเก็บโค้ด
+      ส่วนนี้ช่วยให้เข้าใจว่าข้อมูลไปอยู่ที่ไหน และถ้าอยากแก้ในชีตตรง ๆ ต้องระวังอะไร
+    </p>
+  </div>
+
+  <div class="terms">
+
+    <div class="term">
+      <div class="term-key">
+        <h3>ชีตทั้ง 6 แท็บ</h3>
+        <span class="alt">โครงสร้างข้อมูล</span>
+      </div>
+      <div class="term-body">
+        <p>
+          ข้อมูลไม่ได้อยู่รวมกันในตารางเดียวเหมือนไฟล์เดิม แต่แยกตามชนิดของข้อมูล
+          ผู้ป่วยหนึ่งคนจะมีหนึ่งแถวในแท็บ patients และมีได้หลายแถวในแท็บผลประเมิน
+          จึงประเมินกี่ครั้งก็ได้ ไม่ติดเพดาน 5 ครั้งแบบไฟล์เดิม
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>แท็บ</th><th>เก็บอะไร</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>patients</td><td>ประวัติผู้ป่วย หนึ่งคนหนึ่งแถว</td></tr>
+              <tr><td>bi_assessments</td><td>ผลประเมิน BI ทุกครั้ง</td></tr>
+              <tr><td>followups</td><td>บันทึกการติดตามทุกครั้ง</td></tr>
+              <tr><td>users</td><td>รายชื่อคนที่ใช้แอปได้</td></tr>
+              <tr><td>summary</td><td>ตารางสรุปหน้าตาเหมือนไฟล์เดิม สร้างด้วยสูตร</td></tr>
+              <tr><td>migration_report</td><td>รายการที่ระบบนำเข้าไม่ได้ ต้องตรวจเอง</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="term">
+      <div class="term-key">
+        <h3>การนำเข้าข้อมูลเดิม</h3>
+        <span class="alt">migration</span>
+      </div>
+      <div class="term-body">
+        <p>
+          การย้ายข้อมูลจากไฟล์เก่าเข้าโครงสร้างใหม่ ระบบซ่อมวันที่ที่เพี้ยนให้ได้ 105 จุด
+          แต่มีอีก 162 รายการที่มันเดาแทนไม่ได้ จึงบันทึกไว้ในแท็บ
+          <code>migration_report</code> แทนที่จะเดามั่ว
+        </p>
+        <p class="where">ควรไล่ตรวจ 162 รายการนี้กับแฟ้มกระดาษก่อนใช้งานจริง</p>
+      </div>
+    </div>
+
+    <div class="term">
+      <div class="term-key">
+        <h3>โหมดทดสอบ</h3>
+        <span class="alt">MASK_MODE · PDPA</span>
+      </div>
+      <div class="term-body">
+        <p>
+          ตอนนี้ระบบเปิดโหมดทดสอบอยู่ ข้อมูลที่เสี่ยงตาม พ.ร.บ. คุ้มครองข้อมูลส่วนบุคคล
+          จะถูกปิดบังไว้ ได้แก่ เลขบัตรประชาชน ชื่อ เบอร์โทร และที่อยู่
+          แถบสีชมพูบนหัวจอบอกว่ายังอยู่ในโหมดนี้
+        </p>
+        <p>
+          ก่อนใช้งานจริงต้องปิดโหมดนี้ ล้างข้อมูลทดสอบออก
+          และควรแจ้งเจ้าหน้าที่คุ้มครองข้อมูลของโรงพยาบาลก่อน
+        </p>
+      </div>
+    </div>
+
+    <div class="term">
+      <div class="term-key">
+        <h3>พ.ศ. กับ ค.ศ.</h3>
+        <span class="alt">ต่างกัน 543 ปี</span>
+      </div>
+      <div class="term-body">
+        <p>
+          ระบบเก็บวันที่ในชีตเป็น ค.ศ. รูปแบบ <code>2568-12-08</code>
+          แต่แสดงบนหน้าจอเป็น พ.ศ. เสมอ
+          ที่เก็บแบบนี้เพราะรูปแบบปี-เดือน-วัน เรียงลำดับเวลาได้ถูกต้องอัตโนมัติ
+        </p>
+        <p>
+          <b>ถ้าจะแก้วันที่ในชีตเอง</b> ต้องใส่รูปแบบนี้เท่านั้น
+          ถ้าใส่เป็น <code>8/12/2568</code> ระบบจะเรียงลำดับผิดทันที
+        </p>
+      </div>
+    </div>
+
+    <div class="term">
+      <div class="term-key">
+        <h3>ไฟล์ CSV กับ BOM</h3>
+        <span class="alt">ไฟล์ที่เปิดด้วย Excel</span>
+      </div>
+      <div class="term-body">
+        <p>
+          CSV คือไฟล์ตารางแบบง่ายที่สุด เปิดด้วย Excel ได้เลย
+          ส่วน BOM คือเครื่องหมายเล็ก ๆ ที่ซ่อนอยู่หัวไฟล์ บอก Excel ว่าข้างในเป็นภาษาไทย
+        </p>
+        <p>
+          ถ้าไม่มี BOM Excel บนวินโดวส์จะอ่านภาษาไทยเป็นตัวขยะทั้งไฟล์
+          เป็นจุดที่พลาดกันบ่อยเพราะถ้าทดสอบด้วย Google Sheets จะไม่เจอปัญหานี้เลย
+        </p>
+        <p class="where">เจอที่ ปุ่ม Excel ในกล่องรายชื่อ</p>
+      </div>
+    </div>
+
+    <div class="term">
+      <div class="term-key">
+        <h3>commit กับ push</h3>
+        <span class="alt">การเก็บประวัติโค้ด</span>
+      </div>
+      <div class="term-body">
+        <p>
+          <b>commit</b> คือการบันทึกสภาพของโค้ด ณ จุดหนึ่งไว้ในเครื่อง
+          พร้อมข้อความอธิบายว่าแก้อะไรไปบ้าง ทำให้ย้อนกลับไปจุดไหนก็ได้
+          <b>push</b> คือการส่งสิ่งที่ commit ไว้ขึ้นไปเก็บที่ GitHub
+          เพื่อให้มีสำเนาอยู่นอกเครื่อง
+        </p>
+        <p>
+          สามคำนี้คนละเรื่องกัน ทำอย่างหนึ่งไม่ได้แปลว่าอีกอย่างเกิดขึ้นด้วย
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>คำสั่ง</th><th>ผลที่เกิด</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>commit</td><td>บันทึกประวัติไว้ในเครื่อง ทีมยังไม่เห็นอะไร</td></tr>
+              <tr><td>push</td><td>ส่งประวัติขึ้น GitHub มีสำเนานอกเครื่อง</td></tr>
+              <tr><td>deploy</td><td>ทีมเห็นของใหม่บนลิงก์จริง</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="term">
+      <div class="term-key">
+        <h3>พรีวิวบนเครื่อง</h3>
+        <span class="alt">preview</span>
+      </div>
+      <div class="term-body">
+        <p>
+          ไฟล์จำลองหน้าตาแอปที่เปิดดูบนเครื่องได้เลยโดยไม่ต้อง deploy
+          ใช้ข้อมูลปลอมทั้งหมด ไม่แตะข้อมูลผู้ป่วยจริง
+          มีไว้ให้ดูหน้าตาก่อนว่าถูกใจไหม จะได้ไม่ต้องเอาของที่ยังไม่แน่ใจขึ้นไปให้ทีมเห็น
+        </p>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="note">
+    <b>ที่ต้องทำก่อนใช้งานจริง</b>
+    <p>
+      ย้ายไปบัญชี Google Workspace ของโรงพยาบาลแทนบัญชีส่วนตัว ·
+      ปิดโหมดทดสอบและล้างข้อมูลทดสอบ ·
+      ไล่ตรวจ 162 รายการในแท็บ migration_report กับแฟ้มกระดาษ ·
+      แจ้งเจ้าหน้าที่คุ้มครองข้อมูลของโรงพยาบาล ·
+      ตกลงกันว่าใครโหลดไฟล์ Excel ได้และเก็บไว้ที่ไหน
+    </p>
+  </div>
+</section>
+
+<footer>
+  เอกสารนี้สรุปจากระบบเวอร์ชัน v27 · กลุ่มงานเวชกรรมฟื้นฟู โรงพยาบาลกระบี่
+</footer>
+
+</div>
+
+</body>
+</html>

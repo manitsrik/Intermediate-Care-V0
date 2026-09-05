@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Intermediate Care · โรงพยาบาลกระบี่</title>
+<meta name="description" content="ระบบบันทึกข้อมูลผู้ป่วย Intermediate Care กลุ่มงานเวชกรรมฟื้นฟู โรงพยาบาลกระบี่">
+<meta name="theme-color" content="#37aaaf">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" href="./icon-192.png">
+<link rel="apple-touch-icon" href="./apple-touch-icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="IMC">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&display=swap">
+<style>
+/* สีชุดเดียวกับตัวแอปจริง คนใช้จะได้ไม่รู้สึกว่าข้ามไปคนละระบบ */
+:root {
+  --brand: #3fbbc0;
+  --brand-strong: #37aaaf;
+  --brand-ink: #207175;
+  --brand-deep: #175f63;
+  --bg: #f5fafb;
+  --surface: #ffffff;
+  --text: #1f2933;
+  --muted: #6b7885;
+  --warn: #c2340c;
+  --warn-soft: #fdece7;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100svh;
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "IBM Plex Sans Thai", "Sarabun", "Leelawadee UI", "Noto Sans Thai", Tahoma, sans-serif;
+  font-size: 15px; line-height: 1.6;
+}
+
+.card {
+  width: 100%; max-width: 380px;
+  background: var(--surface);
+  border-radius: 20px;
+  padding: 32px 26px 26px;
+  text-align: center;
+  box-shadow: 0 10px 34px rgba(16, 24, 40, .10);
+}
+
+.mark {
+  width: 76px; height: 76px; margin: 0 auto 18px;
+  border-radius: 21px;
+  background: linear-gradient(180deg, var(--brand), var(--brand-ink));
+  display: flex; align-items: center; justify-content: center;
+  color: #fff;
+  box-shadow: 0 6px 18px rgba(32, 113, 117, .32);
+}
+
+h1 { font-size: 19px; font-weight: 600; margin: 0 0 4px; }
+.org { color: var(--muted); font-size: 13px; margin: 0 0 22px; }
+
+.btn {
+  display: block; width: 100%;
+  padding: 13px 18px; border: 0; border-radius: 12px;
+  background: var(--brand-strong); color: #fff;
+  font-family: inherit; font-size: 15px; font-weight: 500;
+  text-decoration: none; cursor: pointer;
+}
+.btn:hover { background: var(--brand-ink); }
+
+.hint {
+  margin: 22px 0 0; padding-top: 18px;
+  border-top: 1px solid #e9eef1;
+  color: var(--muted); font-size: 13px; text-align: left;
+}
+.hint b { color: var(--text); font-weight: 600; }
+.hint ol { margin: 8px 0 0; padding-left: 20px; }
+.hint li { margin-bottom: 4px; }
+
+.offline {
+  background: var(--warn-soft); color: var(--warn);
+  border-radius: 12px; padding: 12px 14px; font-size: 13px;
+  margin-bottom: 18px; text-align: left;
+}
+
+/* ตอนเปิดจากไอคอนบนหน้าจอโฮม หน้านี้เป็นแค่ทางผ่าน โชว์แค่ว่ากำลังเปิดให้ */
+.spinner {
+  width: 20px; height: 20px; margin: 4px auto 0;
+  border: 2.5px solid #d4e6e7; border-top-color: var(--brand-strong);
+  border-radius: 50%; animation: spin .8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<main class="card">
+  <div class="mark">
+    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M9.6 2.6h4.8v4.2h4.2v4.8h-4.2v4.2H9.6v-4.2H5.4V6.8h4.2z" fill="currentColor"/>
+      <path d="M6.2 17.4h11.6v4H6.2z" fill="currentColor" opacity=".45"/>
+    </svg>
+  </div>
+
+  <h1>Intermediate Care</h1>
+  <p class="org">กลุ่มงานเวชกรรมฟื้นฟู โรงพยาบาลกระบี่</p>
+
+  <div class="offline" id="offline" hidden>
+    ตอนนี้ไม่ได้ต่ออินเทอร์เน็ต ระบบต้องต่อเน็ตเพื่ออ่านข้อมูลจาก Google Sheet
+    ต่อเน็ตแล้วกดเปิดอีกครั้งได้เลย
+  </div>
+
+  <a class="btn" id="open" href="#">เปิดระบบ IMC</a>
+  <div class="spinner" id="spinner" hidden></div>
+
+  <div class="hint" id="hint">
+    <b>ติดตั้งลงหน้าจอโฮม</b>
+    <ol>
+      <li>Android — เมนูสามจุดของ Chrome แล้วเลือก <b>ติดตั้งแอป</b></li>
+      <li>iPhone — ปุ่มแชร์ของ Safari แล้วเลือก <b>เพิ่มไปยังหน้าจอโฮม</b></li>
+    </ol>
+  </div>
+</main>
+
+<script>
+/*
+  หน้านี้ไม่ใช่ตัวแอป เป็นแค่เปลือกที่ถือ manifest กับไอคอนไว้ให้ Android
+  ติดตั้งลงหน้าจอโฮมได้ ตัวแอปจริงอยู่บน Apps Script ซึ่งวาง manifest เองไม่ได้
+  เพราะหน้าจอมันถูกฝังใน iframe คนละโดเมนกับหน้าบนสุด
+
+  เลือกวิธีเด้งออกไปที่ลิงก์จริง ไม่ใช่ฝัง iframe ไว้ในนี้
+  เพราะแอปใช้อีเมลผู้ใช้ตัดสินสิทธิ์ ถ้าฝัง iframe การล็อกอิน Google
+  จะต้องพึ่ง third-party cookie ซึ่งบางเบราว์เซอร์บล็อกอยู่ แล้วจะเข้าไม่ได้เลย
+*/
+
+var APP_URL = 'https://script.google.com/macros/s/AKfycbyHz83LYLyXIgxRiUITK_9UcvzZNwSIa_a-RaMm4Q_smAJbvw5mN134KSe3EdoSk4hZAg/exec';
+
+var open_ = document.getElementById('open');
+var offline = document.getElementById('offline');
+var spinner = document.getElementById('spinner');
+var hint = document.getElementById('hint');
+
+open_.href = APP_URL;
+
+/** เปิดจากไอคอนบนหน้าจอโฮม ไม่ใช่จากแท็บเบราว์เซอร์ธรรมดา */
+function installed() {
+  return (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
+         window.navigator.standalone === true;
+}
+
+function isOffline() {
+  return navigator.onLine === false;
+}
+
+function paint() {
+  var off = isOffline();
+  offline.hidden = !off;
+  open_.textContent = off ? 'ลองเปิดอีกครั้ง' : 'เปิดระบบ IMC';
+  // ติดตั้งไปแล้วไม่ต้องสอนวิธีติดตั้งซ้ำ
+  hint.hidden = installed();
+}
+
+paint();
+window.addEventListener('online', paint);
+window.addEventListener('offline', paint);
+
+/*
+  เปิดจากไอคอนแล้วเด้งเข้าระบบให้เลย ไม่ต้องกดซ้ำอีกที
+  แต่ถ้าเปิดจากแท็บเบราว์เซอร์ ให้ค้างหน้านี้ไว้ก่อน Chrome จะได้มีเวลาเสนอให้ติดตั้ง
+  ถ้าเด้งออกทันทีตั้งแต่วินาทีแรก ปุ่มติดตั้งจะไม่ทันขึ้น
+*/
+if (installed() && !isOffline()) {
+  spinner.hidden = false;
+  window.location.replace(APP_URL);
+}
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('./sw.js').catch(function () {
+      // ไม่มี service worker ก็ยังใช้ได้ แค่เปิดตอนไม่มีเน็ตแล้วจะไม่เห็นหน้านี้
+    });
+  });
+}
+</script>
+</body>
+</html>

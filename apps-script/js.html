@@ -1913,11 +1913,21 @@ function roleOptions_() {
  * สิทธิ์แก้ไขไฟล์ Sheet เป็นคนละเรื่องกับสิทธิ์ในแอป
  * คนที่ถูกปิดสิทธิ์ในแอปแต่ยังแก้ไขไฟล์ได้ ถือว่าปิดไม่สำเร็จ ต้องเตือนให้เห็นชัด
  */
-function fileAccessCell(u, isSelf) {
+function fileAccessCell(u) {
+  /*
+    เจ้าของไฟล์ถอนสิทธิ์ไม่ได้เลย บอกไว้ตั้งแต่แรกดีกว่าปล่อยให้กดปุ่มถอนแล้วเจอข้อความผิดพลาด
+    ถ้าเจ้าของถูกปิดสิทธิ์ในแอป ต้องเตือนว่าเขายังเปิดไฟล์ดิบได้ และแก้จากหน้านี้ไม่ได้
+  */
+  if (u.isOwner) {
+    return u.active
+      ? '<span class="chip chip-brand">เจ้าของไฟล์</span>'
+      : '<span class="chip chip-warn">เจ้าของไฟล์ ถอนสิทธิ์ไม่ได้</span>';
+  }
+
   if (u.fileAccess === null) return '<span class="chip">ตรวจสอบไม่ได้</span>';
 
   if (u.fileAccess === true) {
-    if (u.active || isSelf) return '<span class="chip chip-ok">แชร์แล้ว</span>';
+    if (u.active) return '<span class="chip chip-ok">แชร์แล้ว</span>';
     return '<span class="chip chip-warn">ปิดสิทธิ์แล้วแต่ยังเปิดไฟล์ได้</span> ' +
       '<button class="btn btn-sm u-revoke" data-email="' + esc(u.email) + '">ถอนสิทธิ์ไฟล์</button>';
   }
@@ -1927,261 +1937,358 @@ function fileAccessCell(u, isSelf) {
     '<button class="btn btn-sm u-share" data-email="' + esc(u.email) + '">แชร์ไฟล์ให้</button>';
 }
 
-function renderSettings() {
-  busy();
-  call('apiListUsers').then(function (users) {
-    var meEmail = String(BOOT.user.email).toLowerCase();
+/** จำนวนผู้ใช้แต่ละแบบ ขึ้นใต้ชื่อหน้า จะได้ไม่ต้องไล่นับผู้ดูแลเอาเองจากตาราง */
+function userCounts_(users) {
+  var active = users.filter(function (u) { return u.active; });
+  var admins = active.filter(function (u) { return u.role === 'admin'; });
+  return 'ผู้ใช้งาน ' + users.length + ' คน · ใช้งานอยู่ ' + active.length +
+    ' คน · ผู้ดูแลระบบ ' + admins.length + ' คน';
+}
 
-    var html = '<div class="page-head"><div class="head-text"><h1>ตั้งค่า</h1>' +
-      '<span class="sub num">ผู้ใช้งาน ' + users.length + ' คน · ใช้งานอยู่ ' +
-      users.filter(function (u) { return u.active; }).length + ' คน</span></div></div>';
+/*
+  ช่องค้นหาขึ้นเมื่อทีมใหญ่พอที่จะไล่หาด้วยตาไม่ไหวเท่านั้น
+  ทีมขนาดห้าคนมองเห็นครบทั้งตารางอยู่แล้ว ช่องค้นหาจะเป็นแค่ของเกะกะเหนือตาราง
+*/
+var USER_SEARCH_MIN = 8;
 
-    if (BOOT.user.noAdminYet) {
-      html += '<div class="card" style="border-color:#f3cfc4;background:#fffaf8">' +
-        '<h2 style="color:var(--warn)">ยังไม่มีผู้ดูแลระบบ</h2>' +
-        '<p style="margin:0 0 4px;color:var(--body);line-height:1.6">' +
-        'ตอนนี้ยังไม่มีใครถูกตั้งเป็นผู้ดูแลระบบ ทุกคนที่ลงทะเบียนไว้จึงเข้าหน้านี้ได้ชั่วคราว ' +
-        'กดปุ่มด้านล่างเพื่อตั้งตัวเองเป็นผู้ดูแล แล้วช่องทางชั่วคราวนี้จะปิดทันที</p>' +
-        '<div class="btn-row"><button class="btn btn-primary" id="claim-admin">' +
-        'ตั้ง ' + esc(BOOT.user.email) + ' เป็นผู้ดูแลระบบ</button></div></div>';
-    }
+function byEmail_(users, email) {
+  return users.filter(function (u) { return u.email === email; })[0];
+}
 
-    html += '<div class="card"><h2>เพิ่มผู้ใช้งาน</h2>' +
-      '<form id="user-form"><div class="grid">' +
-      field({ k: 'email', l: 'อีเมล Google', t: 'email', req: true, ph: 'name@gmail.com' }) +
-      field({ k: 'name', l: 'ชื่อ-ตำแหน่ง', t: 'text', ph: 'เช่น สมศรี (พยาบาล)' }) +
-      field({ k: 'role', l: 'สิทธิ์', t: 'select', o: roleOptions_(), req: true }) +
-      '</div><div class="btn-row"><button type="submit" class="btn btn-primary">เพิ่มผู้ใช้</button></div>' +
-      '</form>' +
-      '<p style="color:var(--muted);font-size:13px;margin:14px 0 0;line-height:1.6">' +
-      'ระบบจะแชร์ไฟล์ Google Sheet ให้ในสิทธิ์ผู้แก้ไขอัตโนมัติ ' +
-      'ถ้าแชร์ไม่สำเร็จจะขึ้นสถานะเตือนไว้ในตารางด้านล่าง</p></div>';
+/**
+ * บันทึกผู้ใช้หนึ่งคนแล้ววาดตารางใหม่
+ * ใช้ร่วมกันทั้งช่องชื่อ ช่องสิทธิ์ และปุ่มเปิด/ปิด ข้อความหลังบันทึกจะได้ไม่หลุดกัน
+ */
+function saveUserRow_(data, ask, el) {
+  ask.then(function (ok) {
+    if (!ok) { refreshSettings(); return; }
+    el.disabled = true;                            // กันกดรัวระหว่างรอเซิร์ฟเวอร์ตอบ
+    call('apiSaveUser', data).then(function (r) {
+      var done;
+      if (r.active === false && !r.revoked) {
+        done = toast('ปิดสิทธิ์ ' + r.email + ' แล้ว แต่ถอนสิทธิ์ไฟล์ไม่สำเร็จ\n' + r.revokeError, true);
+      } else if (r.active === false) {
+        done = toast('ปิดสิทธิ์ ' + r.email + ' และถอนสิทธิ์ไฟล์แล้ว');
+      } else {
+        done = toast('อัปเดต ' + r.email + ' แล้ว');
+      }
+      return done.then(refreshSettings);
+    }).catch(function (err) { fail(err); refreshSettings(); });
+  });
+}
 
-    html += '<div class="card flush"><div class="table-wrap"><table class="cards"><thead><tr>' +
-      '<th>อีเมล</th><th>ชื่อ</th><th>สิทธิ์</th><th>สถานะ</th><th>การเข้าถึงไฟล์</th><th>ลบ</th>' +
-      '</tr></thead><tbody>' +
-      users.map(function (u) {
-        var isSelf = (u.email.toLowerCase() === meEmail);
-        var youChip = isSelf ? ' <span class="chip chip-sq">คุณ</span>' : '';
-        return '<tr style="cursor:default">' +
-          '<td class="head"><strong>' + esc(u.email) + '</strong>' + youChip + '</td>' +
-          '<td data-l="อีเมล" class="hn-cell">' + esc(u.email) + youChip + '</td>' +
-          // ช่องกรอก ไม่ใช่ข้อความ เดิมคนที่ถูกเพิ่มโดยไม่ได้ใส่ชื่อจะแก้ได้แค่ในชีตดิบ
-          // และไม่ติดคลาส name-cell แล้ว เพราะคลาสนั้นถูกซ่อนบนมือถือตามแบบตารางการ์ด
-          // ซึ่งทำให้คอลัมน์ชื่อหายไปทั้งคอลัมน์เวลาเปิดจากโทรศัพท์
-          '<td data-l="ชื่อ"><input type="text" class="u-name" data-email="' + esc(u.email) + '" ' +
-            'value="' + esc(u.name || '') + '" placeholder="เช่น สมศรี (พยาบาล)" autocomplete="off"></td>' +
-          '<td data-l="สิทธิ์">' +
-            // แถวตัวเองอ่านสิทธิ์จริงมาแสดง ไม่ใช่เขียน "ผู้ดูแลระบบ" ทิ้งไว้ตายตัว
-            // ช่วงที่ระบบยังไม่มีผู้ดูแลเลย คนที่เข้าหน้านี้ได้ยังเป็นผู้ใช้ทั่วไปอยู่
-            (isSelf ? '<span class="chip chip-brand">' + esc(roleLabel(u.role)) + '</span>'
-              : '<select class="u-role" data-email="' + esc(u.email) + '" autocomplete="off">' +
-                BOOT.vocab.ROLE.map(function (r) {
-                  return '<option value="' + r + '"' + (r === u.role ? ' selected' : '') + '>' +
-                    roleLabel(r) + '</option>';
-                }).join('') + '</select>') +
-          '</td>' +
-          '<td data-l="สถานะ">' +
-            (isSelf ? '<span class="chip chip-brand">ใช้งานอยู่</span>'
-              // ป้ายกำกับต้องบอกว่าติ๊กแล้วได้อะไร ไม่ใช่บอกสถานะปัจจุบัน
-              // ไม่งั้นคนอ่านว่า "ติ๊กเพื่อปิด" ทั้งที่ความจริงคือติ๊กเพื่อเปิด
-              : '<label class="check"><input type="checkbox" class="u-active" ' +
-                'data-email="' + esc(u.email) + '"' + (u.active ? ' checked' : '') + '>' +
-                '<span>เปิดใช้งาน</span></label>' +
-                (u.active ? '' : ' <span class="chip">ปิดอยู่</span>')) +
-          '</td>' +
-          '<td data-l="ไฟล์">' + fileAccessCell(u, isSelf) + '</td>' +
-          '<td data-l="ลบ">' +
-            (isSelf ? '—'
-              : '<button class="btn btn-sm u-delete" data-email="' + esc(u.email) + '">ลบ</button>') +
-          '</td></tr>';
-      }).join('') +
-      '</tbody></table></div></div>';
+/**
+ * โหลดรายชื่อผู้ใช้แล้ววาดหน้าตั้งค่า
+ *
+ * quiet = วาดใหม่หลังบันทึก ไม่ต้องขึ้นโครงจาง ๆ และคงตำแหน่งที่เลื่อนค้างไว้
+ * เดิมทุกครั้งที่แก้ช่องเดียว ทั้งหน้าจะกะพริบเป็นโครงเปล่าแล้วเด้งกลับขึ้นบนสุด
+ * ซึ่งกวนมากเวลาไล่แก้ทีละแถวจากท้ายตาราง
+ *
+ * ยังถามเซิร์ฟเวอร์ใหม่ทุกครั้งโดยตั้งใจ สิทธิ์บนไฟล์ Sheet เปลี่ยนได้จากนอกแอป
+ * ตารางที่วาดจากค่าที่จำไว้ในเครื่องจึงมีโอกาสบอกสิทธิ์ที่ไม่ตรงกับของจริง
+ */
+function renderSettings(quiet) {
+  /*
+    ช่องแก้ชื่อบันทึกตอนออกจากช่อง การกดเมนูอื่นจึงสั่งบันทึกและเปลี่ยนหน้าพร้อมกัน
+    พอบันทึกเสร็จหน้านี้จะวาดตัวเองใหม่ทับหน้าที่เขาเพิ่งเปิด แถบเมนูซ้ายชี้อีกหน้าหนึ่ง
+    แต่เนื้อหาบนจอเป็นหน้าตั้งค่า ต้องหยุดทั้งตอนเริ่มและตอนข้อมูลกลับมา
+    เพราะ busy() เขียนทับจอทันทีตั้งแต่ยังไม่ได้เรียกเซิร์ฟเวอร์
+  */
+  if (VIEW.name !== 'settings') return Promise.resolve();
 
-    html += '<div class="card"><h2>สิทธิ์แต่ละระดับ</h2><dl class="kv">' +
-      kv('ผู้ใช้ทั่วไป', 'ลงทะเบียนเคส ประเมิน BI บันทึกการติดตาม และดูข้อมูลทั้งหมด') +
-      kv('ผู้ดูแลระบบ', 'ทำได้ทุกอย่างเหมือนผู้ใช้ทั่วไป และเพิ่ม ปิดสิทธิ์ หรือลบผู้ใช้ในหน้านี้') +
-      '</dl></div>';
+  var keepAt = quiet ? window.pageYOffset : 0;
+  if (!quiet) busy();
 
-    // แยกออกจากการ์ดบน เพราะเปิด/ปิดใช้งานกับลบเป็นสถานะของคนคนหนึ่ง
-    // ไม่ใช่ระดับสิทธิ์ เอามาต่อท้ายกันทำให้อ่านเหมือนว่าเป็นสิทธิ์อีกสองระดับ
-    html += '<div class="card"><h2>เปิด ปิด หรือลบผู้ใช้</h2><dl class="kv">' +
-      kv('เปิดใช้งาน', 'ระบบแชร์ไฟล์ Google Sheet ให้ในสิทธิ์ผู้แก้ไขอัตโนมัติ') +
-      kv('ปิดการใช้งาน', 'ระบบถอนสิทธิ์ไฟล์ออกให้ด้วย เขาจะเปิดไฟล์ดิบดูข้อมูลผู้ป่วยไม่ได้อีก ' +
-        'ชื่อยังอยู่ในตาราง เปิดกลับมาใหม่ได้ทุกเมื่อ') +
-      kv('ลบ', 'ใช้กับแถวที่ใส่ผิดตั้งแต่แรก เช่นพิมพ์อีเมลผิดตัว ชื่อจะหายจากตารางถาวร ' +
-        'คนที่เคยใช้งานจริงแล้วให้ปิดการใช้งานแทน จะได้ยังรู้ว่าเคยมีใครเข้าถึงข้อมูลผู้ป่วยบ้าง') +
-      '</dl></div>';
+  return call('apiListUsers').then(function (users) {
+    if (VIEW.name !== 'settings') return;
+    drawSettings(users);
+    if (quiet) window.scrollTo(0, keepAt);
+  }).catch(fail);
+}
+
+/** วาดใหม่แบบไม่กะพริบ ใช้ต่อท้าย .then() ซึ่งจะส่งค่าที่ไม่เกี่ยวข้องเข้ามาเป็นอาร์กิวเมนต์ */
+function refreshSettings() {
+  return renderSettings(true);
+}
+
+function drawSettings(users) {
+  var meEmail = String(BOOT.user.email).toLowerCase();
+
+  var html = '<div class="page-head"><div class="head-text"><h1>ตั้งค่า</h1>' +
+    '<span class="sub num">' + userCounts_(users) + '</span></div></div>';
+
+  if (BOOT.user.noAdminYet) {
+    html += '<div class="card card-warn"><h2>ยังไม่มีผู้ดูแลระบบ</h2>' +
+      '<p class="note">ตอนนี้ยังไม่มีใครถูกตั้งเป็นผู้ดูแลระบบ ทุกคนที่ลงทะเบียนไว้จึงเข้าหน้านี้ได้ชั่วคราว ' +
+      'กดปุ่มด้านล่างเพื่อตั้งตัวเองเป็นผู้ดูแล แล้วช่องทางชั่วคราวนี้จะปิดทันที</p>' +
+      '<div class="btn-row"><button class="btn btn-primary" id="claim-admin">' +
+      'ตั้ง ' + esc(BOOT.user.email) + ' เป็นผู้ดูแลระบบ</button></div></div>';
+  }
+
+  /*
+    โหมดทดสอบเป็นเส้นแบ่งระหว่างข้อมูลสมมติกับข้อมูลคนไข้จริง
+    ยกขึ้นมาไว้บนสุดและเปลี่ยนเป็นปุ่ม เพราะเดิมอยู่ท้ายหน้าและหน้าตาเหมือนช่องติ๊ก
+    "เปิดใช้งาน" ของผู้ใช้รายคน ทั้งที่ผลของมันกว้างกว่ากันมาก
+  */
+  html += '<div class="card' + (BOOT.maskMode ? ' card-warn' : '') + '"><h2>โหมดทดสอบ' +
+    '<span class="sub">' + (BOOT.maskMode ? 'เปิดอยู่' : 'ปิดอยู่ · ใช้งานจริง') + '</span></h2>' +
+    '<p class="note">' +
+    (BOOT.maskMode
+      ? 'ทุกหน้ามีแถบเตือนสีแดงกำกับไว้ และการนำเข้าข้อมูลเก่าครั้งถัดไปจะแทนชื่อ HN ' +
+        'เบอร์โทร และที่อยู่ด้วยข้อมูลสมมติ'
+      : 'ระบบถือว่าเป็นการใช้งานจริง การนำเข้าข้อมูลเก่าครั้งถัดไปจะเก็บชื่อ HN ' +
+        'เบอร์โทร และที่อยู่ตามต้นฉบับ') +
+    '<br>ข้อมูลที่นำเข้าไปแล้วถูกปกปิดตั้งแต่ตอนเขียนลงชีต สลับโหมดทีหลังไม่ได้เปลี่ยนของเดิม ' +
+    'ต้องนำเข้าใหม่</p>' +
+    '<div class="btn-row"><button class="btn" id="mask-toggle">' +
+    (BOOT.maskMode ? 'ปิดโหมดทดสอบ' : 'เปิดโหมดทดสอบ') + '</button></div></div>';
+
+  html += '<div class="card"><h2>เพิ่มผู้ใช้งาน</h2>' +
+    '<form id="user-form"><div class="grid">' +
+    field({ k: 'email', l: 'อีเมล Google', t: 'email', req: true, ph: 'name@gmail.com' }) +
+    field({ k: 'name', l: 'ชื่อ-ตำแหน่ง', t: 'text', ph: 'เช่น สมศรี (พยาบาล)' }) +
+    field({ k: 'role', l: 'สิทธิ์', t: 'select', o: roleOptions_(), req: true }) +
+    '</div><div class="btn-row"><button type="submit" class="btn btn-primary">เพิ่มผู้ใช้</button></div>' +
+    '</form>' +
+    '<p class="note" style="margin-top:14px">ระบบจะแชร์ไฟล์ Google Sheet ให้ในสิทธิ์ผู้แก้ไขอัตโนมัติ ' +
+    'ถ้าแชร์ไม่สำเร็จจะขึ้นสถานะเตือนไว้ในตารางด้านล่าง</p></div>';
+
+  html += '<div class="card flush">';
+  if (users.length >= USER_SEARCH_MIN) {
+    html += '<div class="table-search"><input type="search" id="user-search" ' +
+      'placeholder="ค้นหาจากอีเมลหรือชื่อ" autocomplete="off"></div>';
+  }
+  html += '<div class="table-wrap"><table class="cards"><thead><tr>' +
+    '<th>อีเมล</th><th>ชื่อ</th><th>สิทธิ์</th><th>สถานะ</th><th>การเข้าถึงไฟล์</th><th>จัดการ</th>' +
+    '</tr></thead><tbody>' +
+    users.map(function (u) {
+      var isSelf = (u.email.toLowerCase() === meEmail);
+      var mail = esc(u.email);
+      var youChip = isSelf ? ' <span class="chip chip-sq">คุณ</span>' : '';
+      // added_at เก็บเป็นเวลาเต็ม ตัดเหลือแต่วันที่ก่อนแปลงเป็น พ.ศ.
+      var added = String(u.added_at || '').slice(0, 10);
+      var addedLine = added ? '<small class="cell-sub">เพิ่มเมื่อ ' + esc(thDate(added)) + '</small>' : '';
+
+      return '<tr style="cursor:default" data-search="' +
+          esc((u.email + ' ' + (u.name || '')).toLowerCase()) + '">' +
+        '<td class="head"><strong>' + mail + '</strong>' + youChip + addedLine + '</td>' +
+        '<td data-l="อีเมล" class="hn-cell">' + mail + youChip + addedLine + '</td>' +
+        // ช่องกรอก ไม่ใช่ข้อความ เดิมคนที่ถูกเพิ่มโดยไม่ได้ใส่ชื่อจะแก้ได้แค่ในชีตดิบ
+        // และไม่ติดคลาส name-cell เพราะคลาสนั้นถูกซ่อนบนมือถือตามแบบตารางการ์ด
+        // ซึ่งทำให้คอลัมน์ชื่อหายไปทั้งคอลัมน์เวลาเปิดจากโทรศัพท์
+        // ป้ายในช่องว่างบอกสถานะ ไม่ยกตัวอย่าง ตัวอย่างจะอ่านผ่าน ๆ เหมือนเป็นชื่อจริงของแถวนั้น
+        '<td data-l="ชื่อ"><input type="text" class="u-name" data-email="' + mail + '" ' +
+          'value="' + esc(u.name || '') + '" placeholder="ยังไม่ได้ใส่ชื่อ" autocomplete="off"></td>' +
+        // แถวตัวเองใช้ช่องเลือกแบบปิดไว้ ไม่ใช่ป้ายคนละแบบกับแถวอื่น คอลัมน์จะได้ไม่กระโดด
+        // และค่าที่เห็นมาจาก role จริง ไม่ใช่คำว่า "ผู้ดูแลระบบ" ที่เขียนทิ้งไว้ตายตัว
+        '<td data-l="สิทธิ์"><select class="u-role" data-email="' + mail + '" autocomplete="off"' +
+          (isSelf ? ' disabled' : '') + '>' +
+          BOOT.vocab.ROLE.map(function (r) {
+            return '<option value="' + r + '"' + (r === u.role ? ' selected' : '') + '>' +
+              roleLabel(r) + '</option>';
+          }).join('') + '</select></td>' +
+        // คอลัมน์สถานะบอกสถานะอย่างเดียว ปุ่มสั่งงานย้ายไปอยู่คอลัมน์จัดการทั้งหมด
+        '<td data-l="สถานะ">' +
+          (u.active ? '<span class="chip chip-ok">ใช้งานอยู่</span>'
+                    : '<span class="chip">ปิดอยู่</span>') + '</td>' +
+        '<td data-l="ไฟล์">' + fileAccessCell(u) + '</td>' +
+        '<td data-l="จัดการ">' +
+          (isSelf ? '<span class="cell-sub">บัญชีของคุณเอง</span>'
+            : '<div class="cell-actions">' +
+              '<button class="btn btn-sm u-toggle" data-email="' + mail + '">' +
+              (u.active ? 'ปิดการใช้งาน' : 'เปิดใช้งาน') + '</button>' +
+              '<button class="btn btn-sm u-delete" data-email="' + mail + '">ลบ</button></div>') +
+        '</td></tr>';
+    }).join('') +
+    '</tbody></table></div></div>';
+
+  html += '<div class="card"><h2>สิทธิ์แต่ละระดับ</h2><dl class="kv">' +
+    kv('ผู้ใช้ทั่วไป', 'ลงทะเบียนเคส ประเมิน BI บันทึกการติดตาม และดูข้อมูลทั้งหมด') +
+    kv('ผู้ดูแลระบบ', 'ทำได้ทุกอย่างเหมือนผู้ใช้ทั่วไป และเพิ่ม ปิดสิทธิ์ หรือลบผู้ใช้ในหน้านี้') +
+    '</dl></div>';
+
+  // แยกออกจากการ์ดบน เพราะเปิด ปิด และลบเป็นสถานะของคนคนหนึ่ง ไม่ใช่สิทธิ์อีกสองระดับ
+  html += '<div class="card"><h2>เปิด ปิด หรือลบผู้ใช้</h2><dl class="kv">' +
+    kv('ปิดการใช้งาน', 'เข้าแอปไม่ได้ และถูกถอนสิทธิ์ไฟล์ Sheet ออก ชื่อยังอยู่ในตาราง เปิดคืนได้ทุกเมื่อ') +
+    kv('ลบ', 'ใช้กับแถวที่ใส่ผิดตั้งแต่แรก ชื่อหายถาวร คนที่เคยใช้งานจริงให้ปิดการใช้งานแทน') +
+    kv('บัญชีของคุณเอง', 'ปิด ลบ หรือลดสิทธิ์ผู้ดูแลของตัวเองไม่ได้ ให้ผู้ดูแลคนอื่นเป็นคนทำแทน') +
+    '</dl>' +
+    (BOOT.sheetUrl
+      ? '<div class="btn-row"><a class="btn" href="' + esc(BOOT.sheetUrl) + '" target="_blank" ' +
+        'rel="noopener">เปิดไฟล์ Google Sheet</a></div>'
+      : '') +
+    '</div>';
+
+  main().innerHTML = html;
+
+  var claim = document.getElementById('claim-admin');
+  if (claim) {
+    claim.addEventListener('click', function () {
+      claim.disabled = true; claim.textContent = 'กำลังตั้งค่า…';
+      call('apiClaimAdmin').then(function (r) {
+        BOOT.user.isAdmin = true;
+        BOOT.user.noAdminYet = false;
+        BOOT.user.role = 'admin';
+        return toast('ตั้ง ' + r.email + ' เป็นผู้ดูแลระบบแล้ว').then(refreshSettings);
+      }).catch(function (err) { claim.disabled = false; fail(err); refreshSettings(); });
+    });
+  }
+
+  var search = document.getElementById('user-search');
+  if (search) {
+    // ซ่อนแถวแทนการวาดตารางใหม่ ตำแหน่งเคอร์เซอร์ในช่องค้นหาจะได้ไม่หลุดทุกตัวอักษรที่พิมพ์
+    search.addEventListener('input', function () {
+      var q = search.value.trim().toLowerCase();
+      Array.prototype.forEach.call(document.querySelectorAll('tbody tr[data-search]'), function (tr) {
+        tr.hidden = !!q && tr.getAttribute('data-search').indexOf(q) === -1;
+      });
+    });
+  }
+
+  $('#user-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var data = readForm(e.target);
+    data.active = 'TRUE';
+    var typed = String(data.email || '').trim().toLowerCase();
+    var existing = users.filter(function (u) { return u.email.toLowerCase() === typed; })[0];
 
     /*
-      สวิตช์โหมดทดสอบ เดิมอยู่ใน Config.gs ต้องแก้โค้ดแล้ว push ใหม่ถึงจะปิดได้
-      ทั้งที่นี่คือเส้นแบ่งระหว่างข้อมูลสมมติกับข้อมูลคนไข้จริง คนที่ต้องกดคือผู้ดูแลของ
-      โรงพยาบาล ไม่ใช่คนเขียนโค้ด จึงย้ายมาไว้ในหน้านี้
+      อีเมลเป็นกุญแจ การกรอกอีเมลที่มีอยู่แล้วจึงเท่ากับเขียนทับชื่อและสิทธิ์ของคนเดิม
+      เดิมทำให้เงียบ ๆ แล้วขึ้นข้อความว่า "เพิ่มแล้ว" คนกดไม่มีทางรู้ว่าเพิ่งไปแก้ของใคร
     */
-    html += '<div class="card"><h2>โหมดทดสอบ</h2>' +
-      '<label class="check"><input type="checkbox" id="mask-toggle"' +
-      (BOOT.maskMode ? ' checked' : '') + '>' +
-      '<span>เปิดโหมดทดสอบ</span></label>' +
-      '<p style="color:var(--muted);font-size:13px;margin:12px 0 0;line-height:1.6">' +
-      'ตอนนี้' + (BOOT.maskMode ? 'เปิดอยู่ ทุกหน้าจึงมีแถบเตือนสีแดงกำกับไว้' : 'ปิดอยู่ ถือว่าเป็นการใช้งานจริง') + ' · ' +
-      'มีผลกับแถบเตือนบนหน้าจอ และกับการนำเข้าข้อมูลเก่าครั้งถัดไป ซึ่งจะแทนชื่อ HN เบอร์โทร ' +
-      'และที่อยู่ด้วยข้อมูลสมมติ<br>' +
-      'ข้อมูลที่นำเข้าไปแล้วถูกปกปิดตั้งแต่ตอนเขียนลงชีต ปิดโหมดนี้ทีหลังไม่ได้คืนค่าจริงให้ ' +
-      'ต้องนำเข้าใหม่</p></div>';
+    var ask = existing
+      ? askConfirm('อีเมลนี้อยู่ในตารางแล้ว',
+          existing.email + ' มีอยู่แล้ว การกดต่อจะเขียนทับชื่อและสิทธิ์เดิมของเขา\n' +
+          'ถ้าต้องการแค่แก้ข้อมูล แก้ในตารางด้านล่างได้เลย',
+          { confirmText: 'เขียนทับข้อมูลเดิม' })
+      : Promise.resolve(true);
 
-    main().innerHTML = html;
-
-    var claim = document.getElementById('claim-admin');
-    if (claim) {
-      claim.addEventListener('click', function () {
-        claim.disabled = true; claim.textContent = 'กำลังตั้งค่า…';
-        call('apiClaimAdmin').then(function (r) {
-          BOOT.user.isAdmin = true;
-          BOOT.user.noAdminYet = false;
-          BOOT.user.role = 'admin';
-          return toast('ตั้ง ' + r.email + ' เป็นผู้ดูแลระบบแล้ว').then(renderSettings);
-        }).catch(function (err) { claim.disabled = false; fail(err); renderSettings(); });
-      });
-    }
-
-    $('#user-form').addEventListener('submit', function (e) {
-      e.preventDefault();
-      var data = readForm(e.target);
-      data.active = 'TRUE';
+    ask.then(function (ok) {
+      if (!ok) return;
       var btn = e.target.querySelector('button[type=submit]');
       btn.disabled = true; btn.textContent = 'กำลังบันทึก…';
       call('apiSaveUser', data).then(function (r) {
+        var what = r.created ? 'เพิ่ม ' : 'แก้ข้อมูลของ ';
         var done = r.shared
-          ? toast('เพิ่ม ' + r.email + ' และแชร์ไฟล์ Google Sheet ให้แล้ว')
-          : toast('เพิ่ม ' + r.email + ' แล้ว แต่แชร์ไฟล์ไม่สำเร็จ\n' + r.shareError, true);
-        return done.then(renderSettings);
+          ? toast(what + r.email + ' และแชร์ไฟล์ Google Sheet ให้แล้ว')
+          : toast(what + r.email + ' แล้ว แต่แชร์ไฟล์ไม่สำเร็จ\n' + r.shareError, true);
+        return done.then(refreshSettings);
       }).catch(function (err) {
         btn.disabled = false; btn.textContent = 'เพิ่มผู้ใช้';
         fail(err);
       });
     });
+  });
 
-    Array.prototype.forEach.call(document.querySelectorAll('.u-share'), function (el) {
-      el.addEventListener('click', function () {
-        el.disabled = true; el.textContent = 'กำลังแชร์…';
-        call('apiShareFile', el.getAttribute('data-email')).then(function (r) {
-          return toast('แชร์ไฟล์ให้ ' + r.email + ' แล้ว').then(renderSettings);
-        }).catch(function (err) { el.disabled = false; el.textContent = 'แชร์ไฟล์ให้'; fail(err); });
+  Array.prototype.forEach.call(document.querySelectorAll('.u-share'), function (el) {
+    el.addEventListener('click', function () {
+      el.disabled = true; el.textContent = 'กำลังแชร์…';
+      call('apiShareFile', el.getAttribute('data-email')).then(function (r) {
+        return toast('แชร์ไฟล์ให้ ' + r.email + ' แล้ว').then(refreshSettings);
+      }).catch(function (err) { el.disabled = false; el.textContent = 'แชร์ไฟล์ให้'; fail(err); });
+    });
+  });
+
+  Array.prototype.forEach.call(document.querySelectorAll('.u-revoke'), function (el) {
+    el.addEventListener('click', function () {
+      var email = el.getAttribute('data-email');
+      askConfirm('ถอนสิทธิ์ไฟล์',
+        email + ' จะเปิดไฟล์ Google Sheet ไม่ได้อีก\nแต่ประวัติที่เคยบันทึกไว้ยังอยู่ครบ',
+        { confirmText: 'ถอนสิทธิ์' }
+      ).then(function (ok) {
+        if (!ok) return;
+        el.disabled = true; el.textContent = 'กำลังถอน…';
+        call('apiRevokeFile', email).then(function (r) {
+          return toast('ถอนสิทธิ์ไฟล์ของ ' + r.email + ' แล้ว').then(refreshSettings);
+        }).catch(function (err) { el.disabled = false; el.textContent = 'ถอนสิทธิ์ไฟล์'; fail(err); });
       });
     });
+  });
 
-    Array.prototype.forEach.call(document.querySelectorAll('.u-revoke'), function (el) {
-      el.addEventListener('click', function () {
-        var email = el.getAttribute('data-email');
-        askConfirm('ถอนสิทธิ์ไฟล์',
-          email + ' จะเปิดไฟล์ Google Sheet ไม่ได้อีก\nแต่ประวัติที่เคยบันทึกไว้ยังอยู่ครบ',
-          { confirmText: 'ถอนสิทธิ์' }
-        ).then(function (ok) {
-          if (!ok) return;
-          el.disabled = true; el.textContent = 'กำลังถอน…';
-          call('apiRevokeFile', email).then(function (r) {
-            return toast('ถอนสิทธิ์ไฟล์ของ ' + r.email + ' แล้ว').then(renderSettings);
-          }).catch(function (err) { el.disabled = false; el.textContent = 'ถอนสิทธิ์ไฟล์'; fail(err); });
+  Array.prototype.forEach.call(document.querySelectorAll('.u-delete'), function (el) {
+    el.addEventListener('click', function () {
+      var email = el.getAttribute('data-email');
+      askConfirm('ลบ ' + email,
+        'ชื่อนี้จะหายออกจากตารางถาวร และถูกถอนสิทธิ์ไฟล์ Google Sheet ออกด้วย\n' +
+        'ถ้าแค่อยากให้เลิกใช้งานแต่ยังเก็บชื่อไว้ ให้กด "ปิดการใช้งาน" แทน',
+        { kind: 'danger', confirmText: 'ลบผู้ใช้' }
+      ).then(function (ok) {
+        if (!ok) return;
+        el.disabled = true; el.textContent = 'กำลังลบ…';
+        call('apiDeleteUser', email).then(function (r) {
+          return toast('ลบ ' + r.email + ' และถอนสิทธิ์ไฟล์แล้ว').then(refreshSettings);
+        }).catch(function (err) {
+          el.disabled = false; el.textContent = 'ลบ';
+          // ถอนสิทธิ์ไฟล์ไม่ผ่านแปลว่าแถวยังอยู่ วาดใหม่เพื่อให้เห็นสถานะไฟล์ล่าสุด
+          fail(err); refreshSettings();
         });
       });
     });
+  });
 
-    Array.prototype.forEach.call(document.querySelectorAll('.u-delete'), function (el) {
-      el.addEventListener('click', function () {
-        var email = el.getAttribute('data-email');
-        askConfirm('ลบ ' + email,
-          'ชื่อนี้จะหายออกจากตารางถาวร และถูกถอนสิทธิ์ไฟล์ Google Sheet ออกด้วย\n' +
-          'ถ้าแค่อยากให้เลิกใช้งานแต่ยังเก็บชื่อไว้ ให้ติ๊ก "เปิดใช้งาน" ออกแทน',
-          { kind: 'danger', confirmText: 'ลบผู้ใช้' }
-        ).then(function (ok) {
-          if (!ok) return;
-          el.disabled = true; el.textContent = 'กำลังลบ…';
-          call('apiDeleteUser', email).then(function (r) {
-            return toast('ลบ ' + r.email + ' และถอนสิทธิ์ไฟล์แล้ว').then(renderSettings);
-          }).catch(function (err) {
-            el.disabled = false; el.textContent = 'ลบ';
-            // ถอนสิทธิ์ไฟล์ไม่ผ่านแปลว่าแถวยังอยู่ วาดใหม่เพื่อให้เห็นสถานะไฟล์ล่าสุด
-            fail(err); renderSettings();
-          });
-        });
-      });
+  Array.prototype.forEach.call(document.querySelectorAll('.u-toggle'), function (el) {
+    el.addEventListener('click', function () {
+      var row = byEmail_(users, el.getAttribute('data-email'));
+      var turnOff = row.active;
+      // ปิดการใช้งานตัดสิทธิ์ทั้งในแอปและบนไฟล์ ควรถามก่อน ส่วนการเปิดคืนไม่ต้องถาม
+      var ask = turnOff
+        ? askConfirm('ปิดการใช้งาน ' + row.email,
+            'เขาจะเข้าแอปไม่ได้ และระบบจะถอนสิทธิ์แก้ไขไฟล์ Google Sheet ออกด้วย\n' +
+            'เปิดกลับมาใหม่ได้ทุกเมื่อ',
+            { confirmText: 'ปิดการใช้งาน' })
+        : Promise.resolve(true);
+
+      saveUserRow_({
+        email: row.email, name: row.name, role: row.role,
+        active: turnOff ? 'FALSE' : 'TRUE'
+      }, ask, el);
     });
+  });
 
-    Array.prototype.forEach.call(document.querySelectorAll('.u-role, .u-active, .u-name'), function (el) {
-      el.addEventListener('change', function () {
-        var email = el.getAttribute('data-email');
-        var row = users.filter(function (u) { return u.email === email; })[0];
-        var isRole = el.classList.contains('u-role');
-        var isActive = el.classList.contains('u-active');
-        var isName = el.classList.contains('u-name');
-        var willDisable = isActive && !el.checked;
-        var willPromote = isRole && el.value === 'admin' && row.role !== 'admin';
+  Array.prototype.forEach.call(document.querySelectorAll('.u-role, .u-name'), function (el) {
+    el.addEventListener('change', function () {
+      var row = byEmail_(users, el.getAttribute('data-email'));
+      var isRole = el.classList.contains('u-role');
+      if (!isRole && el.value.trim() === String(row.name || '')) return;      // ไม่ได้แก้อะไร
 
-        if (isName && el.value.trim() === String(row.name || '')) return;   // ไม่ได้แก้อะไร
-
-        var data = {
-          email: email,
-          name: isName ? el.value.trim() : row.name,
-          role: isRole ? el.value : row.role,
-          active: (isActive ? el.checked : row.active) ? 'TRUE' : 'FALSE'
-        };
-
-        // ปิดการใช้งานเป็นการตัดสิทธิ์คนอื่นออกจากทั้งแอปและไฟล์ ควรถามก่อน
-        // การเลื่อนเป็นผู้ดูแลก็ถาม เพราะเป็นการมอบสิทธิ์จัดการผู้ใช้ทั้งระบบให้
-        // รวมถึงสิทธิ์ปิดหรือลบบัญชีของคนที่กดให้เองด้วย ซึ่งถอยกลับเองไม่ได้
-        var ask;
-        if (willDisable) {
-          ask = askConfirm('ปิดการใช้งาน ' + email,
-            'เขาจะเข้าแอปไม่ได้ และระบบจะถอนสิทธิ์แก้ไขไฟล์ Google Sheet ออกด้วย\nเปิดกลับมาใหม่ได้ทุกเมื่อ',
-            { confirmText: 'ปิดการใช้งาน' });
-        } else if (willPromote) {
-          ask = askConfirm('ตั้ง ' + email + ' เป็นผู้ดูแลระบบ',
+      // การเลื่อนเป็นผู้ดูแลถามก่อน เพราะเป็นการมอบสิทธิ์จัดการผู้ใช้ทั้งระบบให้
+      // รวมถึงสิทธิ์ปิดหรือลบบัญชีของคนที่กดให้เอง ซึ่งถอยกลับเองไม่ได้
+      var ask = (isRole && el.value === 'admin' && row.role !== 'admin')
+        ? askConfirm('ตั้ง ' + row.email + ' เป็นผู้ดูแลระบบ',
             'เขาจะเพิ่ม ปิดสิทธิ์ และลบผู้ใช้คนอื่นได้ทั้งระบบ รวมทั้งบัญชีของคุณเอง',
-            { confirmText: 'ตั้งเป็นผู้ดูแล' });
-        } else {
-          ask = Promise.resolve(true);
-        }
+            { confirmText: 'ตั้งเป็นผู้ดูแล' })
+        : Promise.resolve(true);
 
-        ask.then(function (ok) {
-          if (!ok) { renderSettings(); return; }
-          el.disabled = true;                       // กันกดรัวระหว่างรอเซิร์ฟเวอร์ตอบ
-          call('apiSaveUser', data).then(function (r) {
-            var done;
-            if (r.active === false && !r.revoked) {
-              done = toast('ปิดสิทธิ์ ' + email + ' แล้ว แต่ถอนสิทธิ์ไฟล์ไม่สำเร็จ\n' + r.revokeError, true);
-            } else if (r.active === false) {
-              done = toast('ปิดสิทธิ์ ' + email + ' และถอนสิทธิ์ไฟล์แล้ว');
-            } else {
-              done = toast('อัปเดต ' + email + ' แล้ว');
-            }
-            return done.then(renderSettings);
-          }).catch(function (err) { fail(err); renderSettings(); });
-        });
+      saveUserRow_({
+        email: row.email,
+        name: isRole ? row.name : el.value.trim(),
+        role: isRole ? el.value : row.role,
+        active: row.active ? 'TRUE' : 'FALSE'
+      }, ask, el);
+    });
+  });
+
+  var maskBtn = document.getElementById('mask-toggle');
+  if (maskBtn) {
+    maskBtn.addEventListener('click', function () {
+      var want = !BOOT.maskMode;
+      // ถามเฉพาะตอนปิด การเปิดโหมดทดสอบเป็นฝั่งที่ปลอดภัยกว่าอยู่แล้ว
+      var ask = want ? Promise.resolve(true) : askConfirm('ปิดโหมดทดสอบ',
+        'แถบเตือน "โหมดทดสอบ" จะหายจากทุกหน้า และการนำเข้าข้อมูลครั้งถัดไปจะเก็บชื่อ HN ' +
+        'เบอร์โทร และที่อยู่จริงลงชีต',
+        { confirmText: 'ปิดโหมดทดสอบ' });
+
+      ask.then(function (ok) {
+        if (!ok) return;
+        maskBtn.disabled = true;
+        call('apiSetMaskMode', want).then(function (r) {
+          BOOT.maskMode = r.maskMode;
+          document.getElementById('mask-banner').hidden = !r.maskMode;
+          return toast(r.maskMode ? 'เปิดโหมดทดสอบแล้ว' : 'ปิดโหมดทดสอบแล้ว').then(refreshSettings);
+        }).catch(function (err) { maskBtn.disabled = false; fail(err); refreshSettings(); });
       });
     });
-
-    var maskToggle = document.getElementById('mask-toggle');
-    if (maskToggle) {
-      maskToggle.addEventListener('change', function () {
-        var want = maskToggle.checked;
-        // ถามเฉพาะตอนปิด การเปิดโหมดทดสอบเป็นฝั่งที่ปลอดภัยกว่าอยู่แล้ว
-        var ask = want ? Promise.resolve(true) : askConfirm('ปิดโหมดทดสอบ',
-          'แถบเตือน "โหมดทดสอบ" จะหายจากทุกหน้า และการนำเข้าข้อมูลครั้งถัดไปจะเก็บชื่อ HN ' +
-          'เบอร์โทร และที่อยู่จริงลงชีต',
-          { confirmText: 'ปิดโหมดทดสอบ' });
-
-        ask.then(function (ok) {
-          if (!ok) { maskToggle.checked = true; return; }
-          maskToggle.disabled = true;
-          call('apiSetMaskMode', want).then(function (r) {
-            BOOT.maskMode = r.maskMode;
-            document.getElementById('mask-banner').hidden = !r.maskMode;
-            return toast(r.maskMode ? 'เปิดโหมดทดสอบแล้ว' : 'ปิดโหมดทดสอบแล้ว').then(renderSettings);
-          }).catch(function (err) { maskToggle.disabled = false; fail(err); renderSettings(); });
-        });
-      });
-    }
-  }).catch(fail);
+  }
 }
 
 /* ---------------------------------------------------------- แดชบอร์ด */

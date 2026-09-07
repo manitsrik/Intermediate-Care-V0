@@ -71,9 +71,9 @@ var DB = {
   bi: [],
   fu: [],
   users: [
-    { email: 'preview@local', name: 'พรีวิวบนเครื่อง', role: 'admin', active: true, added_at: '' },
-    { email: 'nurse1@example.org', name: 'สมศรี (พยาบาล)', role: 'staff', active: true, added_at: '' },
-    { email: 'pt1@example.org', name: 'สมชาย (นักกายภาพบำบัด)', role: 'staff', active: false, added_at: '', fileAccess: false }
+    { email: 'preview@local', name: 'พรีวิวบนเครื่อง', role: 'admin', active: true, added_at: '2026-08-01T09:00:00', isOwner: true },
+    { email: 'nurse1@example.org', name: 'สมศรี (พยาบาล)', role: 'staff', active: true, added_at: '2026-08-14T10:30:00' },
+    { email: 'pt1@example.org', name: 'สมชาย (นักกายภาพบำบัด)', role: 'staff', active: false, added_at: '2026-08-20T14:05:00', fileAccess: false }
   ]
 };
 
@@ -176,6 +176,11 @@ var API = {
       var o = JSON.parse(JSON.stringify(u));
       o.fileAccess = u.fileAccess !== false;
       return o;
+    }).sort(function (a, b) {                 // เรียงแบบเดียวกับ apiListUsers ตัวจริง
+      if (a.active !== b.active) return a.active ? -1 : 1;
+      var aAdmin = a.role === 'admin', bAdmin = b.role === 'admin';
+      if (aAdmin !== bAdmin) return aAdmin ? -1 : 1;
+      return a.email.localeCompare(b.email);
     });
   },
 
@@ -227,6 +232,7 @@ var API = {
       user: { email: 'preview@local', name: 'พรีวิวบนเครื่อง', role: 'admin', isAdmin: true },
       appName: CONFIG.APP_NAME, org: CONFIG.ORG,
       orgUnit: CONFIG.ORG_UNIT, orgPlace: CONFIG.ORG_PLACE, maskMode: PREVIEW_MASK,
+      sheetUrl: 'https://docs.google.com/spreadsheets/d/ตัวอย่างพรีวิว/edit',
       patients: API.apiListPatients({}),
       alerts: DB.patients.filter(function (x) { return x.kbh_appt_date; }).length,
       biItems: BI_ITEMS, biMax: BI_MAX, attention: ATTENTION, vocab: VOCAB, geography: GEOGRAPHY,

@@ -521,6 +521,48 @@ async function screenshot(name) {
     await check('Late response cannot overwrite newer area selection', 'dashFilter.district === "เมืองกระบี่" && dashCache.total === 2');
     await evaluate('(async function() { var realCall = call; var resolveLate; call = function() { return new Promise(resolve => resolveLate = resolve); }; var pendingDash = changeArea("scope","all"); go("patient"); resolveLate(API.apiDashboard()); await pendingDash; call = realCall; })()');
     await check('Late dashboard response cannot replace another screen', 'VIEW.name === "patient" && !!document.getElementById("patient-form")');
+
+    /*
+      ช่องแก้ชื่อในหน้าตั้งค่าบันทึกตอนออกจากช่อง การกดเมนูอื่นจึงสั่งบันทึก
+      และเปลี่ยนหน้าในจังหวะเดียวกัน หน้าตั้งค่าต้องไม่วาดตัวเองทับหน้าที่เพิ่งเปิด
+    */
+    await evaluate('go("settings")');
+    await until(() => evaluate('!!document.getElementById("mask-toggle")'));
+    await check('Every user row exposes an editable name field',
+      'document.querySelectorAll("input.u-name").length === DB.users.length');
+    await evaluate('var el = document.querySelector("input.u-name");' +
+      'el.value = "ชื่อใหม่"; el.dispatchEvent(new Event("change")); go("dashboard")');
+    await until(() => evaluate('!document.getElementById("modal").hidden'));
+    await evaluate('document.getElementById("modal-ok").click()');
+    await until(() => evaluate('!!document.querySelector(".stat-card")'));
+    await check('Saving a user name on blur cannot redraw settings over the next screen',
+      'VIEW.name === "dashboard" && !document.getElementById("mask-toggle")' +
+      ' && DB.users[0].name === "ชื่อใหม่"');
+
+    /*
+      อีเมลเป็นกุญแจของตาราง users การกรอกอีเมลที่มีอยู่แล้วในฟอร์มเพิ่มผู้ใช้
+      จึงเป็นการเขียนทับชื่อและสิทธิ์ของคนเดิม ต้องเตือนก่อน ไม่ใช่ทำเงียบ ๆ
+    */
+    await evaluate('go("settings")');
+    await until(() => evaluate('!!document.getElementById("mask-toggle")'));
+    await evaluate('document.querySelector("#user-form [name=email]").value = DB.users[1].email;' +
+      'document.querySelector("#user-form [name=role]").value = "admin";' +
+      'document.getElementById("user-form").requestSubmit()');
+    await until(() => evaluate('document.getElementById("modal-title").textContent === "อีเมลนี้อยู่ในตารางแล้ว"'));
+    await evaluate('document.getElementById("modal-cancel").click()');
+    await check('Adding an email that already exists warns before overwriting the person',
+      'DB.users[1].role === "staff"');
+
+    // คอลัมน์ชื่อเคยหายทั้งคอลัมน์บนมือถือ เพราะตารางแบบการ์ดซ่อนคลาส name-cell
+    await evaluate('go("settings")');
+    await until(() => evaluate('!!document.getElementById("mask-toggle")'));
+    await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
+    await evaluate('new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))');
+    await check('The user name stays visible and editable on a phone',
+      'document.querySelector("input.u-name").offsetParent !== null' +
+      ' && document.documentElement.scrollWidth <= innerWidth');
+    await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1080, deviceScaleFactor: 1, mobile: false });
+
     assert.equal(exceptions.length, 0, JSON.stringify(exceptions));
     console.log(`\n${checks} browser checks passed; screenshots saved in preview/`);
   } finally {

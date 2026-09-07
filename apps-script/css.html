@@ -303,6 +303,23 @@ main { flex-grow: 1; padding: 18px 26px 32px; max-width: 1240px; width: 100%; }
 .card.flush { padding: 0; overflow: hidden; }
 .retry-row { margin-top: 14px; }
 
+/* การ์ดที่บอกสถานะซึ่งต้องสังเกตเห็น เช่นยังไม่มีผู้ดูแล หรือโหมดทดสอบเปิดอยู่ */
+.card-warn { border-color: #f3cfc4; background: #fffaf8; }
+.card-warn > h2 { color: var(--warn); }
+/* คำอธิบายในการ์ด ใช้แทนการเขียน style ซ้ำ ๆ ติดไปกับ p แต่ละอัน */
+.card .note { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.6; }
+
+/* บรรทัดรองในช่องตาราง เช่นวันที่เพิ่มผู้ใช้ ซึ่งไม่คุ้มที่จะกินคอลัมน์ของตัวเอง */
+.cell-sub { display: block; font-size: 12px; color: var(--faint); margin-top: 2px; }
+/* ปุ่มหลายตัวในช่องเดียว ต้องขึ้นบรรทัดใหม่ได้เมื่อคอลัมน์แคบ */
+.cell-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.table-search { padding: 14px 22px 0; }
+/*
+  แถวที่ถูกกรองออกด้วยช่องค้นหา ต้องซ่อนได้ทั้งตารางปกติและตารางแบบการ์ดบนมือถือ
+  ซึ่งตั้ง display เป็น block ทับค่าปริยายของแอตทริบิวต์ hidden ไว้
+*/
+tr[hidden] { display: none !important; }
+
 .back {
   display: inline-flex; align-items: center; gap: 7px;
   background: none; border: 0; padding: 0 0 14px; cursor: pointer;

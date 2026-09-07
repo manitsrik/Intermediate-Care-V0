@@ -141,6 +141,31 @@ function fileEditors_() {
 }
 
 /**
+ * อีเมลเจ้าของไฟล์ Sheet คืนค่าว่างถ้าไม่มีหรืออ่านไม่ได้
+ * ไฟล์ที่อยู่ใน Shared Drive ไม่มีเจ้าของรายบุคคล getOwner() จะคืน null
+ *
+ * หน้าจอต้องรู้ว่าใครเป็นเจ้าของ เพราะเจ้าของถอนสิทธิ์ไฟล์ไม่ได้
+ * ถ้าไม่บอกไว้ก่อน ผู้ดูแลจะกดปุ่มถอนสิทธิ์แล้วเจอข้อความผิดพลาดโดยไม่รู้ตัวว่าทำไม
+ */
+function fileOwnerEmail_() {
+  try {
+    var owner = SpreadsheetApp.getActiveSpreadsheet().getOwner();
+    return owner ? String(owner.getEmail()).toLowerCase() : '';
+  } catch (e) {
+    return '';
+  }
+}
+
+/** ลิงก์เปิดไฟล์ Sheet ไว้ให้กดจากหน้าตั้งค่า ซึ่งเป็นหน้าที่พูดเรื่องสิทธิ์บนไฟล์ */
+function sheetUrl_() {
+  try {
+    return SpreadsheetApp.getActiveSpreadsheet().getUrl();
+  } catch (e) {
+    return '';
+  }
+}
+
+/**
  * แชร์ไฟล์ Sheet ให้ผู้ใช้ในสิทธิ์ผู้แก้ไข
  * จำเป็นเพราะแอปตั้งค่าให้แต่ละคนรันสคริปต์ด้วยบัญชีตัวเอง
  * ถ้าไม่มีสิทธิ์แก้ไขไฟล์จะเปิดแอปได้แต่กดบันทึกไม่ผ่าน
@@ -209,6 +234,7 @@ function apiRevokeFile(email) {
 function apiListUsers() {
   requireAdmin_();
   var editors = fileEditors_();
+  var owner = fileOwnerEmail_();
 
   return readAll_(SHEETS.USERS)
     .filter(function (u) { return String(u.email).trim(); })
@@ -220,9 +246,21 @@ function apiListUsers() {
         role: String(u.role || 'staff').toLowerCase(),
         active: String(u.active).toUpperCase() !== 'FALSE',
         added_at: u.added_at || '',
+        isOwner: !!owner && email.toLowerCase() === owner,
         // null = ตรวจสิทธิ์ไฟล์ไม่ได้ ไม่ใช่ว่าไม่มีสิทธิ์
         fileAccess: editors === null ? null : (editors.indexOf(email.toLowerCase()) !== -1)
       };
+    })
+    /*
+      เรียงให้คนที่ต้องดูแลอยู่บนสุด คนที่ยังใช้งานก่อนคนที่ปิดไปแล้ว
+      ผู้ดูแลก่อนผู้ใช้ทั่วไป ที่เหลือเรียงตามอีเมล
+      เดิมเรียงตามลำดับแถวในชีต ซึ่งคือลำดับที่บังเอิญเพิ่มเข้ามา ไม่ได้บอกอะไรเลย
+    */
+    .sort(function (a, b) {
+      if (a.active !== b.active) return a.active ? -1 : 1;
+      var aAdmin = a.role === 'admin', bAdmin = b.role === 'admin';
+      if (aAdmin !== bAdmin) return aAdmin ? -1 : 1;
+      return a.email.localeCompare(b.email);
     });
 }
 
@@ -813,6 +851,7 @@ function apiBootstrap() {
     orgUnit: CONFIG.ORG_UNIT,
     orgPlace: CONFIG.ORG_PLACE,
     maskMode: maskMode_(),
+    sheetUrl: sheetUrl_(),
     biItems: BI_ITEMS,
     biMax: BI_MAX,
     // คำเต็มกับป้ายสั้นของงานค้าง หน้าจอจะได้ไม่ต้องมีรายการของตัวเองให้หลุดกัน

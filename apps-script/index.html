@@ -3,6 +3,12 @@
 <head>
   <base target="_top">
   <meta charset="utf-8">
+  <!--
+    ชื่อเอกสาร เบราว์เซอร์ใช้ตั้งชื่อไฟล์ตอนสั่ง "บันทึกเป็น PDF" และวาดบนหัวกระดาษ
+    ถ้าไม่มี จะได้ชื่อไฟล์เป็น index.html ซึ่งบอกไม่ได้ว่าเป็นเอกสารอะไร
+    fillPrintHeader() ใน js.html เขียนทับให้ตรงกับหน้าที่กำลังพิมพ์พร้อมวันที่
+  -->
+  <title>Intermediate Care - โรงพยาบาลกระบี่</title>
   <?!= include('css'); ?>
 </head>
 <body>
@@ -49,7 +55,7 @@
       </div>
 
       <div class="top-actions">
-        <button class="ic-btn" id="btn-pdf" aria-label="บันทึกหน้าแดชบอร์ดเป็น PDF">
+        <button class="ic-btn" id="btn-pdf" aria-label="บันทึกหน้านี้เป็น PDF">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M14 3H7.4A1.4 1.4 0 0 0 6 4.4v15.2A1.4 1.4 0 0 0 7.4 21h9.2a1.4 1.4 0 0 0 1.4-1.4V7z"></path>
@@ -100,6 +106,28 @@
       </button>
     </header>
 
+    <!--
+      หัวกระดาษ โผล่เฉพาะตอนพิมพ์ ดูกฎที่ .letterhead ใน css
+      วางไว้นอก <main> เพราะ main ถูกเขียนทับใหม่ทุกครั้งที่เปลี่ยนหน้า
+      อยู่ตรงนี้จึงติดไปกับกระดาษทุกหน้าที่พิมพ์ได้ โดยไม่ต้องให้แต่ละหน้าวาดเอง
+    -->
+    <header class="letterhead" aria-hidden="true">
+      <span class="lh-mark">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M9.6 2.6h4.8v4.2h4.2v4.8h-4.2v4.2H9.6v-4.2H5.4V6.8h4.2z" fill="currentColor"/>
+          <path d="M6.2 17.4h11.6v4H6.2z" fill="currentColor" opacity=".45"/>
+        </svg>
+      </span>
+      <span class="lh-org">
+        <strong id="lh-place">โรงพยาบาลกระบี่</strong>
+        <small id="lh-unit">กลุ่มงานเวชกรรมฟื้นฟู</small>
+      </span>
+      <span class="lh-meta">
+        <strong id="lh-app">Intermediate Care</strong>
+        <small id="lh-date"></small>
+      </span>
+    </header>
+
     <div class="mask-banner" id="mask-banner" hidden>โหมดทดสอบ</div>
     <div class="net-banner" id="net-banner" role="status" aria-live="polite" hidden>
       ออฟไลน์ — บันทึกข้อมูลไม่ได้จนกว่าจะต่อเน็ตใหม่
@@ -108,6 +136,12 @@
     <main id="main"><div class="loading">กำลังโหลด…</div></main>
 
     <footer class="app-foot">Care &nbsp;•&nbsp; Recover &nbsp;•&nbsp; Return to Life</footer>
+
+    <!-- ท้ายกระดาษ แทนที่ท้ายกระดาษของเบราว์เซอร์ซึ่งพิมพ์พาธไฟล์ออกมาบนเอกสาร -->
+    <footer class="print-foot" aria-hidden="true">
+      <span id="pf-org">กลุ่มงานเวชกรรมฟื้นฟู โรงพยาบาลกระบี่</span>
+      <span id="pf-date"></span>
+    </footer>
   </div>
 
   <nav class="bottomnav" id="bottomnav"></nav>

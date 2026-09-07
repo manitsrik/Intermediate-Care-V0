@@ -58,7 +58,10 @@ var doc = {
 var win = {
   scrollTo: function () {},
   setTimeout: function (fn) { return 0; },
-  clearTimeout: function () {}
+  clearTimeout: function () {},
+  // แอปผูก beforeprint ไว้เติมหัวกระดาษ ตัวจำลองต้องรับไว้ได้ ไม่งั้นสคริปต์ล้มตั้งแต่โหลด
+  addEventListener: function () {},
+  removeEventListener: function () {}
 };
 
 /* ------------------------------------------------------------- รันจริง */

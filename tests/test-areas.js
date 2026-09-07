@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const ctx = vm.createContext({ console });
-for (const file of ['Config.gs', 'Geography.gs', 'Util.gs', 'Schema.gs', 'Api.gs']) {
+for (const file of ['Config.gs', 'Bi.gs', 'Geography.gs', 'Util.gs', 'Schema.gs', 'Api.gs']) {
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../apps-script', file), 'utf8'), ctx);
 }
 let count = 0;
@@ -324,6 +324,196 @@ test('ปฏิเสธไตรมาสที่ไม่มีปีงบ�
   assert.throws(() => ctx.apiReport({ fq: 'Q1' }), /เลือกปีงบ/);
   assert.throws(() => ctx.apiReport({ fy: 'FY2569', fq: 'Q9' }));
   assert.throws(() => ctx.apiReport({ fy: 'FY2569', fq: '__proto__' }));
+});
+test('ทุกการ์ดนับได้เท่าฐานของตัวเอง และฐานไม่เท่ากันจริง', () => {
+  const r = ctx.apiReport();
+  const sum = (rows) => rows.reduce((s, x) => s + x.count, 0);
+
+  assert.equal(sum(r.wards), r.bases.wards);
+  assert.equal(sum(r.adl), r.bases.adl);
+  assert.equal(sum(r.dcReasons), r.bases.dcReasons);
+  assert.equal(sum(r.buckets), r.bases.buckets);
+  assert.equal(sum(r.programs), r.bases.programs);
+  assert.equal(sum(r.dxGroups), r.bases.dxGroups);
+
+  // ถ้าฐานเท่ากันหมด การเขียนกำกับก็ไม่ได้แก้ปัญหาอะไร ต้องมีใบที่ฐานต่างกันจริง
+  assert.equal(r.bases.wards, r.total);
+  assert.equal(r.bases.adl, r.assessed);
+  assert.equal(r.bases.dcReasons, r.closed);
+  assert.ok(r.bases.adl < r.bases.wards, 'ฐานกลุ่ม ADL ต้องเล็กกว่าฐานผู้ป่วยทั้งหมด');
+  assert.ok(r.bases.dcReasons < r.bases.wards, 'ฐานเหตุจบต้องเล็กกว่าฐานผู้ป่วยทั้งหมด');
+});
+test('"ไม่ระบุ" อยู่ล่างสุดเสมอ ไม่แทรกกลางกลุ่มที่มีความหมาย', () => {
+  patients[0].ward = 'SU'; patients[1].ward = 'SU'; patients[2].ward = 'SU';
+  patients[3].ward = 'ortho';                        // ที่เหลืออีกหกรายไม่มี ward
+
+  const rows = ctx.apiReport().wards;
+  assert.equal(rows[0].name, 'SU');                  // มากสุดอยู่บน
+  assert.equal(rows[rows.length - 1].name, 'ไม่ระบุ');
+  // "ไม่ระบุ" มีหกราย มากกว่าทุกกลุ่มจริง ถ้าเรียงตามจำนวนล้วนมันจะขึ้นไปอยู่บนสุด
+  assert.equal(rows[rows.length - 1].count, 6);
+  assert.ok(rows[rows.length - 1].count > rows[0].count);
+
+  ['ward'].forEach(k => patients.forEach(p => { delete p[k]; }));
+});
+test('กดแท่งแล้วได้รายชื่อชุดเดียวกับที่นับ ไม่ใช่คนละชุด', () => {
+  patients[0].ward = 'SU'; patients[1].ward = 'SU';
+  const r = ctx.apiReport();
+
+  r.wards.forEach(row => {
+    const rows = r.patients.filter(p => p.groups.ward === row.name);
+    assert.equal(rows.length, row.count, 'ward ' + row.name);
+  });
+  r.adl.forEach(row => {
+    assert.equal(r.patients.filter(p => p.groups.adl === row.name).length, row.count);
+  });
+  // เคสที่ยังไม่ปิดต้องไม่มีเหตุจบติดมา ไม่งั้นจะไปโผล่ในแท่งเหตุจบเป็น "ไม่ระบุ"
+  assert.ok(r.patients.every(p => p.status === 'closed' || p.groups.dcReason === ''));
+
+  patients.forEach(p => { delete p.ward; });
+});
+test('กรองตามสถานะได้ และทุกแท่งนับใหม่จากชุดที่เหลือ', () => {
+  const closed = patients.filter(p => p.status === 'closed');
+  const active = patients.filter(p => p.status !== 'closed');
+
+  const c = ctx.apiReport({ status: 'closed' });
+  assert.equal(c.total, closed.length);
+  assert.equal(c.bases.wards, closed.length);
+  assert.ok(c.patients.every(p => p.status === 'closed'));
+
+  const a = ctx.apiReport({ status: 'active' });
+  assert.equal(a.total, active.length);
+  assert.equal(a.closed, 0);
+  assert.equal(a.bases.dcReasons, 0);            // ไม่มีใครจบ แท่งเหตุจบจึงไม่มีฐาน
+  assert.equal(a.dcReasons.length, 0);
+
+  assert.throws(() => ctx.apiReport({ status: 'ทุกสถานะ' }), /สถานะ/);
+});
+test('กรองตามกลุ่มการวินิจฉัยได้ และตัวเลือกไม่หายตอนกรองพื้นที่', () => {
+  patients[0].dx_group = 'stroke'; patients[1].dx_group = 'stroke'; patients[4].dx_group = 'TBI';
+
+  const all = ctx.apiReport();
+  assert.equal(all.dxOptions.join(','), 'TBI,stroke');
+
+  const stroke = ctx.apiReport({ dxGroup: 'stroke' });
+  assert.equal(stroke.total, 2);
+  assert.equal(stroke.dxGroups.length, 1);
+  assert.equal(stroke.dxGroups[0].name, 'stroke');
+
+  // TEST E อยู่ระนอง กรองพื้นที่เป็นกระบี่แล้วต้องไม่เหลือ แต่ตัวเลือก TBI ยังต้องอยู่
+  const krabi = ctx.apiReport({ scope: 'krabi', dxGroup: 'TBI' });
+  assert.equal(krabi.total, 0);
+  assert.ok(krabi.dxOptions.indexOf('TBI') !== -1);
+
+  patients.forEach(p => { delete p.dx_group; });
+});
+test('ช่องที่กรอกไม่ครบถูกรวมไว้ที่เดียว และตรงกับรายชื่อที่กดดู', () => {
+  const r = ctx.apiReport();
+  r.gaps.forEach(g => {
+    assert.equal(r.patients.filter(p => p.gaps.indexOf(g.key) !== -1).length, g.count, g.key);
+  });
+
+  // F I J ยืนยันจังหวัด/อำเภอไม่ได้ ส่วน E อยู่ต่างจังหวัดซึ่งระบุไว้ชัดแล้ว ไม่นับว่าขาด
+  const area = r.gaps.filter(g => g.key === 'area')[0];
+  assert.equal(area.count, 3);
+  assert.ok(r.patients.filter(p => p.hn === 'E')[0].gaps.indexOf('area') === -1);
+
+  // C D F G H I J ยังไม่เคยประเมิน ส่วน A B E มีใบประเมินแล้ว
+  assert.equal(r.gaps.filter(g => g.key === 'bi')[0].count, patients.length - 3);
+});
+test('ตัวชี้วัดผลลัพธ์คิดจากข้อมูลที่มีจริง ไม่เดาให้เมื่อยังไม่มีอะไรให้เทียบ', () => {
+  const o = ctx.apiReport().outcome;
+
+  assert.equal(o.base, patients.length);           // ทุกคนมีทั้ง first_bi และ latest_bi
+  assert.equal(o.avgFirst, 6.1);
+  assert.equal(o.avgLatest, 10.3);
+  assert.equal(o.avgGain, 4.2);
+  assert.equal(o.improved + o.same + o.declined, o.base);
+
+  /*
+    มีใบประเมินที่ลงวันที่ไว้สองใบแค่ A B E เท่านั้น อีกเจ็ดรายยังไม่มีอะไรให้เทียบ
+    ต้องไม่ถูกนับเป็น "คงที่" ไม่งั้นจะดูเหมือนดูแลไปแล้วเจ็ดรายไม่ขยับ
+  */
+  assert.equal(o.adlShift.base, 3);
+  assert.equal(o.adlShift.up, 1);                  // E ติดเตียง 0 -> ติดสังคม 20
+  assert.equal(o.adlShift.same, 2);
+  assert.equal(o.adlShift.down, 0);
+
+  assert.equal(o.sixMonth.base, 1);                // มีเคสปิดใบเดียวที่มีวันครบทั้งสองด้าน
+  assert.equal(o.sixMonth.stayed, 0);              // อยู่ 32 วัน ยังไม่ถึง 183
+
+  // ไม่มีใครกรอกจำนวนครั้ง PT หรือวัน D/C ต้องคืน null ไม่ใช่ศูนย์ที่อ่านเหมือนวัดแล้วได้ศูนย์
+  assert.equal(o.ptVisits.base, 0);
+  assert.equal(o.ptVisits.median, null);
+  assert.equal(o.admitToStart.base, 0);
+  assert.equal(o.admitToStart.avg, null);
+});
+test('ผู้ป่วยมีเพียงใบประเมินเดียวยังไม่ถูกนับว่ากลุ่ม ADL คงที่', () => {
+  assessments.push({ hn: 'D', assess_date: '2026-08-05', total: 10 });
+  const o = ctx.apiReport().outcome;
+  assert.equal(o.adlShift.base, 3, 'D มีใบเดียว ยังเทียบไม่ได้');
+
+  assessments.push({ hn: 'D', assess_date: '2026-08-25', total: 10 });
+  const after = ctx.apiReport().outcome;
+  assert.equal(after.adlShift.base, 4, 'ประเมินใบที่สองแล้วจึงเข้าฐาน');
+  assert.equal(after.adlShift.same, 3);
+
+  assessments.length -= 2;
+});
+test('แจกแจงรายพื้นที่นับทุกคนครั้งเดียว และแตกเป็นรายตำบลเมื่อเจาะอำเภอ', () => {
+  const r = ctx.apiReport();
+  assert.equal(r.areaLevel, 'district');
+  assert.equal(r.areas.reduce((s, x) => s + x.total, 0), r.total);
+  r.areas.forEach(x => {
+    assert.equal(x.bed + x.home + x.social + x.unassessed, x.total, x.name);
+    assert.equal(r.patients.filter(p => p.groups.area === x.key).length, x.total, x.name);
+  });
+  assert.ok(r.areas.every(x => x.total > 0), 'พื้นที่ที่ไม่มีผู้ป่วยต้องถูกตัดออก');
+
+  const city = ctx.apiReport({ scope: 'krabi', district: 'เมืองกระบี่' });
+  assert.equal(city.areaLevel, 'tambon');
+  assert.equal(city.areas.reduce((s, x) => s + x.total, 0), city.total);
+});
+test('เลือกปีงบแล้วได้ตัวเลขงวดก่อนมาเทียบ ไม่เลือกก็ไม่มี', () => {
+  assert.equal(ctx.apiReport().prev, null);
+
+  const y = ctx.apiReport({ fy: 'FY2569' });
+  assert.equal(y.prev.key, 'FY2568');
+  assert.equal(y.prev.label, 'ปีงบ 2568');
+  assert.equal(y.prev.total, 0);
+
+  const q = ctx.apiReport({ fy: 'FY2569', fq: 'Q4' });
+  assert.equal(q.prev.key, 'FY2569-Q3');
+  assert.equal(q.prev.label, 'ปีงบ 2569 ไตรมาส 3');
+
+  // งวดก่อนใช้ตัวกรองชุดเดียวกัน ไม่งั้นเลขที่เอามาเทียบเป็นคนละกลุ่มผู้ป่วย
+  const scoped = ctx.apiReport({ scope: 'krabi', district: 'เมืองกระบี่', fy: 'FY2569' });
+  assert.equal(scoped.prev.key, 'FY2568');
+  assert.equal(scoped.prev.total, 0);
+});
+test('เดินงวดถอยหลังถูกต้องทุกโหมด รวมตอนข้ามปี', () => {
+  assert.equal(ctx.prevPeriod_('FY2570', 'years'), 'FY2569');
+  assert.equal(ctx.prevPeriod_('FY2570-Q1', 'quarters'), 'FY2569-Q4');
+  assert.equal(ctx.prevPeriod_('FY2569-Q2', 'quarters'), 'FY2569-Q1');
+  assert.equal(ctx.prevPeriod_('2026-01', 'months'), '2025-12');
+  assert.equal(ctx.prevPeriod_('2026-02', 'months'), '2026-01');
+
+  // ไปแล้วกลับต้องได้ที่เดิม ทั้งสองทิศต้องนับงวดแบบเดียวกัน
+  ['FY2569', 'FY2569-Q3', '2026-05'].forEach(key => {
+    const mode = key.indexOf('-Q') !== -1 ? 'quarters' : (key.indexOf('FY') === 0 ? 'years' : 'months');
+    assert.equal(ctx.prevPeriod_(ctx.nextPeriod_(key, mode), mode), key, key);
+  });
+});
+test('ค่ากลางทนต่อค่าสุดโต่งที่ค่าเฉลี่ยไม่ทน', () => {
+  assert.equal(ctx.medianOf_([]), null);
+  assert.equal(ctx.medianOf_([7]), 7);
+  assert.equal(ctx.medianOf_([1, 2, 3, 4]), 2.5);
+  assert.equal(ctx.medianOf_([3, 1, 2]), 2);        // ไม่ต้องเรียงมาก่อน
+
+  // สี่รายรอราวสองสัปดาห์ อีกรายรอทั้งปี ค่าเฉลี่ยเด้งไปเกินสองเดือน ค่ากลางไม่ขยับ
+  const days = [12, 14, 15, 16, 365];
+  assert.equal(ctx.medianOf_(days), 15);
+  assert.equal(ctx.avgOf_(days), 84.4);
 });
 test('บันทึกพื้นที่ลงคอลัมน์ใหม่ และยังเก็บคะแนน BI เดิมครบ', () => {
   patients = [{ ...patients[0], patient_id: 1, _row: 2, bi_1: 5, bi_5: 10 }];

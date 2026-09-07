@@ -260,24 +260,99 @@ function apiSaveUser(form) {
   });
 }
 
-/* ---------------------------------------------------------------- ตั้งต้น */
+/* ----------------------------------------------------------------- รายงาน */
 
-/** ข้อมูลชุดแรกที่หน้าเว็บต้องใช้ เรียกครั้งเดียวตอนเปิดแอป */
 /**
- * ส่งรายชื่อผู้ป่วยกลับไปพร้อมข้อมูลตั้งต้นด้วย
- * การคุยกับ Apps Script หนึ่งรอบใช้เวลาหลายวินาที การรวมสองรอบเป็นรอบเดียว
- * ทำให้หน้าแรกขึ้นเร็วขึ้นเท่าตัว ส่วนที่เพิ่มมาคืออ่านชีตอีกใบเดียว
+ * ระดับการช่วยเหลือตัวเองของกลุ่ม ADL เลขมากคือพึ่งพาคนอื่นน้อยลง
+ * ใช้เทียบผลประเมินครั้งแรกกับครั้งล่าสุดว่าผู้ป่วยขยับกลุ่มขึ้นหรือลง
  */
+var ADL_RANK = { 'ติดเตียง': 0, 'ติดบ้าน': 1, 'ติดสังคม': 2 };
+
+/** ป้ายของช่องที่ยังไม่ได้กรอก เขียนไว้ที่เดียวเพราะทั้งการนับ การเรียง และการเจาะรายชื่อต้องใช้ค่าเดียวกัน */
+var UNSPECIFIED = 'ไม่ระบุ';
+
+/**
+ * ช่องที่หน้ารายงานถือว่ายังกรอกไม่ครบ
+ *
+ * แยกจาก ATTENTION ของแดชบอร์ดเพราะตอบคนละคำถาม ATTENTION ถามว่าต้องไปทำอะไรกับผู้ป่วย
+ * ส่วนตรงนี้ถามว่าตัวเลขในรายงานเชื่อได้แค่ไหน ช่องที่ว่างจะไปโผล่เป็น "ไม่ระบุ" กระจาย
+ * อยู่ในหลายการ์ด รวมมาไว้ที่เดียวจึงเห็นขนาดของปัญหาและกดเข้าไปแก้ได้
+ */
+var REPORT_GAPS = [
+  { key: 'area',    label: 'ยังไม่ระบุพื้นที่' },
+  { key: 'start',   label: 'ไม่มีวัน Start' },
+  { key: 'bi',      label: 'ยังไม่เคยประเมิน BI' },
+  { key: 'dx',      label: 'ไม่ระบุการวินิจฉัย' },
+  { key: 'ward',    label: 'ไม่ระบุหอผู้ป่วย' },
+  { key: 'program', label: 'ไม่ระบุรูปแบบโปรแกรม' },
+  { key: 'reason',  label: 'ปิดเคสแล้วแต่ไม่ระบุเหตุจบ' }
+];
+
+/** ช่วงคะแนนตามเกณฑ์ ADL ที่ใช้แบ่งกลุ่ม ติดเตียง 0-4 ติดบ้าน 5-11 ติดสังคม 12 ขึ้นไป */
+var BI_BUCKETS = [
+  { label: '0–4 (ติดเตียง)', min: 0, max: 4 },
+  { label: '5–11 (ติดบ้าน)', min: 5, max: 11 },
+  { label: '12–19 (ติดสังคม)', min: 12, max: 19 },
+  { label: '20 (เต็ม)', min: 20, max: 20 }
+];
+
+/** ค่ากลางของรายการตัวเลข รายงานคู่กับค่าเฉลี่ยเพราะข้อมูลไม่กี่สิบรายเบ้ง่ายจากตัวสุดโต่งรายเดียว */
+function medianOf_(list) {
+  if (!list.length) return null;
+  var s = list.slice().sort(function (a, b) { return a - b; });
+  var mid = Math.floor(s.length / 2);
+  return Math.round((s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2) * 10) / 10;
+}
+
+/** งวดก่อนหน้า ตรงข้ามกับ nextPeriod_() ใช้ดึงตัวเลขของงวดที่แล้วมาเทียบ */
+function prevPeriod_(key, mode) {
+  if (mode === 'months') {
+    var y = parseInt(key.slice(0, 4), 10);
+    var m = parseInt(key.slice(5, 7), 10) - 1;
+    if (m < 1) { m = 12; y--; }
+    return y + '-' + (m < 10 ? '0' + m : String(m));
+  }
+  if (mode === 'years') return 'FY' + (parseInt(key.slice(2), 10) - 1);
+
+  var fy = parseInt(key.slice(2, 6), 10);
+  var q = parseInt(key.slice(8), 10) - 1;
+  if (q < 1) { q = 4; fy--; }
+  return 'FY' + fy + '-Q' + q;
+}
+
+/** ชื่องวดที่อ่านออก ใช้ทั้งบนหัวเรื่องและบนป้ายเทียบงวดก่อน */
+function periodLabel_(key) {
+  if (!key) return 'ทุกปีงบ';
+  var p = String(key).split('-Q');
+  return 'ปีงบ ' + p[0].replace('FY', '') + (p[1] ? ' ไตรมาส ' + p[1] : '');
+}
+
+/**
+ * ช่องที่ผู้ป่วยรายนี้ยังกรอกไม่ครบ คืนรหัสเหตุผล อาจขาดหลายช่องพร้อมกัน
+ * รับ groups ที่คำนวณไว้แล้วมาใช้ต่อ จะได้ไม่ตีความคำว่า "ว่าง" คนละแบบกับตอนนับแท่ง
+ */
+function gapFlags_(p, groups, everAssessed) {
+  var flags = [];
+  if (patientArea_(p).districtKey === '__unknown') flags.push('area');
+  if (String(p.start_date || '').length < 7) flags.push('start');
+  if (!everAssessed) flags.push('bi');
+  if (groups.dx === UNSPECIFIED) flags.push('dx');
+  if (groups.ward === UNSPECIFIED) flags.push('ward');
+  if (groups.program === UNSPECIFIED) flags.push('program');
+  if (groups.dcReason === UNSPECIFIED) flags.push('reason');
+  return flags;
+}
+
 /**
  * ข้อมูลหน้ารายงาน สรุปตามกลุ่มที่ใช้ตัดสินใจงานจริง
- * กลุ่ม ADL มาจากผลประเมินครั้งล่าสุดของแต่ละคน ไม่ใช่ครั้งแรก
- */
-/**
- * สรุปองค์ประกอบของผู้ป่วย รับตัวกรองพื้นที่และปีงบเหมือนแดชบอร์ด
  *
- * ปีงบคัดจาก start_date ฐานเดียวกับกราฟผู้ป่วยเข้าใหม่บนแดชบอร์ด
+ * ปีงบและไตรมาสคัดจาก start_date ฐานเดียวกับกราฟผู้ป่วยเข้าใหม่บนแดชบอร์ด
  * คือ "ผู้ป่วยที่เริ่มโปรแกรมในปีงบนั้น" ไม่ใช่ "ที่จบในปีงบนั้น"
  * ตรงกับวิธีนับของรายงาน IMC ที่ส่งเขต และทำให้สองหน้าพูดภาษาเดียวกัน
+ *
+ * ทุกกลุ่มที่ใช้นับถูกติดไว้กับผู้ป่วยแต่ละรายใน o.groups ตั้งแต่ต้น แล้วทั้งแท่ง ฐาน
+ * และรายชื่อที่กดเข้าไปดูอ่านจากที่นั่นที่เดียว ตัวเลขบนแท่งกับจำนวนรายชื่อจึงไม่มีทาง
+ * เพี้ยนจากกัน วิธีเดียวกับที่กล่องงานค้างบนแดชบอร์ดใช้อยู่
  */
 function apiReport(opts) {
   currentUser_();
@@ -285,101 +360,312 @@ function apiReport(opts) {
   var filter = areaFilter_(opts);
   var fy = String(opts.fy || '');
   var fq = String(opts.fq || '');
+  var status = String(opts.status || '');
+  var dxGroup = String(opts.dxGroup || '');
 
   if (fq && !fy) throw new Error('กรุณาเลือกปีงบก่อนเลือกไตรมาส');
   if (fq && !FISCAL_QUARTERS.some(function (q) { return q.key === fq; })) {
     throw new Error('ไตรมาสไม่ถูกต้อง');
   }
+  if (status && ['active', 'closed'].indexOf(status) === -1) throw new Error('สถานะไม่ถูกต้อง');
 
   // เลือกไตรมาสก็เทียบกุญแจระดับไตรมาส ไม่เลือกก็เทียบระดับปีงบ ใช้ตัวเดียวกันทั้งคู่
   var wanted = fy ? (fq ? fy + '-' + fq : fy) : '';
   var mode = fq ? 'quarters' : 'years';
 
   var all = readAll_(SHEETS.PATIENTS);
-  var patients = all.filter(function (p) {
-    if (!matchesArea_(p, filter)) return false;
-    return !wanted || periodKey_(p.start_date, mode) === wanted;
-  });
 
-  // ตัวเลือกปีงบคิดจากผู้ป่วยทุกคนก่อนกรอง ตัวเลือกจะได้ไม่หายไปตอนเปลี่ยนพื้นที่
-  var seenFy = {};
+  // ตัวเลือกในดรอปดาวน์คิดจากผู้ป่วยทุกคนก่อนกรอง ตัวเลือกจะได้ไม่หายไปตอนเปลี่ยนตัวกรองอื่น
+  var seenFy = {}, seenDx = {};
   all.forEach(function (p) {
     var k = periodKey_(p.start_date, 'years');
     if (k) seenFy[k] = true;
-  });
-  var fiscalYears = Object.keys(seenFy).sort().reverse();
-  var latest = {};
-  readAll_(SHEETS.BI).forEach(function (r) {
-    var hn = String(r.hn), d = String(r.assess_date || '');
-    if (!latest[hn] || d >= latest[hn].date) latest[hn] = { date: d, adl: String(r.adl_group || ''), total: r.total };
+    var d = String(p.dx_group || p.dx || '').trim();
+    if (d) seenDx[d] = true;
   });
 
-  var tally = function (list, pick) {
-    var map = {};
-    list.forEach(function (p) {
-      var k = String(pick(p) || '').trim() || 'ไม่ระบุ';
-      map[k] = (map[k] || 0) + 1;
-    });
-    return Object.keys(map)
-      .map(function (k) { return { name: k, count: map[k] }; })
-      .sort(function (a, b) { return b.count - a.count; });
+  var keep = function (p, wantKey) {
+    if (!matchesArea_(p, filter)) return false;
+    if (wantKey && periodKey_(p.start_date, mode) !== wantKey) return false;
+    if (status && (String(p.status) === 'closed' ? 'closed' : 'active') !== status) return false;
+    return !dxGroup || String(p.dx_group || p.dx || '').trim() === dxGroup;
   };
 
-  // ช่วงคะแนนตามเกณฑ์ ADL ที่ใช้แบ่งกลุ่มผู้สูงอายุ ติดเตียง 0-4 ติดบ้าน 5-11 ติดสังคม 12 ขึ้นไป
-  var buckets = [
-    { label: '0–4 (ติดเตียง)', min: 0, max: 4, count: 0 },
-    { label: '5–11 (ติดบ้าน)', min: 5, max: 11, count: 0 },
-    { label: '12–19 (ติดสังคม)', min: 12, max: 19, count: 0 },
-    { label: '20 (เต็ม)', min: 20, max: 20, count: 0 }
-  ];
-
-  var progress = [];
-  patients.forEach(function (p) {
-    var a = parseFloat(p.first_bi), b = parseFloat(p.latest_bi);
-    if (isNaN(b)) return;
-    buckets.forEach(function (k) { if (b >= k.min && b <= k.max) k.count++; });
-    if (isNaN(a)) return;
-    progress.push({
-      hn: p.hn,
-      name: [p.prefix, p.first_name, p.last_name].filter(String).join(' ').trim(),
-      dx: p.dx,
-      ward: p.ward,
-      first: a,
-      latest: b,
-      gain: b - a,
-      adl: (latest[String(p.hn)] || {}).adl || '',
-      status: p.status
-    });
-  });
-  progress.sort(function (x, y) { return y.gain - x.gain; });
-
-  var assessed = patients.filter(function (p) { return latest[String(p.hn)]; });
+  var patients = all.filter(function (p) { return keep(p, wanted); });
 
   /*
-    เหตุจบนับเฉพาะเคสที่ปิดแล้ว ถ้าเอาทุกคนมานับ เคสที่ยังดูแลอยู่จะไปกองรวมใน
-    "ไม่ระบุ" จนกลบสัดส่วนของเหตุจบจริง เปอร์เซ็นต์ในแท่งจึงคิดจากฐานเคสที่จบแล้ว
+    ดัชนีผลประเมินของแต่ละคน ทั้งครั้งแรกและครั้งล่าสุด
+
+    ใบที่ไม่มีวันที่ยังนับว่า "เคยประเมินแล้ว" แต่ไม่เอามาจัดลำดับ เพราะบอกไม่ได้ว่า
+    มาก่อนหรือหลังใบอื่น ถ้าเอาไปเทียบด้วยจะกลายเป็นใบแรกของทุกคนที่มีมัน
+    ส่วนกลุ่ม ADL ใช้ค่าที่บันทึกไว้ ถ้าว่าง (ข้อมูลนำเข้าบางแถว) จึงคิดจากคะแนนรวมแทน
   */
-  var closedCases = patients.filter(function (p) { return String(p.status) === 'closed'; });
+  var everAssessed = {}, firstAt = {}, lastAt = {}, datedCount = {};
+  readAll_(SHEETS.BI).forEach(function (r) {
+    var hn = String(r.hn);
+    everAssessed[hn] = true;
+    var d = String(r.assess_date || '');
+    if (!d) return;
+    var total = parseFloat(r.total);
+    var rec = {
+      date: d,
+      total: total,
+      adl: String(r.adl_group || '').trim() || (isNaN(total) ? '' : adlGroup_(total))
+    };
+    datedCount[hn] = (datedCount[hn] || 0) + 1;
+    if (!lastAt[hn] || d >= lastAt[hn].date) lastAt[hn] = rec;
+    if (!firstAt[hn] || d < firstAt[hn].date) firstAt[hn] = rec;
+  });
+
+  var bucketOf = function (v) {
+    var hit = BI_BUCKETS.filter(function (k) { return v >= k.min && v <= k.max; })[0];
+    return hit ? hit.label : '';
+  };
+
+  // เจาะอำเภอไว้แล้วก็แจกแจงต่อเป็นรายตำบล ยังไม่เจาะก็แจกแจงเป็นรายอำเภอ
+  var areaLevel = isDistrict_(filter.district) ? 'tambon' : 'district';
+
+  var views = patients.map(function (p) {
+    var hn = String(p.hn);
+    var o = displayPatient_(p);
+    var b = parseFloat(p.latest_bi);
+    o.groups = {
+      bucket: isNaN(b) ? '' : bucketOf(b),
+      adl: (lastAt[hn] || {}).adl || '',
+      dx: String(p.dx_group || p.dx || '').trim() || UNSPECIFIED,
+      ward: String(p.ward || '').trim() || UNSPECIFIED,
+      program: String(p.imc_program || '').trim() || UNSPECIFIED,
+      // เหตุจบว่างไว้สำหรับเคสที่ยังไม่ปิด ไม่ใช่ "ไม่ระบุ" เพราะยังไม่ถึงเวลาต้องกรอก
+      dcReason: String(p.status) === 'closed' ? (String(p.dc_reason || '').trim() || UNSPECIFIED) : '',
+      area: areaLevel === 'district' ? o.area.districtKey : o.area.tambonKey
+    };
+    o.gaps = gapFlags_(p, o.groups, !!everAssessed[hn]);
+    return o;
+  });
+
+  /*
+    นับจากค่าที่ติดอยู่กับผู้ป่วยแต่ละราย ไม่ได้ตีความใหม่จากคนละที่
+    ฐานคือจำนวนรายที่มีค่าในกลุ่มนั้นจริง แต่ละการ์ดจึงบอกฐานของตัวเองได้ถูกต้อง
+    โดยไม่ต้องมีใครไปจำว่าการ์ดไหนใช้ฐานอะไร
+  */
+  var tally = function (key) {
+    var map = {}, base = 0;
+    views.forEach(function (o) {
+      var k = o.groups[key];
+      if (!k) return;
+      base++;
+      map[k] = (map[k] || 0) + 1;
+    });
+    var rows = Object.keys(map).map(function (k) { return { name: k, count: map[k] }; });
+    // "ไม่ระบุ" ไม่ใช่กลุ่มจริง ดันไว้ล่างสุดเสมอ ไม่ให้แทรกกลางกลุ่มที่มีความหมาย
+    rows.sort(function (a, b) {
+      if ((a.name === UNSPECIFIED) !== (b.name === UNSPECIFIED)) return a.name === UNSPECIFIED ? 1 : -1;
+      return b.count - a.count;
+    });
+    return { rows: rows, base: base };
+  };
+
+  var bucketTally = tally('bucket');
+  var adlTally = tally('adl');
+  var dxTally = tally('dx');
+  var wardTally = tally('ward');
+  var programTally = tally('program');
+  var dcTally = tally('dcReason');
+
+  // แท่งการกระจายคะแนนเรียงตามช่วงคะแนนเสมอ ไม่ใช่ตามจำนวนราย ไม่งั้นแกนอ่านไม่ได้
+  var buckets = BI_BUCKETS.map(function (k) {
+    var hit = bucketTally.rows.filter(function (x) { return x.name === k.label; })[0];
+    return { label: k.label, min: k.min, max: k.max, count: hit ? hit.count : 0 };
+  });
+
+  /* ------------------------------------------------------------- ผลลัพธ์
+
+    แท่งข้างบนบอกว่าคนไข้กลุ่มนี้หน้าตาเป็นแบบไหน ส่วนตรงนี้บอกว่าดูแลแล้วได้ผลไหม
+    ซึ่งเป็นคำถามที่รายงาน IMC ต้องตอบจริง ทุกตัวคิดจากข้อมูลที่มีอยู่แล้วในชีต
+  */
+  var firsts = [], latests = [], gains = [];
+  var shiftUp = 0, shiftSame = 0, shiftDown = 0, shiftBase = 0;
+  var stayed = 0, stayBase = 0;
+  var ptVisits = [], toStart = [];
+
+  views.forEach(function (o) {
+    var hn = String(o.hn);
+    var a = parseFloat(o.first_bi), b = parseFloat(o.latest_bi);
+    if (!isNaN(a) && !isNaN(b)) { firsts.push(a); latests.push(b); gains.push(b - a); }
+
+    /*
+      เลื่อนกลุ่ม ADL ต้องมีใบประเมินที่ลงวันที่ไว้อย่างน้อยสองใบ
+      มีใบเดียวแปลว่ายังไม่มีอะไรให้เทียบ ถ้านับรวมจะไปกองอยู่ในช่อง "คงที่"
+      แล้วทำให้ดูเหมือนดูแลไปก็ไม่มีอะไรเปลี่ยน ทั้งที่ยังไม่ได้วัดซ้ำเลย
+    */
+    var f = firstAt[hn], l = lastAt[hn];
+    if ((datedCount[hn] || 0) >= 2 && f && l &&
+        ADL_RANK[f.adl] !== undefined && ADL_RANK[l.adl] !== undefined) {
+      shiftBase++;
+      var d = ADL_RANK[l.adl] - ADL_RANK[f.adl];
+      if (d > 0) shiftUp++; else if (d < 0) shiftDown++; else shiftSame++;
+    }
+
+    /*
+      อยู่ครบ 6 เดือนนับจากวันจริงที่เริ่มถึงวันจริงที่จบ ไม่ได้อ่านช่อง six_month_status
+      เพราะช่องนั้นเก็บผลตอนกดบันทึกครั้งสุดท้าย พอเวลาผ่านไปก็ค้างอยู่ที่ค่าเดิม
+      ฐานคือเคสที่ปิดแล้วและมีวันครบทั้งสองด้าน เคสที่ยังดูแลอยู่ยังตอบไม่ได้
+    */
+    if (String(o.status) === 'closed') {
+      var s = String(o.start_date || ''), e = String(o.end_date || '');
+      if (s.length >= 10 && e.length >= 10) {
+        stayBase++;
+        if (daysBetweenIso_(s, e) >= CONFIG.IMC_DURATION_DAYS) stayed++;
+      }
+    }
+
+    var pt = parseFloat(o.pt_visit_count);
+    if (!isNaN(pt) && pt >= 0) ptVisits.push(pt);
+
+    // ช่วงรอยต่อจากจำหน่ายออกจากหอผู้ป่วยถึงวันเริ่มโปรแกรม ยิ่งสั้นยิ่งได้ฟื้นฟูเร็ว
+    var days = daysBetweenIso_(String(o.dc_date || ''), String(o.start_date || ''));
+    if (days !== null && !isNaN(days) && days >= 0) toStart.push(days);
+  });
+
+  var outcome = {
+    base: gains.length,
+    avgFirst: avgOf_(firsts),
+    avgLatest: avgOf_(latests),
+    avgGain: avgOf_(gains),
+    improved: gains.filter(function (v) { return v > 0; }).length,
+    same: gains.filter(function (v) { return v === 0; }).length,
+    declined: gains.filter(function (v) { return v < 0; }).length,
+    adlShift: { up: shiftUp, same: shiftSame, down: shiftDown, base: shiftBase },
+    sixMonth: { stayed: stayed, base: stayBase },
+    ptVisits: { avg: avgOf_(ptVisits), median: medianOf_(ptVisits), base: ptVisits.length },
+    admitToStart: { avg: avgOf_(toStart), median: medianOf_(toStart), base: toStart.length }
+  };
+
+  /* --------------------------------------------------- แจกแจงรายพื้นที่
+
+    ตารางเทียบพื้นที่กับกลุ่ม ADL ในตารางเดียว ตอบคำถามที่แท่งเดี่ยว ๆ ตอบไม่ได้
+    คือพื้นที่ไหนผู้ป่วยหนักกว่ากัน แถวที่ไม่มีผู้ป่วยเลยตัดทิ้ง ตารางจะได้ไม่ยาวลอย
+  */
+  var areaKeys = areaLevel === 'district'
+    ? Object.keys(GEOGRAPHY.districts).concat(['__outside', '__unknown'])
+    : tambonsOf_(filter.district).concat(['__unknown']);
+
+  var nameOfArea = function (key) {
+    if (key === '__outside') return 'ต่างจังหวัด';
+    if (key === '__unknown') return areaLevel === 'district' ? 'ยังไม่ระบุพื้นที่' : 'ยังไม่ระบุตำบล / ต้องตรวจสอบ';
+    return key;
+  };
+
+  var areas = areaKeys.map(function (key) {
+    var rows = views.filter(function (o) { return o.groups.area === key; });
+    var g = [];
+    rows.forEach(function (o) {
+      var a = parseFloat(o.first_bi), b = parseFloat(o.latest_bi);
+      if (!isNaN(a) && !isNaN(b)) g.push(b - a);
+    });
+    var adlCount = function (name) {
+      return rows.filter(function (o) { return o.groups.adl === name; }).length;
+    };
+    return {
+      key: key,
+      name: nameOfArea(key),
+      total: rows.length,
+      bed: adlCount('ติดเตียง'),
+      home: adlCount('ติดบ้าน'),
+      social: adlCount('ติดสังคม'),
+      unassessed: rows.filter(function (o) { return !o.groups.adl; }).length,
+      avgGain: avgOf_(g)
+    };
+  }).filter(function (r) { return r.total > 0; })
+    .sort(function (a, b) { return b.total - a.total; });
+
+  /* ------------------------------------------------------- เทียบงวดก่อน
+
+    เลือกงวดไว้แล้วเห็นแค่ว่างวดนี้เป็นแบบไหน ยังตอบไม่ได้ว่าดีขึ้นหรือแย่ลง
+    จึงคิดตัวเลขหัวเรื่องของงวดก่อนด้วยตัวกรองชุดเดียวกันมาวางเทียบให้
+  */
+  var prev = null;
+  if (wanted) {
+    var prevKey = prevPeriod_(wanted, mode);
+    var prevRows = all.filter(function (p) { return keep(p, prevKey); });
+    var prevGains = [];
+    prevRows.forEach(function (p) {
+      var a = parseFloat(p.first_bi), b = parseFloat(p.latest_bi);
+      if (!isNaN(a) && !isNaN(b)) prevGains.push(b - a);
+    });
+    prev = {
+      key: prevKey,
+      label: periodLabel_(prevKey),
+      total: prevRows.length,
+      avgGain: avgOf_(prevGains),
+      improved: prevGains.filter(function (v) { return v > 0; }).length
+    };
+  }
+
+  var progress = views.filter(function (o) {
+    return !isNaN(parseFloat(o.first_bi)) && !isNaN(parseFloat(o.latest_bi));
+  }).map(function (o) {
+    var a = parseFloat(o.first_bi), b = parseFloat(o.latest_bi);
+    return {
+      hn: o.hn, name: o.full_name, dx: o.dx, ward: o.ward,
+      first: a, latest: b, gain: b - a, adl: o.groups.adl, status: o.status
+    };
+  }).sort(function (x, y) { return y.gain - x.gain; });
 
   return {
     filter: filter,
     fy: fy,
     fq: fq,
-    fiscalYears: fiscalYears,
+    status: status,
+    dxGroup: dxGroup,
+    periodLabel: periodLabel_(wanted),
+    fiscalYears: Object.keys(seenFy).sort().reverse(),
     fiscalQuarters: FISCAL_QUARTERS,
+    dxOptions: Object.keys(seenDx).sort(),
+    areaLevel: areaLevel,
     total: patients.length,
-    assessed: assessed.length,
-    adl: tally(assessed, function (p) { return (latest[String(p.hn)] || {}).adl; }),
-    dxGroups: tally(patients, function (p) { return p.dx_group || p.dx; }),
-    wards: tally(patients, function (p) { return p.ward; }),
-    programs: tally(patients, function (p) { return p.imc_program; }),
-    closed: closedCases.length,
-    dcReasons: tally(closedCases, function (p) { return p.dc_reason; }),
+    assessed: adlTally.base,
+    active: patients.length - dcTally.base,
+    closed: dcTally.base,
+    adl: adlTally.rows,
+    dxGroups: dxTally.rows,
+    wards: wardTally.rows,
+    programs: programTally.rows,
+    dcReasons: dcTally.rows,
     buckets: buckets,
-    progress: progress
+    // ฐานของแต่ละการ์ดไม่เท่ากัน หน้าจอจึงต้องเขียนกำกับไว้ทุกใบ ไม่ใช่แค่ใบเหตุจบ
+    bases: {
+      buckets: bucketTally.base,
+      adl: adlTally.base,
+      dxGroups: dxTally.base,
+      wards: wardTally.base,
+      programs: programTally.base,
+      dcReasons: dcTally.base
+    },
+    outcome: outcome,
+    areas: areas,
+    prev: prev,
+    gaps: REPORT_GAPS.map(function (it) {
+      return {
+        key: it.key,
+        label: it.label,
+        count: views.filter(function (o) { return o.gaps.indexOf(it.key) !== -1; }).length
+      };
+    }),
+    progress: progress,
+    patients: views
   };
 }
 
+/* ---------------------------------------------------------------- ตั้งต้น */
+
+/**
+ * ข้อมูลชุดแรกที่หน้าเว็บต้องใช้ เรียกครั้งเดียวตอนเปิดแอป
+ *
+ * ส่งรายชื่อผู้ป่วยกลับไปพร้อมข้อมูลตั้งต้นด้วย การคุยกับ Apps Script หนึ่งรอบ
+ * ใช้เวลาหลายวินาที การรวมสองรอบเป็นรอบเดียวทำให้หน้าแรกขึ้นเร็วขึ้นเท่าตัว
+ * ส่วนที่เพิ่มมาคืออ่านชีตอีกใบเดียว
+ */
 function apiBootstrap() {
   var user = currentUser_();
   ensurePatientAreaHeaders_();

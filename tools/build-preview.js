@@ -31,6 +31,8 @@ const geography = read('Geography.gs');
 // ใช้การคำนวณแดชบอร์ดจริง เพื่อให้พรีวิวตรวจยอดพื้นที่และค่าเทียบเดือนก่อนได้
 const apiSource = read('Api.gs');
 const dashboard = apiSource.slice(apiSource.indexOf('function prevMonthEnd_('));
+// หน้ารายงานใช้การคำนวณจริงเช่นกัน พรีวิวจะได้ไม่เพี้ยนจากของที่ deploy
+const report = apiSource.slice(apiSource.indexOf('var ADL_RANK'), apiSource.indexOf('function apiBootstrap()'));
 const displayPatient = apiSource.match(/function displayPatient_\(p\)[\s\S]*?\r?\n\}/)[0];
 
 const mock = `
@@ -39,6 +41,7 @@ ${config}
 ${bi}
 ${geography}
 ${dashboard}
+${report}
 ${displayPatient}
 
 /* ---------------------------------------------------- ข้อมูลปลอมสำหรับพรีวิว */
@@ -289,74 +292,7 @@ var API = {
 
   apiDashboard: function (opts) { return apiDashboard(opts); },
 
-  apiReport: function (opts) {
-    opts = opts || {};
-    var f = areaFilter_(opts);
-    var fy = String(opts.fy || '');
-    var fq = String(opts.fq || '');
-    var wanted = fy ? (fq ? fy + '-' + fq : fy) : '';
-    var mode = fq ? 'quarters' : 'years';
-    var seenFy = {};
-    DB.patients.forEach(function (x) {
-      var k = periodKey_(x.start_date, 'years');
-      if (k) seenFy[k] = true;
-    });
-    var picked = DB.patients.filter(function (x) {
-      return matchesArea_(x, f) && (!wanted || periodKey_(x.start_date, mode) === wanted);
-    });
-    var closedCases = picked.filter(function (x) { return x.status === 'closed'; });
-    var tally = function (pick, list) {
-      var map = {};
-      (list || picked).forEach(function (x) {
-        var k = String(pick(x) || '').trim() || 'ไม่ระบุ';
-        map[k] = (map[k] || 0) + 1;
-      });
-      return Object.keys(map)
-        .map(function (k) { return { name: k, count: map[k] }; })
-        .sort(function (a, b) { return b.count - a.count; });
-    };
-    var buckets = [
-      { label: '0–4 (ติดเตียง)', min: 0, max: 4, count: 0 },
-      { label: '5–11 (ติดบ้าน)', min: 5, max: 11, count: 0 },
-      { label: '12–19 (ติดสังคม)', min: 12, max: 19, count: 0 },
-      { label: '20 (เต็ม)', min: 20, max: 20, count: 0 }
-    ];
-    var progress = [];
-    picked.forEach(function (x) {
-      var a = Number(x.first_bi), b = Number(x.latest_bi);
-      if (isNaN(b)) return;
-      buckets.forEach(function (k) { if (b >= k.min && b <= k.max) k.count++; });
-      if (isNaN(a)) return;
-      progress.push({
-        hn: x.hn, name: full_(x), dx: x.dx, ward: x.ward,
-        first: a, latest: b, gain: b - a,
-        adl: b >= 12 ? 'ติดสังคม' : (b >= 5 ? 'ติดบ้าน' : 'ติดเตียง'),
-        status: x.status
-      });
-    });
-    progress.sort(function (m, n) { return n.gain - m.gain; });
-    return {
-      filter: f,
-      fy: fy,
-      fq: fq,
-      fiscalYears: Object.keys(seenFy).sort().reverse(),
-      fiscalQuarters: FISCAL_QUARTERS,
-      total: picked.length,
-      assessed: progress.length,
-      adl: tally(function (x) {
-        var b = Number(x.latest_bi);
-        if (isNaN(b)) return '';
-        return b >= 12 ? 'ติดสังคม' : (b >= 5 ? 'ติดบ้าน' : 'ติดเตียง');
-      }),
-      dxGroups: tally(function (x) { return x.dx_group || x.dx; }),
-      wards: tally(function (x) { return x.ward; }),
-      programs: tally(function (x) { return x.imc_program; }),
-      closed: closedCases.length,
-      dcReasons: tally(function (x) { return x.dc_reason; }, closedCases),
-      buckets: buckets,
-      progress: progress
-    };
-  }
+  apiReport: function (opts) { return apiReport(opts); }
 };
 
 /*

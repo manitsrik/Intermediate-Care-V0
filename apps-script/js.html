@@ -437,16 +437,62 @@ function wireTopbar() {
   });
 }
 
+/**
+ * เติมชื่อหน่วยงานกับวันที่ลงหัว-ท้ายกระดาษ
+ *
+ * ผูกกับ beforeprint ไม่ใช่เติมตอนบูตครั้งเดียว เพราะแอปเปิดค้างข้ามวันได้
+ * และคนกด Ctrl+P เองก็ต้องได้วันที่ที่ถูกเหมือนกับกดปุ่มในแอป
+ */
+function fillPrintHeader() {
+  var org = BOOT || {};
+  var set = function (id, text) {
+    var el = document.getElementById(id);
+    if (el) el.textContent = text;
+  };
+  var d = new Date();
+  var today = thDate(d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()));
+
+  set('lh-place', org.orgPlace || org.org || '');
+  set('lh-unit', org.orgUnit || '');
+  set('lh-app', org.appName || '');
+  set('lh-date', 'พิมพ์เมื่อ ' + today);
+  set('pf-org', [org.orgUnit, org.orgPlace].filter(String).join(' · '));
+  set('pf-date', 'จัดทำโดยระบบ ' + (org.appName || '') + ' · ' + today);
+
+  /*
+    ชื่อเอกสารกลายเป็นชื่อไฟล์ตอนกด "บันทึกเป็น PDF" และเป็นข้อความบนหัวกระดาษ
+    ที่เบราว์เซอร์วาดให้ ไม่ตั้งไว้จะได้ไฟล์ชื่อ index.html ซึ่งบอกไม่ได้ว่าเอกสารอะไร
+
+    เว้นอักขระที่ตั้งชื่อไฟล์บนวินโดวส์ไม่ได้ โดยเฉพาะขีดทับใน "รายงาน / BI"
+    ใช้ขีดกลางคั่นแทน ชื่อที่ได้จึงบันทึกลงเครื่องได้ทันทีโดยไม่ต้องแก้
+  */
+  var name = { report: 'รายงาน IMC', dashboard: 'แดชบอร์ด IMC' }[VIEW.name] || (org.appName || 'IMC');
+  document.title = [name, org.orgPlace, today].filter(String).join(' - ');
+}
+
 /*
-  บันทึกหน้าแดชบอร์ดเป็น PDF ผ่านหน้าต่างพิมพ์ของเบราว์เซอร์
+  เติมตอนบูตด้วย ไม่ได้พึ่ง beforeprint อย่างเดียว
+  เพราะการสั่งพิมพ์บางทางไม่ยิงอีเวนต์นี้ เช่นตอนแปลงเป็น PDF ด้วยเครื่องมืออัตโนมัติ
+  ถ้าพึ่งอีเวนต์อย่างเดียว หัวกระดาษจะออกมาเป็นช่องว่างโดยไม่มีใครรู้
+*/
+window.addEventListener('beforeprint', fillPrintHeader);
+
+/*
+  บันทึกหน้าที่กำลังดูอยู่เป็น PDF ผ่านหน้าต่างพิมพ์ของเบราว์เซอร์
 
   ไม่ใช้ไลบรารีจับภาพหน้าจอ เพราะโดนัทผลการคัดกรองวาดด้วย conic-gradient
   ซึ่งไลบรารีพวกนั้นวาดไม่ออก จะได้วงว่างเปล่า ส่วนการพิมพ์ใช้ตัวเบราว์เซอร์เอง
   จึงได้ทุกอย่างตรงกับที่เห็นบนจอ และตัวหนังสือใน PDF ยังคัดลอกกับค้นหาได้
+
+  หน้ารายงานพิมพ์ได้เองด้วย ไม่ใช่ถูกลากกลับไปแดชบอร์ดเหมือนเดิม
+  เพราะเป็นหน้าที่ถูกพิมพ์ไปแนบรายงานบ่อยที่สุด ส่วนหน้าอื่นเป็นฟอร์มกับรายชื่อ
+  ซึ่งพิมพ์ออกมาแล้วไม่ได้ใช้ จึงพากลับไปหน้าที่พิมพ์แล้วได้เรื่องแทน
 */
+var PRINTABLE = ['dashboard', 'report'];
+
 function savePdf() {
   closeDropdown();
-  var ready = (VIEW.name === 'dashboard') ? Promise.resolve() : go('dashboard');
+  var ready = (PRINTABLE.indexOf(VIEW.name) !== -1) ? Promise.resolve() : go('dashboard');
   Promise.resolve(ready).then(function () {
     // เผื่อเวลาให้จัดหน้าเสร็จก่อน ไม่งั้นบางทีได้กระดาษที่ยังวางของไม่ครบ
     setTimeout(function () { window.print(); }, 120);
@@ -618,6 +664,7 @@ function boot() {
     document.getElementById('btn-user').title = b.user.email;
     document.getElementById('user-initial').textContent = initials(displayName(b.user));
     document.getElementById('mask-banner').hidden = !b.maskMode;
+    fillPrintHeader();
     setAlerts(b.alerts || 0);
     // apiBootstrap ส่งรายชื่อผู้ป่วยมาด้วยเลย หน้าแรกจึงคุยกับเซิร์ฟเวอร์รอบเดียว ไม่ใช่สองรอบ
     if (b.patients) { patientCache = b.patients; patientCacheAt = Date.now(); }
@@ -1658,7 +1705,12 @@ function areaControls(d) {
  * ดรอปดาวน์เลือกพื้นที่ ใช้ร่วมกันทั้งแดชบอร์ดและหน้ารายงาน
  * เขียนที่เดียวเพื่อให้สองหน้ากรองด้วยตัวเลือกชุดเดียวกันเสมอ ไม่มีทางเพี้ยนจากกัน
  */
-function areaSelects(geo, f, onChange, onReset) {
+function areaSelects(geo, f, onChange, onReset, opts) {
+  /*
+    หน้าที่มีตัวกรองอื่นต่อท้ายสั่ง noClear ไว้ แล้วไปวางปุ่มล้างเองที่ท้ายแถวจริง
+    ไม่งั้นปุ่มจะไปค้างอยู่กลางแถวคั่นระหว่างช่องพื้นที่กับช่องที่เหลือ
+  */
+  opts = opts || {};
   // เลือกตำบลได้เมื่อเจาะอำเภอไว้แล้ว ไม่ว่าอำเภอไหนก็ตาม ไม่ใช่แค่อำเภอเมือง
   var picked = Object.prototype.hasOwnProperty.call(geo.districts, f.district) ? f.district : '';
   return '<label class="area-field"><span>พื้นที่</span><select onchange="' + onChange + '(\'scope\',this.value)">' +
@@ -1667,7 +1719,8 @@ function areaSelects(geo, f, onChange, onReset) {
     optionHtml('', 'ทุกอำเภอ', f.district) + Object.keys(geo.districts).map(function (x) { return optionHtml(x, x, f.district); }).join('') + optionHtml('__unknown', 'ยังไม่ระบุอำเภอ / ต้องตรวจสอบ', f.district) + '</select></label>' +
     '<label class="area-field area-tambon"><span>ตำบล</span><select onchange="' + onChange + '(\'tambon\',this.value)"' + (picked ? '' : ' disabled') + '>' +
     optionHtml('', 'ทุกตำบล', f.tambon) + (picked ? geo.districts[picked] : []).map(function (x) { return optionHtml(x, x, f.tambon); }).join('') + optionHtml('__unknown', 'ยังไม่ระบุตำบล / ต้องตรวจสอบ', f.tambon) + '</select></label>' +
-    '<button class="area-clear" onclick="' + onReset + '()"' + (f.scope === 'all' ? ' disabled' : '') + ' title="ล้างตัวกรองพื้นที่">ล้าง</button>';
+    (opts.noClear ? '' :
+      '<button class="area-clear" onclick="' + onReset + '()"' + (f.scope === 'all' ? ' disabled' : '') + ' title="ล้างตัวกรองพื้นที่">ล้าง</button>');
 }
 
 function toggleAreaFilters() {
@@ -1747,13 +1800,27 @@ function deltaChip(n, after) {
   เนื้อหาเดิมสี่บรรทัดจึงเหลือสอง โดยไม่ได้ตัดข้อมูลอะไรออก
   บรรทัดรองย้ายไปต่อท้ายตัวเลขบนบรรทัดเดียวกัน เพราะมันขยายความตัวเลขนั้นอยู่แล้ว
 */
+/*
+  บรรทัดรองตัดขึ้นบรรทัดใหม่ได้เฉพาะตรงจุดคั่น ไม่ตัดกลางคำ
+
+  ภาษาไทยไม่มีช่องว่างระหว่างคำ เบราว์เซอร์จึงตัดตามพจนานุกรมของมันเอง
+  "จบแล้ว 2" กลายเป็น "จบ" ท้ายบรรทัดแล้ว "แล้ว 2" ขึ้นบรรทัดใหม่ ซึ่งอ่านสะดุด
+  จะสั่ง nowrap ทั้งก้อนก็ไม่ได้ เพราะบนมือถือการ์ดแคบกว่าข้อความจนล้นออกนอกกรอบ
+  แบ่งเป็นท่อนตามจุดคั่นแล้วห้ามตัดในแต่ละท่อน จึงได้ทั้งไม่ตัดกลางคำและไม่ล้น
+*/
+function subParts(text) {
+  return String(text).split(' · ').map(function (part) {
+    return '<span class="nb">' + esc(part) + '</span>';
+  }).join(' · ');
+}
+
 function statCard(cls, ico, label, value, sub, chip) {
   return '<div class="stat-card ' + cls + '">' +
     '<span class="ico">' + icon(ico, 22, 1.9) + '</span>' +
     '<div class="stat-figure">' +
     '<div class="k">' + esc(label) + '</div>' +
     '<div class="v-row"><span class="v num">' + esc(value) + '</span>' +
-    (sub ? '<span class="sub num">' + esc(sub) + '</span>' : '') +
+    (sub ? '<span class="sub num">' + subParts(sub) + '</span>' : '') +
     '</div></div>' +
     (chip || '') +
     '</div>';
@@ -2096,26 +2163,34 @@ function csvCell(v) {
   return '"' + t.replace(/"/g, '""') + '"';
 }
 
+/** แถวของไฟล์ผู้ป่วย ใช้ร่วมกันทั้งรายชื่อในโมดัลและรายชื่อจากหน้ารายงาน */
+function patientCsvLines(rows) {
+  var lines = [EXPORT_COLS.map(function (c) { return csvCell(c[1]); }).join(',')];
+  rows.forEach(function (p) {
+    lines.push(EXPORT_COLS.map(function (c) { return csvCell(p[c[0]]); }).join(','));
+  });
+  return lines;
+}
+
+/** เขียนไฟล์แล้วสั่งดาวน์โหลด ทุกปุ่มส่งออกในแอปลงมาจบที่นี่ที่เดียว */
+function downloadCsv(fileName, lines) {
+  var blob = new Blob(['\ufeff' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = fileName + '.csv';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+}
+
 function exportSheet() {
   if (!sheetRows.length) {
     notify('ไม่มีข้อมูลให้บันทึก', 'กลุ่มนี้ยังไม่มีผู้ป่วย', 'warn');
     return;
   }
-
-  var lines = [EXPORT_COLS.map(function (c) { return csvCell(c[1]); }).join(',')];
-  sheetRows.forEach(function (p) {
-    lines.push(EXPORT_COLS.map(function (c) { return csvCell(p[c[0]]); }).join(','));
-  });
-
-  var blob = new Blob(['\ufeff' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
-  var url = URL.createObjectURL(blob);
-  var a = document.createElement('a');
-  a.href = url;
-  a.download = sheetFile + '.csv';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+  downloadCsv(sheetFile, patientCsvLines(sheetRows));
 }
 
 /* ---------------------------------------------------------- หน้ารายงาน */
@@ -2127,11 +2202,44 @@ function exportSheet() {
 */
 var reportFilter = null;
 
+/* จำไว้ว่าการ์ดไหนถูกกางหางยาวออกแล้ว ไม่งั้นพอกดเจาะรายชื่อกลับมาจะยุบเองทุกครั้ง */
+var reportOpen = {};
+var progressDesc = true;
+var progressAll = false;
+
+var REPORT_STATUS = [['', 'ทุกสถานะ'], ['active', 'กำลังดูแล'], ['closed', 'จบแล้ว']];
+
+/**
+ * นิยามของการ์ดแท่งทั้งหมดไว้ที่เดียว
+ *
+ *   key   ชื่อชุดข้อมูลและชื่อฐานที่เซิร์ฟเวอร์ส่งมา
+ *   group ชื่อกลุ่มที่ติดอยู่กับผู้ป่วยแต่ละราย ใช้ตอนกดแท่งแล้วเปิดรายชื่อ
+ *   note  ฐานของการ์ดใบนั้น เขียนกำกับทุกใบเพราะแต่ละใบใช้ฐานไม่เท่ากัน
+ *         ถ้าไม่เขียน คนอ่านจะเอาเปอร์เซ็นต์ข้ามการ์ดมาเทียบกันโดยไม่รู้ว่าคนละฐาน
+ */
+var REPORT_PANELS = [
+  { key: 'buckets',   group: 'bucket',   ico: 'chart',    shaded: true,
+    title: 'การกระจายคะแนน BI ล่าสุด', note: 'จาก {n} รายที่มีคะแนน BI' },
+  { key: 'adl',       group: 'adl',      ico: 'target',   shaded: true,
+    title: 'กลุ่ม ADL จากผลประเมินล่าสุด', note: 'จาก {n} รายที่ประเมินแล้ว' },
+  { key: 'dxGroups',  group: 'dx',       ico: 'pulse',
+    title: 'กลุ่มการวินิจฉัย', note: 'จากผู้ป่วยทั้งหมด {n} ราย' },
+  { key: 'wards',     group: 'ward',     ico: 'people',
+    title: 'หอผู้ป่วย', note: 'จากผู้ป่วยทั้งหมด {n} ราย' },
+  { key: 'programs',  group: 'program',  ico: 'calendar',
+    title: 'รูปแบบโปรแกรม', note: 'จากผู้ป่วยทั้งหมด {n} ราย' },
+  { key: 'dcReasons', group: 'dcReason', ico: 'check',
+    title: 'เหตุจบโปรแกรม', note: 'จาก {n} รายที่จบแล้ว' }
+];
+
+/* เกินเท่านี้จึงยุบหาง ตั้งไว้ให้ยุบเมื่อซ่อนได้อย่างน้อยสองแถว ซ่อนแถวเดียวไม่คุ้มกับปุ่มที่เพิ่มมา */
+var COLLAPSE_AFTER = 5;
+
 function renderReport() {
   if (!reportFilter) {
     reportFilter = {
       scope: dashFilter.scope, district: dashFilter.district,
-      tambon: dashFilter.tambon, fy: '', fq: ''
+      tambon: dashFilter.tambon, fy: '', fq: '', status: '', dxGroup: ''
     };
   }
   if (reportCache) { drawReport(reportCache); return; }
@@ -2163,10 +2271,32 @@ function changeReportQuarter(value) {
   return renderReport();
 }
 
-function resetReportArea() {
-  reportFilter.scope = 'all'; reportFilter.district = ''; reportFilter.tambon = '';
+function changeReportStatus(value) {
+  reportFilter.status = value;
   reportCache = null;
   return renderReport();
+}
+
+function changeReportDx(value) {
+  reportFilter.dxGroup = value;
+  reportCache = null;
+  return renderReport();
+}
+
+/* ล้างทุกช่อง ไม่ใช่เฉพาะพื้นที่ ปุ่มเดียวบนแถวที่มีเจ็ดช่องต้องล้างได้ทั้งแถว */
+function resetReportFilters() {
+  reportFilter = { scope: 'all', district: '', tambon: '', fy: '', fq: '', status: '', dxGroup: '' };
+  reportCache = null;
+  return renderReport();
+}
+
+/** ร้อยละแบบปัดจำนวนเต็ม ฐานศูนย์คืนศูนย์ ไม่ใช่ NaN ที่จะไปโผล่บนหน้าจอ */
+function pct(n, base) { return base ? Math.round(n / base * 100) : 0; }
+
+/** ตัวเลขที่อาจยังไม่มีข้อมูลพอจะคิด แสดงขีดแทนเลขศูนย์ที่ทำให้เข้าใจผิดว่าวัดแล้วได้ศูนย์ */
+function numOr(v, digits) {
+  if (v === null || v === undefined || isNaN(v)) return '—';
+  return digits === 0 ? String(Math.round(v)) : String(v);
 }
 
 function drawReport(r) {
@@ -2177,48 +2307,315 @@ function drawReport(r) {
     district: (r.filter && r.filter.district) || '',
     tambon: (r.filter && r.filter.tambon) || '',
     fy: r.fy || '',
-    fq: r.fq || ''
+    fq: r.fq || '',
+    status: r.status || '',
+    dxGroup: r.dxGroup || ''
   };
-  var geo = BOOT.geography;
-  var when = r.fy
-    ? 'ปีงบ ' + r.fy.replace('FY', '') + (r.fq ? ' ไตรมาส ' + r.fq.replace('Q', '') : '')
-    : 'ทุกปีงบ';
-  var scope = [areaLabel(reportFilter), when].join(' · ');
 
-  var html = '<div class="page-head"><div class="head-text"><h1>รายงาน / BI</h1>' +
-    '<span class="sub num">' + esc(scope) + ' · ประเมิน Barthel Index แล้ว ' +
-    r.assessed + ' จาก ' + r.total + ' ราย</span></div>' +
-    (geo ? '<section class="area-controls open" aria-label="กรองข้อมูลรายงาน"><div class="area-selects">' +
-      areaSelects(geo, reportFilter, 'changeReportArea', 'resetReportArea') +
+  main().innerHTML = reportHead(r) + outcomePanel(r) + gapsPanel(r) +
+    '<div class="rep-grid">' +
+    REPORT_PANELS.map(function (p) { return hbarPanel(p, r); }).join('') +
+    '</div>' + areaPanel(r) + progressPanel(r.progress);
+}
+
+/** ชื่อสถานะที่อ่านออก ใช้ทั้งบนบรรทัดขอบเขตและในไฟล์ที่ส่งออก */
+function statusLabel(v) {
+  var hit = REPORT_STATUS.filter(function (s) { return s[0] === v; })[0];
+  return hit ? hit[1] : REPORT_STATUS[0][1];
+}
+
+/** มีตัวกรองช่องไหนเปิดอยู่บ้างไหม ใช้ตัดสินว่าปุ่มล้างกดได้หรือยัง */
+function reportFiltered() {
+  return reportFilter.scope !== 'all' || !!reportFilter.fy ||
+    !!reportFilter.status || !!reportFilter.dxGroup;
+}
+
+/*
+  หัวหน้ารายงานแบ่งเป็นสามชั้นในกรอบเดียว
+
+    ชั้นบน   ชื่อหน้า กับปุ่มที่ทำกับทั้งหน้า (ส่งออก/พิมพ์) ชิดขวา
+    ชั้นกลาง ขอบเขตที่กำลังดู แล้วต่อด้วยยอดผู้ป่วยของขอบเขตนั้น
+    ชั้นล่าง ตัวกรองทั้งเจ็ดช่องเรียงแถวเดียวใต้เส้นคั่น
+
+  เดิมตัวกรองอยู่ข้างชื่อหน้าในตารางสี่คอลัมน์ตายตัว พอมีเจ็ดช่องจึงตกเป็นสองแถว
+  ไม่เท่ากัน มีปุ่มล้างค้างอยู่กลางแถวแรก และเหลือช่องว่างก้อนใหญ่ข้างชื่อหน้า
+  ย้ายลงมาเป็นแถวเต็มความกว้างแล้วทั้งสามชั้นอ่านเรียงจากบนลงล่างได้ทีเดียว
+*/
+function reportHead(r) {
+  var geo = BOOT.geography;
+
+  /*
+    บรรทัดขอบเขตใส่ทุกตัวกรองที่เปิดใช้อยู่ ไม่ใช่แค่พื้นที่กับช่วงเวลา
+    เพราะตอนพิมพ์ลงกระดาษดรอปดาวน์ถูกซ่อนหมด ถ้าบรรทัดนี้ไม่บอก
+    เอกสารที่ส่งต่อกันไปจะไม่มีอะไรบอกเลยว่าเลขในนั้นกรองอะไรไว้บ้าง
+  */
+  var scope = [areaLabel(reportFilter), r.periodLabel];
+  if (r.status) scope.push(statusLabel(r.status));
+  if (r.dxGroup) scope.push('Dx ' + r.dxGroup);
+
+  // แยกเป็นอีกบรรทัด ขอบเขตกับยอดนับเป็นคนละเรื่อง รวมบรรทัดเดียวยาวจนต้องไล่อ่าน
+  var counts = 'ผู้ป่วย ' + r.total + ' ราย · กำลังดูแล ' + r.active +
+    ' · จบแล้ว ' + r.closed + ' · ประเมิน BI แล้ว ' + r.assessed + ' ราย';
+
+  var field = function (label, onChange, options, disabled) {
+    return '<label class="area-field"><span>' + esc(label) + '</span>' +
+      '<select onchange="' + onChange + '(this.value)"' + (disabled ? ' disabled' : '') + '>' +
+      options + '</select></label>';
+  };
+
+  return '<div class="page-head rep-head">' +
+    '<div class="head-text"><h1>รายงาน / BI</h1>' +
+    '<span class="sub">' + subParts(scope.join(' · ')) + '</span>' +
+    '<span class="sub num">' + subParts(counts) + '</span></div>' +
+
+    /*
+      ปุ่มส่งออกอยู่ในหัวหน้า ไม่ใช่แถวลอยใต้กรอบ เพราะเป็นงานของทั้งหน้าเหมือนชื่อหน้า
+      และตรงนี้เคยเป็นช่องว่างเปล่าข้างชื่อหน้าอยู่แล้ว
+    */
+    '<div class="rep-actions">' +
+    '<button class="btn" onclick="exportReportSummary()">' + icon('report', 16) + ' ส่งออกตารางสรุป</button>' +
+    '<button class="btn" onclick="exportReportPatients()">' + icon('people', 16) + ' ส่งออกรายชื่อ ' + r.total + ' ราย</button>' +
+    '<button class="btn" onclick="savePdf()">' + icon('edit', 16) + ' บันทึกเป็น PDF</button>' +
+    '</div>' +
+
+    (geo ? '<section class="rep-filters" aria-label="กรองข้อมูลรายงาน"><div class="rep-selects">' +
+      areaSelects(geo, reportFilter, 'changeReportArea', 'resetReportFilters', { noClear: true }) +
+
       // ปีงบคัดจากวัน Start ฐานเดียวกับกราฟบนแดชบอร์ด เขียนกำกับไว้กันเข้าใจผิด
-      '<label class="area-field"><span>ปีงบ (นับจากวัน Start)</span>' +
-      '<select onchange="changeReportYear(this.value)">' +
-      optionHtml('', 'ทุกปีงบ', r.fy) +
-      (r.fiscalYears || []).map(function (k) {
-        return optionHtml(k, k.replace('FY', ''), r.fy);
-      }).join('') + '</select></label>' +
+      field('ปีงบ (นับจากวัน Start)', 'changeReportYear',
+        optionHtml('', 'ทุกปีงบ', r.fy) +
+        (r.fiscalYears || []).map(function (k) {
+          return optionHtml(k, k.replace('FY', ''), r.fy);
+        }).join('')) +
+
       // เลือกไตรมาสได้ต่อเมื่อเจาะปีงบไว้แล้ว เพราะไตรมาสอยู่ในปีงบ
-      '<label class="area-field"><span>ไตรมาส</span>' +
-      '<select onchange="changeReportQuarter(this.value)"' + (r.fy ? '' : ' disabled') + '>' +
-      optionHtml('', 'ทั้งปีงบ', r.fq) +
-      (r.fiscalQuarters || []).map(function (q) {
-        return optionHtml(q.key, q.label, r.fq);
-      }).join('') + '</select></label>' +
+      field('ไตรมาส', 'changeReportQuarter',
+        optionHtml('', 'ทั้งปีงบ', r.fq) +
+        (r.fiscalQuarters || []).map(function (q) {
+          return optionHtml(q.key, q.label, r.fq);
+        }).join(''), !r.fy) +
+
+      /*
+        สถานะเป็นตัวกรองที่ขาดไม่ได้ ถ้าไม่มี เคสที่ยังดูแลอยู่กับที่จบไปแล้วจะปนกัน
+        ในทุกแท่ง แล้วอ่านไม่ออกว่ากลุ่ม ADL ที่เห็นเป็นภาพของคนที่ยังดูแลอยู่หรือรวมคนที่จบแล้ว
+      */
+      field('สถานะ', 'changeReportStatus',
+        REPORT_STATUS.map(function (s) { return optionHtml(s[0], s[1], r.status); }).join('')) +
+
+      field('กลุ่มการวินิจฉัย', 'changeReportDx',
+        optionHtml('', 'ทุกกลุ่ม', r.dxGroup) +
+        (r.dxOptions || []).map(function (d) { return optionHtml(d, d, r.dxGroup); }).join('')) +
+
+      /*
+        ปุ่มล้างอยู่ท้ายแถวและล้างทุกช่อง ไม่ใช่เฉพาะพื้นที่แบบบนแดชบอร์ด
+        เพราะหน้านี้มีเจ็ดช่อง ปุ่มที่ล้างแค่สามช่องแรกจะหลอกให้คิดว่าล้างหมดแล้ว
+      */
+      '<button class="area-clear" onclick="resetReportFilters()"' +
+      (reportFiltered() ? '' : ' disabled') + ' title="ล้างตัวกรองทุกช่อง">ล้างตัวกรอง</button>' +
       '</div></section>' : '') +
     '</div>';
+}
 
-  html += '<div class="rep-grid">' +
-    hbarPanel('การกระจายคะแนน BI ล่าสุด', 'chart', r.buckets, true) +
-    hbarPanel('กลุ่ม ADL จากผลประเมินล่าสุด', 'target', r.adl, true) +
-    hbarPanel('กลุ่มการวินิจฉัย', 'pulse', r.dxGroups) +
-    hbarPanel('หอผู้ป่วย', 'people', r.wards) +
-    hbarPanel('รูปแบบโปรแกรม', 'calendar', r.programs) +
-    // ใส่ฐานไว้ในหัวข้อ กันอ่านเปอร์เซ็นต์ผิดว่าเป็นสัดส่วนของผู้ป่วยทั้งหมด
-    hbarPanel('เหตุจบโปรแกรม (จาก ' + (r.closed || 0) + ' รายที่จบแล้ว)', 'check', r.dcReasons) +
-    '</div>';
+/* ------------------------------------------------------------- ผลลัพธ์
 
-  html += progressPanel(r.progress);
-  main().innerHTML = html;
+  แท่งข้างล่างบอกว่าคนไข้กลุ่มนี้หน้าตาเป็นแบบไหน แผงนี้บอกว่าดูแลแล้วได้ผลไหม
+  ซึ่งเป็นคำตอบ จึงอยู่บนสุดก่อนแท่งทั้งหมดที่เป็นคำอธิบาย
+
+  ตั้งใจไม่ใช้การ์ดสีแบบแดชบอร์ด ทั้งที่มี statCard() ให้ใช้อยู่แล้ว ด้วยสองเหตุผล
+
+  หนึ่ง สองหน้าตอบคนละคำถาม ถ้าหน้าตาเหมือนกันคนอ่านจะนึกว่าเปิดแดชบอร์ดอยู่
+  ยิ่งใบ "คะแนน BI เพิ่มเฉลี่ย" มีอยู่บนแดชบอร์ดด้วย คนละฐานคนละช่วงเวลาแต่ป้ายเดียวกัน
+  ถ้าวางเป็นการ์ดสีเดียวกันอีกจะแยกไม่ออกว่ากำลังอ่านเลขของหน้าไหน
+
+  สอง หน้านี้ใช้เฉดเขียวน้ำทะเลไล่เข้ม-อ่อนสื่อระดับการพึ่งพาในแท่ง ADL อยู่แล้ว
+  การเติมพาสเทลสี่สีที่ไม่ได้แปลว่าอะไรเข้ามา ทำให้สีบนหน้าเดียวกันมีความหมายสองระบบ
+
+  ยอดผู้ป่วยไม่อยู่ในแผงนี้ เพราะไม่ใช่ผลลัพธ์ แต่เป็นขอบเขตของตัวเลขทุกตัว
+  จึงไปอยู่บนบรรทัดใต้หัวเรื่องรวมกับพื้นที่และช่วงเวลาที่เลือกไว้
+*/
+function outcomePanel(r) {
+  var o = r.outcome || {};
+  var shift = o.adlShift || {}, six = o.sixMonth || {}, pt = o.ptVisits || {}, wait = o.admitToStart || {};
+  var prev = r.prev;
+
+  /*
+    ป้ายส่วนต่างอยู่ใต้ตัวเลขที่มันเทียบจริง ๆ ไม่ใช่ลอยอยู่มุมการ์ด
+    ขึ้นเฉพาะตอนที่งวดก่อนมีคะแนนให้เทียบจริง งวดก่อนที่ไม่มีใครประเมินเลย
+    ไม่ใช่ศูนย์ที่เอามาลบได้ ถ้าโชว์ "+3.5" จะอ่านเหมือนดีขึ้นจากศูนย์
+  */
+  var gainChip = '';
+  if (prev && prev.avgGain !== null && o.avgGain !== null && o.avgGain !== undefined) {
+    var d = Math.round((o.avgGain - prev.avgGain) * 10) / 10;
+    gainChip = '<span class="fig-chip num">' +
+      (d > 0 ? '↑ +' + d : (d < 0 ? '↓ ' + d : '± 0')) + ' เทียบ' + esc(prev.label) + '</span>';
+  }
+
+  /*
+    บรรทัดปิดท้ายบอกตัวเลขจริงของงวดก่อน ไม่ใช่แค่ส่วนต่าง
+    เพราะ "+0.8" บอกไม่ได้ว่าฐานที่เทียบมามีคนกี่ราย งวดที่มีคนสามรายกับสามสิบราย
+    เลื่อนขึ้นเท่ากันไม่ได้แปลว่าเรื่องเดียวกัน และบรรทัดนี้ขึ้นเสมอเมื่อเลือกงวดไว้
+    แม้งวดก่อนจะไม่มีใครเลย ซึ่งเป็นข้อมูลที่ควรเห็นพอ ๆ กัน
+  */
+  var prevLine = prev
+    ? '<div class="outcome-prev">' + subParts('เทียบกับ' + prev.label + ' · ผู้ป่วย ' + prev.total +
+        ' ราย · BI เพิ่มเฉลี่ย ' + numOr(prev.avgGain)) + '</div>'
+    : '';
+
+  var figs = [
+    { value: o.base ? (o.avgGain > 0 ? '+' : '') + numOr(o.avgGain) : '—',
+      label: 'BI เพิ่มเฉลี่ย',
+      meta: o.base ? numOr(o.avgFirst) + ' → ' + numOr(o.avgLatest) + ' · จาก ' + o.base + ' ราย'
+        : 'ยังไม่มีใครประเมินครบสองครั้ง',
+      chip: gainChip },
+
+    { value: shift.base ? pct(shift.up, shift.base) + '%' : '—',
+      label: 'เลื่อนกลุ่ม ADL ดีขึ้น',
+      meta: shift.base ? shift.up + ' จาก ' + shift.base + ' ราย · คงที่ ' + shift.same + ' · แย่ลง ' + shift.down
+        : 'ต้องประเมินซ้ำอย่างน้อยสองครั้งจึงเทียบได้' },
+
+    { value: six.base ? pct(six.stayed, six.base) + '%' : '—',
+      label: 'อยู่ในโปรแกรมครบ 6 เดือน',
+      meta: six.base ? six.stayed + ' จาก ' + six.base + ' รายที่จบแล้ว'
+        : 'ยังไม่มีเคสที่ปิดพร้อมวันครบทั้งสองด้าน' },
+
+    // ค่ากลางเป็นตัวเลขหลัก เพราะรอนานผิดปกติรายเดียวดันค่าเฉลี่ยได้มากในข้อมูลไม่กี่สิบราย
+    { value: numOr(wait.median, 0),
+      label: 'วันรอเข้าโปรแกรม',
+      meta: wait.base ? 'วัน (ค่ากลาง) · เฉลี่ย ' + numOr(wait.avg) + ' · จาก ' + wait.base + ' ราย'
+        : 'ต้องมีทั้งวัน D/C และวัน Start' },
+
+    { value: numOr(pt.median, 0),
+      label: 'ครั้งที่ได้ PT',
+      meta: pt.base ? 'ครั้ง (ค่ากลาง) · เฉลี่ย ' + numOr(pt.avg) + ' · จาก ' + pt.base + ' ราย'
+        : 'ยังไม่มีบันทึกการติดตามชนิด PT' }
+  ];
+
+  return '<div class="panel"><div class="panel-head">' +
+    '<span class="panel-ico">' + icon('pulse', 20, 1.9) + '</span>' +
+    '<h2>ผลลัพธ์การดูแล<span class="sub">แต่ละตัวเลขมีฐานไม่เท่ากัน เขียนกำกับไว้ใต้ตัวเลขแล้ว</span></h2></div>' +
+    '<div class="outcome">' + figs.map(function (f) {
+      return '<div class="outcome-fig">' +
+        '<div class="fig-v num">' + esc(f.value) + '</div>' +
+        '<div class="fig-k">' + esc(f.label) + '</div>' +
+        '<div class="fig-m num">' + subParts(f.meta) + '</div>' +
+        (f.chip || '') + '</div>';
+    }).join('') + '</div>' + prevLine + '</div>';
+}
+
+/*
+  ช่องที่ยังกรอกไม่ครบจะไปโผล่เป็น "ไม่ระบุ" กระจายอยู่ในหลายการ์ด
+  รวมมาไว้ที่เดียวจึงเห็นขนาดของปัญหาจริง และกดเข้าไปแก้ได้ทันที
+  ไม่มีอะไรค้างก็ไม่ต้องแสดงการ์ด อย่าให้กล่องว่างมากินที่บนหน้าที่ยาวอยู่แล้ว
+*/
+function gapsPanel(r) {
+  var items = (r.gaps || []).filter(function (g) { return g.count > 0; });
+  if (!items.length) return '';
+
+  return '<div class="panel"><div class="panel-head">' +
+    '<span class="panel-ico">' + icon('bell', 20, 1.9) + '</span>' +
+    '<h2>ข้อมูลที่ยังกรอกไม่ครบ<span class="sub">ช่องที่ว่างจะถูกนับรวมเป็น "ไม่ระบุ" ในการ์ดข้างล่าง</span></h2></div>' +
+    items.map(function (g) {
+      return '<button class="todo-row" onclick="openReportGap(\'' + esc(g.key) + '\')" ' +
+        'title="ดูรายชื่อ ' + esc(g.label) + '">' +
+        '<span class="todo-label">' + esc(g.label) + '</span>' +
+        '<span class="todo-count num">' + g.count + ' ราย</span>' +
+        icon('arrow', 14, 2) + '</button>';
+    }).join('') + '</div>';
+}
+
+function reportPatients() {
+  return (reportCache && reportCache.patients) ? reportCache.patients : [];
+}
+
+function openReportGap(key) {
+  var item = ((reportCache && reportCache.gaps) || []).filter(function (g) { return g.key === key; })[0];
+  var rows = reportPatients().filter(function (p) {
+    return p.gaps && p.gaps.indexOf(key) !== -1;
+  });
+  openList((item ? item.label : 'ข้อมูลไม่ครบ') + ' · ' + areaLabel(reportFilter), rows, 'imc-gap-' + key);
+}
+
+/**
+ * แท่งเทียบกลุ่ม กดที่แท่งแล้วเห็นว่าตัวเลขนั้นมาจากใครบ้าง
+ *
+ * ส่งลำดับแถวไปแทนชื่อกลุ่ม เพราะชื่อกลุ่มเป็นข้อความที่ผู้ใช้กรอกเอง
+ * ยัดลงใน onclick แล้วมีโอกาสมีอัญประกาศปนจนพัง ส่วนลำดับเป็นตัวเลขเสมอ
+ */
+function hbarPanel(panel, r) {
+  var rows = r[panel.key] || [];
+  var base = (r.bases || {})[panel.key] || 0;
+  var note = panel.note.replace('{n}', base);
+
+  var head = '<div class="panel-head"><span class="panel-ico">' + icon(panel.ico, 20, 1.9) + '</span>' +
+    '<h2>' + esc(panel.title) + '<span class="sub">' + esc(note) + '</span></h2></div>';
+
+  if (!base) return '<div class="panel">' + head + '<div class="empty">ยังไม่มีข้อมูล</div></div>';
+
+  // ความกว้างของแท่งเทียบกับค่าสูงสุดของทั้งชุดเสมอ กางหางแล้วแท่งเดิมจึงไม่ขยับ
+  var max = Math.max.apply(null, rows.map(function (x) { return x.count; }).concat([1]));
+  var open = !!reportOpen[panel.key];
+  var shown = (!open && rows.length > COLLAPSE_AFTER + 1) ? rows.slice(0, COLLAPSE_AFTER) : rows;
+  var rest = rows.slice(shown.length);
+
+  var bar = function (name, count, i, shaded) {
+    /*
+      ยอดศูนย์ไม่วาดแท่งเลย ปล่อยรางว่างไว้ ดีกว่าวาดแท่งกว้างศูนย์
+      แล้วต้องคอยกันไม่ให้เหลือจุดสีจาก min-width
+      และไม่ทำเป็นปุ่มด้วย เพราะกดแล้วได้แต่กล่องรายชื่อเปล่า ๆ
+    */
+    var tag = count ? 'button' : 'div';
+    return '<' + tag + ' class="hbar-row' + (count ? '' : ' hbar-zero') + '"' +
+      (count ? ' onclick="openReportRow(\'' + panel.key + '\',' + i + ')" title="ดูรายชื่อ"' : '') + '>' +
+      '<span class="lbl">' + esc(name) + '</span>' +
+      '<span class="n num">' + count + ' ราย · ' + pct(count, base) + '%</span>' +
+      '<span class="hbar-track">' + (count
+        ? '<span class="hbar-fill' + (shaded ? severityClass(name) : '') +
+          '" style="width:' + Math.round(count / max * 100) + '%"></span>'
+        : '') + '</span></' + tag + '>';
+  };
+
+  var body = shown.map(function (x, i) {
+    return bar(x.label || x.name, x.count, i, panel.shaded);
+  }).join('');
+
+  /*
+    หางยาวที่แต่ละกลุ่มมีรายเดียวกินที่ครึ่งการ์ดโดยไม่ได้ข้อมูลเพิ่ม
+    ยุบไว้ก่อนแล้วบอกว่ายุบไปกี่กลุ่มกี่ราย กดกางได้ถ้าอยากดูจริง ๆ
+  */
+  if (rest.length) {
+    var restCount = rest.reduce(function (s, x) { return s + x.count; }, 0);
+    body += '<button class="hbar-row hbar-more" onclick="toggleReportRows(\'' + panel.key + '\')">' +
+      '<span class="lbl">อื่น ๆ อีก ' + rest.length + ' กลุ่ม</span>' +
+      '<span class="n num">' + restCount + ' ราย · ' + pct(restCount, base) + '%</span></button>';
+  } else if (open && rows.length > COLLAPSE_AFTER + 1) {
+    // ปุ่มย่อกลับไม่มีข้อมูลในตัว ติดคลาสไว้ให้ตัดทิ้งตอนพิมพ์ลงกระดาษ
+    body += '<button class="hbar-row hbar-more hbar-back" onclick="toggleReportRows(\'' + panel.key + '\')">' +
+      '<span class="lbl">ย่อกลับ</span></button>';
+  }
+
+  return '<div class="panel">' + head + '<div class="hbars">' + body + '</div></div>';
+}
+
+function toggleReportRows(key) {
+  reportOpen[key] = !reportOpen[key];
+  if (reportCache) drawReport(reportCache);
+}
+
+function openReportRow(key, i) {
+  var panel = REPORT_PANELS.filter(function (x) { return x.key === key; })[0];
+  var row = ((reportCache && reportCache[key]) || [])[i];
+  if (!panel || !row) return;
+
+  var name = row.label || row.name;
+  var rows = reportPatients().filter(function (p) {
+    return p.groups && p.groups[panel.group] === name;
+  });
+  /*
+    ชื่อไฟล์ใช้แค่ชื่อกลุ่มการนับ ไม่เอาชื่อกลุ่มที่กดต่อท้าย
+    เพราะชื่อกลุ่มมาจากข้อมูลที่ผู้ใช้กรอก มีทั้ง "66/5" และ "ส่งต่อคลีนิก สปสช."
+    ขีดทับในนั้นทำให้ชื่อไฟล์ที่ดาวน์โหลดพัง ส่วนหัวเรื่องบนกล่องบอกครบอยู่แล้ว
+  */
+  openList(panel.title + ' · ' + name, rows, 'imc-' + panel.group);
 }
 
 /*
@@ -2232,46 +2629,95 @@ function severityClass(label) {
   return hit ? ' ' + hit[1] : '';
 }
 
-function hbarPanel(title, ico, rows, shaded) {
-  rows = rows || [];
-  var max = Math.max.apply(null, rows.map(function (x) { return x.count; }).concat([1]));
-  var sum = rows.reduce(function (a, x) { return a + x.count; }, 0);
+/*
+  ตารางเทียบพื้นที่กับกลุ่ม ADL ในตารางเดียว
+  ตอบคำถามที่แท่งเดี่ยว ๆ ตอบไม่ได้ คือพื้นที่ไหนผู้ป่วยหนักกว่ากัน
+  เจาะอำเภอไว้แล้วตารางจะแตกต่อเป็นรายตำบลของอำเภอนั้นเอง
+*/
+function areaPanel(r) {
+  var rows = r.areas || [];
+  var level = r.areaLevel === 'tambon' ? 'ตำบล' : 'อำเภอ';
+  var head = '<div class="panel-head"><span class="panel-ico">' + icon('target', 20, 1.9) + '</span>' +
+    '<h2>แจกแจงราย' + level + '<span class="sub">กลุ่ม ADL จากผลประเมินล่าสุด · แถวที่ไม่มีผู้ป่วยถูกตัดออก</span></h2></div>';
 
-  return '<div class="panel"><div class="panel-head">' +
-    '<span class="panel-ico">' + icon(ico, 20, 1.9) + '</span><h2>' + esc(title) + '</h2></div>' +
-    (sum
-      ? '<div class="hbars">' + rows.map(function (x) {
-          return '<div class="hbar-row">' +
-            '<span class="lbl">' + esc(x.label || x.name) + '</span>' +
-            '<span class="n num">' + x.count + ' ราย · ' + Math.round(x.count / sum * 100) + '%</span>' +
-            // ยอดศูนย์ไม่วาดแท่งเลย ปล่อยรางว่างไว้ ดีกว่าวาดแท่งกว้างศูนย์
-            // แล้วต้องคอยกันไม่ให้เหลือจุดสีจาก min-width
-            '<span class="hbar-track">' + (x.count
-              ? '<span class="hbar-fill' + (shaded ? severityClass(x.label || x.name) : '') +
-                '" style="width:' + Math.round(x.count / max * 100) + '%"></span>'
-              : '') + '</span></div>';
-        }).join('') + '</div>'
-      : '<div class="empty">ยังไม่มีข้อมูล</div>') +
-    '</div>';
+  if (rows.length < 2) {
+    return '<div class="panel">' + head +
+      '<div class="empty">ต้องมีผู้ป่วยอย่างน้อยสอง' + level + 'จึงเทียบกันได้</div></div>';
+  }
+
+  return '<div class="panel" style="padding:20px 0 0">' +
+    '<div style="padding:0 22px">' + head + '</div>' +
+    '<div class="table-wrap"><table class="cards rep-areas"><thead><tr>' +
+    '<th>' + level + '</th><th class="ta-r">ผู้ป่วย</th><th class="ta-r">ติดเตียง</th>' +
+    '<th class="ta-r">ติดบ้าน</th><th class="ta-r">ติดสังคม</th>' +
+    '<th class="ta-r">ยังไม่ประเมิน</th><th class="ta-r">BI เพิ่มเฉลี่ย</th>' +
+    '</tr></thead><tbody>' +
+    rows.map(function (x, i) {
+      return '<tr onclick="openReportArea(' + i + ')" title="ดูรายชื่อ">' +
+        '<td class="head"><strong>' + esc(x.name) + '</strong> ' + x.total + ' ราย</td>' +
+        '<td data-l="' + level + '">' + esc(x.name) + '</td>' +
+        '<td data-l="ผู้ป่วย" class="ta-r num">' + x.total + '</td>' +
+        '<td data-l="ติดเตียง" class="ta-r num">' + (x.bed || '—') + '</td>' +
+        '<td data-l="ติดบ้าน" class="ta-r num">' + (x.home || '—') + '</td>' +
+        '<td data-l="ติดสังคม" class="ta-r num">' + (x.social || '—') + '</td>' +
+        '<td data-l="ยังไม่ประเมิน" class="ta-r num">' + (x.unassessed || '—') + '</td>' +
+        '<td data-l="BI เพิ่มเฉลี่ย" class="ta-r num">' +
+          (x.avgGain === null ? '—' : (x.avgGain > 0 ? '+' : '') + x.avgGain) + '</td>' +
+        '</tr>';
+    }).join('') +
+    '</tbody></table></div></div>';
+}
+
+function openReportArea(i) {
+  var row = ((reportCache && reportCache.areas) || [])[i];
+  if (!row) return;
+  var rows = reportPatients().filter(function (p) {
+    return p.groups && p.groups.area === row.key;
+  });
+  openList('ผู้ป่วย · ' + row.name, rows, 'imc-area-' + row.key);
 }
 
 /* จำนวนช่องที่มองเห็นต้องเท่ากับจำนวนหัวตารางเสมอ ไม่งั้นข้อมูลจะเลื่อนคอลัมน์ */
 function progressPanel(rows) {
-  var head = '<div class="panel-head"><span class="panel-ico">' + icon('pulse', 20, 1.9) + '</span>' +
-    '<h2>ความคืบหน้ารายบุคคล<span class="sub">เรียงจากคะแนนที่เพิ่มขึ้นมากที่สุด</span></h2></div>';
+  rows = rows || [];
 
-  if (!rows.length) {
+  /*
+    เรียงจากคะแนนเพิ่มมากสุดอย่างเดียวทำให้คนที่คะแนนลดลงไปกองอยู่ท้ายตาราง
+    ทั้งที่เป็นกลุ่มที่ต้องดูที่สุด สลับทิศได้ และตัดมาสิบอันดับก่อน
+    ไม่งั้นพอผู้ป่วยโตเป็นหลายร้อยราย หน้าจะยาวจนเลื่อนหาอะไรไม่เจอ
+  */
+  var sorted = rows.slice().sort(function (a, b) {
+    return progressDesc ? b.gain - a.gain : a.gain - b.gain;
+  });
+  var shown = progressAll ? sorted : sorted.slice(0, 10);
+
+  var head = '<div class="panel-head"><span class="panel-ico">' + icon('pulse', 20, 1.9) + '</span>' +
+    '<h2>ความคืบหน้ารายบุคคล<span class="sub">' +
+    (progressDesc ? 'เรียงจากคะแนนที่เพิ่มขึ้นมากที่สุด' : 'เรียงจากคะแนนที่ลดลงมากที่สุด') +
+    ' · แสดง ' + shown.length + ' จาก ' + sorted.length + ' ราย</span></h2>' +
+    '<span class="panel-tools">' +
+    '<button class="panel-link" onclick="toggleProgressSort()">' +
+    (progressDesc ? 'ดูรายที่แย่ลงก่อน' : 'ดูรายที่ดีขึ้นก่อน') + ' ' + icon('arrow', 14, 2) + '</button>' +
+    (sorted.length > 10
+      ? '<button class="panel-link" onclick="toggleProgressAll()">' +
+        (progressAll ? 'ย่อกลับ' : 'ดูทั้งหมด') + ' ' + icon('arrow', 14, 2) + '</button>'
+      : '') +
+    '<button class="panel-link" onclick="exportProgress()">ส่งออก ' + icon('arrow', 14, 2) + '</button>' +
+    '</span></div>';
+
+  if (!sorted.length) {
     return '<div class="panel">' + head + '<div class="empty">ยังไม่มีผู้ป่วยที่ประเมินครบสองครั้ง</div></div>';
   }
 
   return '<div class="panel" style="padding:20px 0 0">' +
     '<div style="padding:0 22px">' + head + '</div>' +
-    '<div class="table-wrap"><table class="cards"><thead><tr>' +
+    '<div class="table-wrap"><table class="cards rep-progress"><thead><tr>' +
     '<th>ผู้ป่วย</th><th>การวินิจฉัย</th><th>Ward</th>' +
     '<th>Barthel Index</th><th>กลุ่ม ADL</th><th>สถานะ</th>' +
     '</tr></thead><tbody>' +
-    rows.map(function (x) {
-      return '<tr onclick="go(\'detail\',\'' + esc(x.hn) + '\')">' +
+    shown.map(function (x) {
+      // แถวที่ไม่ดีขึ้นเน้นไว้ ให้กวาดตาเจอโดยไม่ต้องไล่อ่านตัวเลขทีละแถว
+      return '<tr class="' + (x.gain <= 0 ? 'row-flat' : '') + '" onclick="go(\'detail\',\'' + esc(x.hn) + '\')">' +
         '<td class="head"><strong>' + esc(x.hn) + '</strong> ' + esc(x.name || '') + '</td>' +
         '<td data-l="ผู้ป่วย" class="name-cell"><div class="cell-person">' +
           '<span class="avatar row">' + esc(initials(x.name)) + '</span>' +
@@ -2285,6 +2731,113 @@ function progressPanel(rows) {
         '</tr>';
     }).join('') +
     '</tbody></table></div></div>';
+}
+
+function toggleProgressSort() {
+  progressDesc = !progressDesc;
+  if (reportCache) drawReport(reportCache);
+}
+
+function toggleProgressAll() {
+  progressAll = !progressAll;
+  if (reportCache) drawReport(reportCache);
+}
+
+/* ------------------------------------------------------- ส่งออกหน้ารายงาน */
+
+/** ผู้ป่วยทุกรายในตัวกรองที่เลือกอยู่ คอลัมน์ชุดเดียวกับที่ส่งออกจากรายชื่อ */
+function exportReportPatients() {
+  var rows = reportPatients();
+  if (!rows.length) {
+    notify('ไม่มีข้อมูลให้บันทึก', 'ตัวกรองที่เลือกอยู่ยังไม่มีผู้ป่วย', 'warn');
+    return;
+  }
+  downloadCsv('imc-report-patients', patientCsvLines(rows));
+}
+
+/** เฉพาะรายที่ประเมินครบสองครั้ง พร้อมคะแนนแรกรับ คะแนนล่าสุด และผลต่าง */
+function exportProgress() {
+  var rows = (reportCache && reportCache.progress) || [];
+  if (!rows.length) {
+    notify('ไม่มีข้อมูลให้บันทึก', 'ยังไม่มีผู้ป่วยที่ประเมินครบสองครั้ง', 'warn');
+    return;
+  }
+  var head = ['HN', 'ชื่อ-สกุล', 'การวินิจฉัย', 'Ward', 'BI แรกรับ', 'BI ล่าสุด', 'ผลต่าง', 'กลุ่ม ADL', 'สถานะ'];
+  var lines = [head.map(csvCell).join(',')];
+  rows.slice().sort(function (a, b) {
+    return progressDesc ? b.gain - a.gain : a.gain - b.gain;
+  }).forEach(function (x) {
+    lines.push([x.hn, x.name, x.dx, x.ward, x.first, x.latest, x.gain, x.adl, x.status]
+      .map(csvCell).join(','));
+  });
+  downloadCsv('imc-report-progress', lines);
+}
+
+/**
+ * ตารางสรุปทุกแท่งในไฟล์เดียว พร้อมบรรทัดบอกว่ากรองอะไรไว้บ้าง
+ *
+ * เขียนตัวกรองไว้บนหัวไฟล์ด้วย เพราะไฟล์ที่ส่งต่อกันไปจะถูกเปิดอ่านโดยคนที่ไม่ได้
+ * นั่งเลือกตัวกรองเอง ถ้ามีแต่ตัวเลขลอย ๆ จะบอกไม่ได้ว่าเป็นเลขของพื้นที่ไหนปีไหน
+ */
+function exportReportSummary() {
+  var r = reportCache;
+  if (!r) return;
+
+  var o = r.outcome || {};
+  var shift = o.adlShift || {}, six = o.sixMonth || {}, pt = o.ptVisits || {}, wait = o.admitToStart || {};
+  var lines = [];
+  var row = function (cells) { lines.push(cells.map(csvCell).join(',')); };
+
+  row(['รายงาน IMC', BOOT.org || '']);
+  row(['พื้นที่', areaLabel(reportFilter)]);
+  row(['ช่วงเวลา', r.periodLabel]);
+  row(['สถานะ', statusLabel(r.status)]);
+  row(['กลุ่มการวินิจฉัย', r.dxGroup || 'ทุกกลุ่ม']);
+  row(['ผู้ป่วยทั้งหมด (ราย)', r.total]);
+  row(['กำลังดูแล (ราย)', r.active]);
+  row(['จบโปรแกรมแล้ว (ราย)', r.closed]);
+  row(['ประเมิน BI แล้ว (ราย)', r.assessed]);
+  row([]);
+
+  row(['ผลลัพธ์', 'ค่า', 'ฐาน (ราย)']);
+  row(['คะแนน BI เฉลี่ยแรกรับ', numOr(o.avgFirst), o.base]);
+  row(['คะแนน BI เฉลี่ยล่าสุด', numOr(o.avgLatest), o.base]);
+  row(['คะแนน BI เพิ่มเฉลี่ย', numOr(o.avgGain), o.base]);
+  row(['ดีขึ้น (ราย)', o.improved, o.base]);
+  row(['คงที่ (ราย)', o.same, o.base]);
+  row(['แย่ลง (ราย)', o.declined, o.base]);
+  row(['เลื่อนกลุ่ม ADL ดีขึ้น (ราย)', shift.up, shift.base]);
+  row(['กลุ่ม ADL คงที่ (ราย)', shift.same, shift.base]);
+  row(['เลื่อนกลุ่ม ADL แย่ลง (ราย)', shift.down, shift.base]);
+  row(['อยู่ในโปรแกรมครบ 6 เดือน (ราย)', six.stayed, six.base]);
+  row(['วันรอเข้าโปรแกรม (ค่ากลาง)', numOr(wait.median, 0), wait.base]);
+  row(['วันรอเข้าโปรแกรม (เฉลี่ย)', numOr(wait.avg), wait.base]);
+  row(['ครั้งที่ได้ PT (ค่ากลาง)', numOr(pt.median, 0), pt.base]);
+  row(['ครั้งที่ได้ PT (เฉลี่ย)', numOr(pt.avg), pt.base]);
+  row([]);
+
+  row(['หมวด', 'กลุ่ม', 'จำนวน (ราย)', 'ร้อยละ', 'ฐาน (ราย)']);
+  REPORT_PANELS.forEach(function (panel) {
+    var base = (r.bases || {})[panel.key] || 0;
+    (r[panel.key] || []).forEach(function (x) {
+      row([panel.title, x.label || x.name, x.count, pct(x.count, base), base]);
+    });
+  });
+  row([]);
+
+  var level = r.areaLevel === 'tambon' ? 'ตำบล' : 'อำเภอ';
+  row([level, 'ผู้ป่วย (ราย)', 'ติดเตียง', 'ติดบ้าน', 'ติดสังคม', 'ยังไม่ประเมิน', 'BI เพิ่มเฉลี่ย']);
+  (r.areas || []).forEach(function (x) {
+    row([x.name, x.total, x.bed, x.home, x.social, x.unassessed, numOr(x.avgGain)]);
+  });
+
+  if ((r.gaps || []).some(function (g) { return g.count > 0; })) {
+    row([]);
+    row(['ข้อมูลที่ยังกรอกไม่ครบ', 'จำนวน (ราย)']);
+    r.gaps.forEach(function (g) { if (g.count) row([g.label, g.count]); });
+  }
+
+  downloadCsv('imc-report-summary', lines);
 }
 
 function legendRow(color, label, n, sum, kind) {

@@ -6,6 +6,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { spawn } = require('node:child_process');
+const zlib = require('node:zlib');
 const chromePath = process.argv[2];
 if (!chromePath || !fs.existsSync(chromePath)) throw new Error('Pass the path to Chrome as the first argument');
 const out = path.resolve(__dirname, '../preview');
@@ -72,7 +73,26 @@ async function screenshot(name) {
     await until(() => evaluate('typeof BOOT !== "undefined" && !!BOOT'));
     await evaluate('MOCK_DELAY_MS = 0; go("dashboard")');
     await check('Dashboard keeps region data without rendering a table', 'dashCache.total === 6 && document.querySelectorAll("main .area-table").length === 0 && dashCache.districts.reduce((s,r) => s+r.total,0) === 6');
+    // หัว-ท้ายกระดาษเป็นของกระดาษ บนจอมีแถบบนกับเมนูซ้ายบอกอยู่แล้ว
+    await check('The letterhead stays off the screen',
+      'document.querySelector(".letterhead").offsetParent === null' +
+      ' && document.querySelector(".print-foot").offsetParent === null');
     await screenshot('dashboard-areas-desktop.png');
+
+    /*
+      แดชบอร์ดก็ถูกพิมพ์เหมือนกัน และใช้ @page เดียวกับหน้ารายงาน
+      พอเปลี่ยนกระดาษเป็นแนวตั้ง ความกว้างลดจาก 1063px เหลือ 725px
+      ต้องไม่มีการ์ดใบไหนล้นออกนอกกระดาษ และการ์ดสามใบต้องยังอยู่แถวเดียวกัน
+    */
+    await send('Emulation.setDeviceMetricsOverride', { width: 725, height: 1000, deviceScaleFactor: 1, mobile: false });
+    await send('Emulation.setEmulatedMedia', { media: 'print' });
+    await evaluate('new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))');
+    await check('The dashboard still fits portrait paper with its cards on one row',
+      'document.documentElement.scrollWidth <= innerWidth' +
+      ' && new Set([...document.querySelectorAll(".stat-card")].map(c => Math.round(c.getBoundingClientRect().top))).size === 1');
+    await send('Emulation.setEmulatedMedia', { media: '' });
+    await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1080, deviceScaleFactor: 1, mobile: false });
+
     await evaluate('changeArea("scope", "krabi")');
     await check('Province filter excludes outside and unconfirmed addresses', 'dashCache.total === 4');
     await evaluate('changeArea("district", "เมืองกระบี่")');
@@ -93,6 +113,310 @@ async function screenshot(name) {
     await evaluate('closeList(); changeArea("tambon", "เขาทอง")');
     await check('Empty area displays zero without NaN', 'dashCache.total === 0 && !main().textContent.includes("NaN")');
     await evaluate('resetArea()');
+
+    /* ------------------------------------------------------ หน้ารายงาน
+
+      ตรวจบนจอกว้างก่อน เพราะตารางแจกแจงพื้นที่กับตารางความคืบหน้าเป็นตารางจริง
+      เฉพาะบนจอกว้าง บนมือถือถูกพับเป็นการ์ดจนนับคอลัมน์ไม่ได้
+    */
+    await evaluate('go("report")');
+    await until(() => evaluate('!!reportCache'));
+
+    await check('Every bar panel counts to its own stated base',
+      'REPORT_PANELS.every(p => (reportCache[p.key] || []).reduce((s, x) => s + x.count, 0) === reportCache.bases[p.key])');
+    // ถ้าทุกใบฐานเท่ากันหมด การเขียนฐานกำกับก็ไม่พิสูจน์อะไร ต้องมีใบที่ฐานต่างจริง
+    await check('Panels really do sit on different bases',
+      'reportCache.bases.dcReasons === reportCache.closed && reportCache.bases.wards === reportCache.total' +
+      ' && reportCache.bases.dcReasons !== reportCache.bases.wards');
+    await check('Each panel head prints its base on screen',
+      '[...document.querySelectorAll(".rep-grid .panel-head .sub")].length === REPORT_PANELS.length' +
+      ' && [...document.querySelectorAll(".rep-grid .panel-head .sub")].every(s => /จาก[^0-9]*[0-9]+/.test(s.textContent))');
+
+    await evaluate('openReportRow("wards", 0)');
+    await check('Clicking a bar opens exactly the patients behind that bar',
+      'sheetRows.length === reportCache.wards[0].count' +
+      ' && sheetRows.every(p => p.ward === reportCache.wards[0].name)' +
+      ' && !document.getElementById("listmodal").hidden');
+    await evaluate('closeList(); openReportRow("adl", 0)');
+    await check('ADL drilldown reads the same group the bar was counted from',
+      'sheetRows.length === reportCache.adl[0].count' +
+      ' && sheetRows.every(p => p.groups.adl === reportCache.adl[0].name)');
+
+    await evaluate('closeList()');
+    await check('Outcome figures render real numbers, never NaN',
+      '!document.querySelector(".outcome").textContent.includes("NaN")' +
+      ' && document.querySelectorAll(".outcome .outcome-fig").length === 5');
+    /*
+      หน้ารายงานต้องไม่หยิบการ์ดสีของแดชบอร์ดมาใช้ ไม่งั้นสองหน้าที่ตอบคนละคำถาม
+      จะหน้าตาเหมือนกันจนแยกไม่ออก ยิ่งใบ "คะแนน BI เพิ่มเฉลี่ย" มีอยู่ทั้งสองหน้า
+      คนละฐานคนละช่วงเวลา ถ้าวางเหมือนกันจะอ่านไม่ออกว่าเป็นเลขของหน้าไหน
+    */
+    await check('The report never borrows the dashboard stat cards',
+      'document.querySelectorAll("main .stat-card").length === 0' +
+      ' && document.querySelector(".outcome").closest(".panel") !== null');
+    // ยอดผู้ป่วยไม่ใช่ผลลัพธ์ แต่เป็นขอบเขตของทุกตัวเลข จึงอยู่บนหัวหน้า
+    await check('Patient counts live in the page head, not as an outcome figure',
+      'document.querySelector(".rep-head .head-text").textContent.includes("กำลังดูแล")' +
+      ' && document.querySelector(".rep-head .head-text").textContent.includes("จบแล้ว")' +
+      ' && !document.querySelector(".outcome").textContent.includes("กำลังดูแล")');
+    /*
+      หัวหน้าเรียงเป็นสามชั้น ชื่อหน้ากับปุ่ม / ขอบเขต / ตัวกรอง
+      ตัวกรองต้องเป็นแถวเต็มความกว้างของตัวเอง ไม่ใช่ไปเบียดอยู่ข้างชื่อหน้าแบบเดิม
+      และปุ่มล้างต้องอยู่ท้ายสุดของแถว ไม่ใช่ค้างอยู่กลางระหว่างช่องพื้นที่กับช่องอื่น
+    */
+    await check('Head stacks into three bands with filters on a full-width row',
+      'document.querySelectorAll(".rep-head .head-text .sub").length === 2' +
+      ' && document.querySelector(".rep-head .rep-actions") !== null' +
+      ' && Math.round(document.querySelector(".rep-filters").getBoundingClientRect().width)' +
+      '    > Math.round(document.querySelector(".rep-head .head-text").getBoundingClientRect().width)' +
+      ' && document.querySelector(".rep-filters").getBoundingClientRect().top' +
+      '    > document.querySelector(".rep-head .head-text").getBoundingClientRect().top');
+    /*
+      ปุ่มล้างต้องอยู่ท้ายแถวเดียวกับช่องอื่น ไม่ใช่ตกลงไปบรรทัดใหม่ตัวเดียวโดด ๆ
+      วัดว่ามันอยู่แถวเดียวกับช่องแรกจริง คือขอบบนยังไม่พ้นขอบล่างของช่องแรก
+    */
+    await check('The clear button sits last on the same filter row',
+      'document.querySelector(".rep-selects").lastElementChild.classList.contains("area-clear")' +
+      ' && document.querySelectorAll(".rep-selects .area-field").length === 7' +
+      ' && document.querySelector(".rep-selects .area-clear").getBoundingClientRect().top' +
+      '    < document.querySelector(".rep-selects .area-field").getBoundingClientRect().bottom');
+    // ล้างแล้วต้องกลับไปตั้งต้นทุกช่อง ไม่ใช่เหลือปีงบหรือสถานะค้างไว้
+    await evaluate('changeReportStatus("closed")');
+    await until(() => evaluate('reportCache.status === "closed"'));
+    await evaluate('changeReportYear(reportCache.fiscalYears[0])');
+    await until(() => evaluate('!!reportCache.fy'));
+    await evaluate('resetReportFilters()');
+    await until(() => evaluate('reportCache.status === "" && reportCache.fy === ""'));
+    await check('Clearing resets every filter, not just the area ones',
+      'reportFilter.scope === "all" && !reportFilter.fy && !reportFilter.fq' +
+      ' && !reportFilter.status && !reportFilter.dxGroup' +
+      ' && document.querySelector(".rep-selects .area-clear").disabled === true');
+    /*
+      บรรทัดรองต้องไม่ถูกตัดกลางคำไทย เบราว์เซอร์ตัดตามพจนานุกรมของมัน
+      "จบแล้ว 2" จึงกลายเป็น "จบ" ท้ายบรรทัดกับ "แล้ว 2" บรรทัดใหม่ได้ถ้าไม่กัน
+      หนึ่งท่อนที่กินสองบรรทัด = หนึ่งท่อนที่มีมากกว่าหนึ่งกล่องข้อความ
+    */
+    await check('Sub-lines break at separators, never inside a Thai word',
+      '[...document.querySelectorAll(".fig-m .nb, .page-head .sub .nb")].length > 0' +
+      ' && [...document.querySelectorAll(".fig-m .nb, .page-head .sub .nb")]' +
+      '      .every(s => s.getClientRects().length === 1)');
+    // TEST006 มีใบประเมินใบเดียว ยังไม่มีอะไรให้เทียบ ต้องไม่ถูกนับเป็น "คงที่"
+    await check('ADL shift ignores patients assessed only once',
+      'reportCache.outcome.adlShift.base === 5 && reportCache.outcome.adlShift.up' +
+      ' + reportCache.outcome.adlShift.same + reportCache.outcome.adlShift.down === 5');
+    await check('Six-month outcome counts only closed cases with both dates',
+      'reportCache.outcome.sixMonth.base === reportCache.closed');
+
+    await check('Data-quality panel points at the rows that are actually incomplete',
+      'reportCache.gaps.filter(g => g.count).length > 0' +
+      ' && document.querySelectorAll(".panel .todo-row").length === reportCache.gaps.filter(g => g.count).length');
+    await evaluate('openReportGap("area")');
+    await check('Incomplete-address drilldown matches its count',
+      'sheetRows.length === reportCache.gaps.filter(g => g.key === "area")[0].count' +
+      ' && sheetRows.every(p => p.gaps.indexOf("area") !== -1)');
+
+    await evaluate('closeList()');
+    await check('Area breakdown accounts for every patient exactly once',
+      'reportCache.areas.reduce((s, r) => s + r.total, 0) === reportCache.total' +
+      ' && reportCache.areas.every(r => r.bed + r.home + r.social + r.unassessed === r.total)');
+    await evaluate('openReportArea(0)');
+    await check('Area row drilldown matches its total',
+      'sheetRows.length === reportCache.areas[0].total');
+
+    await evaluate('closeList()');
+    await check('Progress table starts with the biggest gain first',
+      'progressDesc === true && reportCache.progress[0].gain >= reportCache.progress[reportCache.progress.length - 1].gain');
+    await evaluate('toggleProgressSort()');
+    // แถบเน้นต้องมองเห็นจริงบนจอที่กำลังดูอยู่ ไม่ใช่ไปติดอยู่บนช่องที่ถูกซ่อน
+    await check('Sorting the other way surfaces the patients who did not improve',
+      'progressDesc === false' +
+      ' && document.querySelectorAll("table.rep-progress tbody tr.row-flat").length > 0' +
+      ' && document.querySelector("table.rep-progress tbody tr").classList.contains("row-flat")' +
+      ' && [...document.querySelectorAll("table.rep-progress tbody tr.row-flat td")]' +
+      '      .some(td => td.offsetParent !== null && getComputedStyle(td).boxShadow !== "none")');
+    await evaluate('toggleProgressSort()');
+
+    /*
+      ข้อมูลตัวอย่างมีแค่หกราย เห็นเพดานสิบแถวไม่ได้
+      ยัดแถวปลอมเข้าไปในผลที่ได้มาแล้ววาดใหม่ เพื่อตรวจเฉพาะการตัดแถวของหน้าจอ
+      แล้วโยนของปลอมทิ้งด้วยการล้างแคช รอบถัดไปจะถามเซิร์ฟเวอร์ใหม่เอง
+    */
+    await evaluate('window.__realProgress = reportCache.progress;' +
+      'reportCache.progress = Array.from({length: 25}, (_, i) => ({hn: "X" + i, name: "x", dx: "", ward: "", first: 1, latest: 1 + i, gain: i, adl: "", status: "active"}));' +
+      'drawReport(reportCache)');
+    await check('A long progress table shows ten rows with a way to see the rest',
+      'document.querySelectorAll("table.rep-progress tbody tr").length === 10' +
+      ' && main().textContent.includes("แสดง 10 จาก 25 ราย")');
+    await evaluate('toggleProgressAll()');
+    await check('Show-all reveals every row', 'document.querySelectorAll("table.rep-progress tbody tr").length === 25');
+    await evaluate('toggleProgressAll(); reportCache.progress = window.__realProgress; drawReport(reportCache)');
+
+    /*
+      หางยาวของการ์ดก็เห็นไม่ได้จากข้อมูลตัวอย่างเช่นกัน หอผู้ป่วยมีแค่สามกลุ่ม
+      ตรวจเฉพาะการยุบและกางของหน้าจอด้วยชุดปลอม แล้วคืนของจริงกลับไป
+    */
+    await evaluate('window.__realWards = reportCache.wards;' +
+      'reportCache.wards = Array.from({length: 9}, (_, i) => ({name: "W" + i, count: 9 - i}));' +
+      'reportCache.bases.wards = 45; drawReport(reportCache)');
+    await check('A long bar panel collapses its tail into one summary row',
+      '[...document.querySelectorAll(".rep-grid .panel")].filter(p => p.textContent.includes("หอผู้ป่วย"))[0]' +
+      '  .querySelectorAll(".hbar-row").length === 6' +
+      ' && main().textContent.includes("อื่น ๆ อีก 4 กลุ่ม")');
+    await evaluate('toggleReportRows("wards")');
+    await check('Expanding the tail shows every group',
+      '[...document.querySelectorAll(".rep-grid .panel")].filter(p => p.textContent.includes("หอผู้ป่วย"))[0]' +
+      '  .querySelectorAll(".hbar-row").length === 10');
+    await evaluate('toggleReportRows("wards"); reportCache.wards = window.__realWards;' +
+      'reportCache.bases.wards = reportCache.total; drawReport(reportCache)');
+
+    await evaluate('exportedCsv = ""; exportReportSummary()');
+    await until(() => evaluate('exportedCsv.length > 0'));
+    await check('Summary export carries the filter context, every panel and the outcome numbers',
+      'exportedCsv.includes("พื้นที่") && exportedCsv.includes("ทุกปีงบ")' +
+      ' && REPORT_PANELS.every(p => exportedCsv.includes(p.title))' +
+      ' && exportedCsv.includes("คะแนน BI เพิ่มเฉลี่ย")' +
+      ' && exportedCsv.includes("เลื่อนกลุ่ม ADL ดีขึ้น (ราย)")');
+
+    await evaluate('exportedCsv = ""; exportReportPatients()');
+    await until(() => evaluate('exportedCsv.length > 0'));
+    await check('Patient export holds exactly the filtered patients',
+      'exportedCsv.trim().split("\\r\\n").length === reportCache.total + 1 && exportedCsv.includes("TEST001")');
+
+    // กรองสถานะแล้วทุกแท่งต้องนับใหม่จากชุดที่เหลือ ไม่ใช่ค้างเลขของชุดเดิม
+    await evaluate('changeReportStatus("closed")');
+    await until(() => evaluate('reportCache.status === "closed"'));
+    await check('Status filter narrows every panel, not just the header',
+      'reportCache.patients.every(p => p.status === "closed")' +
+      ' && reportCache.total === reportCache.closed' +
+      ' && reportCache.bases.wards === reportCache.total' +
+      ' && reportCache.wards.reduce((s, x) => s + x.count, 0) === reportCache.total');
+    await evaluate('exportedCsv = ""; exportReportSummary()');
+    await until(() => evaluate('exportedCsv.length > 0'));
+    await check('Summary export states which filter produced it', 'exportedCsv.includes("จบแล้ว")');
+    await evaluate('changeReportStatus("")');
+    await until(() => evaluate('reportCache.status === ""'));
+
+    // เลือกปีงบแล้วต้องมีเลขของงวดก่อนมาวางเทียบให้ ไม่ใช่เห็นแต่งวดที่เลือก
+    await evaluate('changeReportYear(reportCache.fiscalYears[0])');
+    await until(() => evaluate('!!reportCache.prev'));
+    await check('Picking a fiscal year brings the previous period along to compare',
+      'reportCache.prev.key === "FY" + (parseInt(reportCache.fy.slice(2), 10) - 1)' +
+      ' && document.querySelector(".outcome-prev").textContent.includes(reportCache.prev.label)' +
+      ' && document.querySelector(".outcome-prev").textContent.includes(reportCache.prev.total + " ราย")');
+    /*
+      งวดก่อนในข้อมูลตัวอย่างไม่มีใครประเมินเลย ป้ายส่วนต่างจึงต้องไม่ขึ้น
+      ไม่ใช่เอาค่าว่างมาลบแล้วโชว์ "+3.5" ซึ่งอ่านเหมือนดีขึ้นจากศูนย์
+    */
+    await check('No delta badge when the previous period has nothing to compare',
+      'reportCache.prev.avgGain === null' +
+      ' && document.querySelectorAll(".outcome .fig-chip").length === 0');
+    await evaluate('changeReportYear("")');
+    await until(() => evaluate('reportCache.fy === ""'));
+
+    await screenshot('report-desktop.png');
+
+    /*
+      หน้ารายงานถูกพิมพ์ไปแนบรายงานบ่อยที่สุด จึงตรวจที่ความกว้างของกระดาษจริง
+      A4 แนวตั้งหักขอบแล้วเหลือราว 725px ซึ่งต่ำกว่าเบรกพอยต์มือถือ 900px
+      ถ้าไม่ตรวจที่ความกว้างนี้จะไม่มีทางเห็นว่ากฎของมือถือติดไปบนกระดาษด้วย
+    */
+    await send('Emulation.setDeviceMetricsOverride', { width: 725, height: 1000, deviceScaleFactor: 1, mobile: false });
+    await send('Emulation.setEmulatedMedia', { media: 'print' });
+    await evaluate('new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))');
+    await check('Printing the report fits the page and drops what cannot be clicked on paper',
+      'document.documentElement.scrollWidth <= innerWidth' +
+      ' && document.querySelector(".rep-filters").offsetParent === null' +
+      ' && document.querySelector(".rep-actions").offsetParent === null' +
+      ' && document.querySelector(".outcome").offsetParent !== null' +
+      ' && document.querySelector(".page-head .sub").textContent.includes("ทุกพื้นที่")');
+    /*
+      บนกระดาษตารางต้องเป็นตารางจริง ไม่ใช่การ์ดเรียงลงมาทีละคนแบบบนมือถือ
+      ซึ่งกินห้าบรรทัดต่อผู้ป่วยหนึ่งราย และเคยทำให้เอกสารบานเป็นหกแผ่น
+    */
+    /*
+      หัวกระดาษของหน่วยงานต้องโผล่เฉพาะบนกระดาษ ไม่ใช่บนจอ
+      และต้องมีชื่อหน่วยงานกับวันที่จริง ไม่ใช่ช่องว่างที่ลืมเติม
+    */
+    await check('The letterhead appears on paper with the real unit name and date',
+      'document.querySelector(".letterhead").offsetParent !== null' +
+      ' && document.querySelector(".print-foot").offsetParent !== null' +
+      ' && document.getElementById("lh-place").textContent === BOOT.orgPlace' +
+      ' && document.getElementById("lh-unit").textContent === BOOT.orgUnit' +
+      ' && /25\\d\\d/.test(document.getElementById("lh-date").textContent)' +
+      ' && /25\\d\\d/.test(document.getElementById("pf-date").textContent)');
+    await check('Paper is not a phone: tables stay tables',
+      'getComputedStyle(document.querySelector("table.rep-progress")).display === "table"' +
+      ' && getComputedStyle(document.querySelector("table.rep-progress tbody tr")).display === "table-row"' +
+      ' && getComputedStyle(document.querySelector("table.rep-progress thead")).display === "table-header-group"');
+    await send('Emulation.setEmulatedMedia', { media: '' });
+    await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1080, deviceScaleFactor: 1, mobile: false });
+
+    /*
+      สั่งพิมพ์จริงแล้วอ่านจากไฟล์ที่ได้ ไม่ใช่เดาจากความสูงบนจอ
+      preferCSSPageSize ให้ @page ในไฟล์เป็นตัวกำหนดขนาดและแนวกระดาษ
+
+      หมายเหตุ: หัว-ท้ายที่เบราว์เซอร์วาดเอง (วันที่ ชื่อเอกสาร ลิงก์ เลขหน้า)
+      ตรวจจากไฟล์นี้ไม่ได้ เพราะ headless ไม่วาดให้ไม่ว่าจะสั่งอย่างไร
+      สิ่งที่คุมได้จากฝั่งเราคือชื่อเอกสาร ซึ่งเป็นทั้งข้อความบนหัวกระดาษ
+      และชื่อไฟล์ตอนกดบันทึก จึงตรวจตรงนั้นแทน
+    */
+    const pdf = Buffer.from((await send('Page.printToPDF', {
+      printBackground: true, preferCSSPageSize: true
+    })).data, 'base64').toString('latin1');
+    const sheets = (pdf.match(/\/Type\s*\/Page[^s]/g) || []).length;
+    const paper = pdf.match(/\/MediaBox\s*\[\s*0\s+0\s+([\d.]+)\s+([\d.]+)/);
+    assert.ok(Number(paper[2]) > Number(paper[1]), 'กระดาษต้องเป็นแนวตั้ง ได้ ' + paper[1] + 'x' + paper[2]);
+    assert.ok(sheets > 0 && sheets <= 3, 'ข้อมูลตัวอย่างหกรายต้องพิมพ์ไม่เกินสามแผ่น ได้ ' + sheets);
+    checks += 2;
+    console.log('PASS The report prints portrait on ' + sheets + ' A4 sheet(s)');
+
+    /*
+      เลขหน้าเขียนเองใน @bottom-center ของ @page ไม่ได้พึ่งท้ายกระดาษของเบราว์เซอร์
+      ซึ่งพ่วงพาธ file:/// มาด้วยและย้ายที่ไม่ได้
+
+      พิสูจน์ด้วยการพิมพ์สองรอบเทียบกัน รอบที่สองปิดกฎด้วย content:none
+      ถ้าเลขหน้าถูกวาดจริง รอบที่เปิดต้องมีก้อนข้อความมากกว่า
+      ตัวหนังสือในไฟล์ PDF ถูกเข้ารหัสเป็นรหัสตัวอักษร อ่านออกมาเทียบตรง ๆ ไม่ได้
+      จึงนับจำนวนก้อนแทน
+    */
+    const textRuns = (raw) => {
+      let n = 0;
+      const re = new RegExp('stream\\r?\\n', 'g');
+      let at;
+      while ((at = re.exec(raw)) !== null) {
+        const from = at.index + at[0].length;
+        const to = raw.indexOf('endstream', from);
+        if (to < 0) continue;
+        try {
+          n += (zlib.inflateSync(Buffer.from(raw.slice(from, to), 'latin1')).toString('latin1')
+            .match(/T[jJ]/g) || []).length;
+        } catch (e) { /* ไม่ใช่สตรีมบีบอัด */ }
+      }
+      return n;
+    };
+    await evaluate('(() => { const s = document.createElement("style"); s.id = "no-page-number";' +
+      ' s.textContent = "@media print { @page { @bottom-center { content: none } } }";' +
+      ' document.head.appendChild(s); })()');
+    const without = textRuns(Buffer.from((await send('Page.printToPDF', {
+      printBackground: true, preferCSSPageSize: true
+    })).data, 'base64').toString('latin1'));
+    await evaluate('document.getElementById("no-page-number").remove()');
+    assert.ok(textRuns(pdf) > without,
+      'เลขหน้าใน @bottom-center ต้องถูกวาดลงกระดาษจริง ได้ ' + textRuns(pdf) + ' เทียบกับ ' + without);
+    checks++;
+    console.log('PASS Every sheet carries our own page number');
+
+    /*
+      ชื่อเอกสารคือชื่อไฟล์ที่ได้ตอนกด "บันทึกเป็น PDF"
+      ต้องบอกได้ว่าเป็นเอกสารอะไรของใครวันไหน และต้องไม่มีอักขระที่ตั้งชื่อไฟล์ไม่ได้
+      โดยเฉพาะขีดทับใน "รายงาน / BI" ซึ่งเป็นชื่อหน้าจริงบนหน้าจอ
+    */
+    await check('The saved file is named after the document, not index.html',
+      'document.title.indexOf("รายงาน") === 0' +
+      ' && document.title.includes(BOOT.orgPlace)' +
+      ' && /25\\d\\d/.test(document.title)' +
+      ' && !/[\\\\/:*?"<>|]/.test(document.title)');
+
     await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
     await check('Mobile layout has no horizontal page overflow', 'document.documentElement.scrollWidth <= innerWidth');
     await screenshot('dashboard-areas-mobile.png');
@@ -106,6 +430,11 @@ async function screenshot(name) {
     await check('A zero row draws no bar at all',
       '[...document.querySelectorAll(".hbar-track")].some(t => !t.firstElementChild)' +
       ' && ![...document.querySelectorAll(".hbar-fill")].some(b => b.style.width === "0%")');
+    // กดแท่งยอดศูนย์แล้วได้กล่องรายชื่อเปล่า จึงต้องไม่เป็นปุ่มตั้งแต่แรก
+    await check('A zero row is not clickable',
+      '[...document.querySelectorAll(".hbar-row")].every(r =>' +
+      ' r.classList.contains("hbar-zero") === (r.tagName === "DIV" && !r.onclick))' +
+      ' && document.querySelectorAll(".hbar-zero").length > 0');
     await screenshot('report-bars-mobile.png');   // จุดนี้อยู่หลังสลับเป็นจอมือถือแล้ว
 
     await evaluate('go("detail", "TEST001")');

@@ -103,6 +103,29 @@ test('แก้ข้อมูลเก่าด้านอื่นได้�
   ctx.validatePatientArea_(next, old);
   assert.equal(next.tambon, 'ปากน้ำ');
 });
+test('เลือกตำบลได้ทุกอำเภอ ไม่ใช่แค่อำเภอเมือง', () => {
+  assert.equal(ctx.patientArea_(patients[3]).tambonKey, 'เหนือคลอง');
+  assert.equal(ctx.apiDashboard({ scope: 'krabi', district: 'เหนือคลอง', tambon: 'เหนือคลอง' }).total, 1);
+});
+test('แท็บรายตำบลตามอำเภอที่เลือก ยอดรวมตรงกับตัวกรอง', () => {
+  const d = ctx.apiDashboard({ scope: 'krabi', district: 'เหนือคลอง' });
+  assert.equal(d.tambonDistrict, 'เหนือคลอง');
+  assert.equal(d.tambons.reduce((s, r) => s + r.total, 0), d.total);
+  assert.equal(ctx.apiDashboard().tambonDistrict, 'เมืองกระบี่');   // ไม่เลือกอำเภอ ตกมาที่อำเภอเมือง
+});
+test('ตำบลข้ามอำเภอหรืออำเภอที่ยังไม่ระบุ ยังถูกปฏิเสธเหมือนเดิม', () => {
+  for (const f of [{ scope: 'krabi', district: 'เหนือคลอง', tambon: 'อ่าวนาง' },
+                   { scope: 'krabi', district: '__unknown', tambon: 'ปากน้ำ' }]) {
+    assert.throws(() => ctx.apiDashboard(f));
+  }
+});
+test('ชื่อตำบลในกระบี่ไม่ซ้ำข้ามอำเภอ การเดาอำเภอจากตำบลจึงได้คำตอบเดียว', () => {
+  const lookup = ctx.tambonToDistrict_();
+  const all = Object.keys(ctx.GEOGRAPHY.districts).reduce((s, d) => s + ctx.GEOGRAPHY.districts[d].length, 0);
+  assert.equal(Object.keys(lookup).length, all);   // ไม่มีชื่อไหนถูกตัดทิ้งเพราะซ้ำ
+  assert.equal(lookup['อ่าวนาง'], 'เมืองกระบี่');
+  assert.equal(lookup['เหนือคลอง'], 'เหนือคลอง');
+});
 test('บันทึกพื้นที่ลงคอลัมน์ใหม่ และยังเก็บคะแนน BI เดิมครบ', () => {
   patients = [{ ...patients[0], patient_id: 1, _row: 2, bi_1: 5, bi_5: 10 }];
   let saved;

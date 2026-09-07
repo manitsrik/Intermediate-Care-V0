@@ -83,7 +83,7 @@ global.Session = { getActiveUser: () => ({ getEmail: () => 'test@local' }) };
 
 /* ------------------------------------------------------ โหลดโค้ดจริงมาใช้ */
 
-for (const f of ['Config.gs', 'Util.gs', 'Schema.gs']) {
+for (const f of ['Config.gs', 'Geography.gs', 'Util.gs', 'Schema.gs']) {
   eval(fs.readFileSync(path.join(SRC, f), 'utf8').replace(/^\s*function (\w+)/gm, 'global.$1 = function $1'));
 }
 
@@ -193,6 +193,40 @@ check('sheet_() ขยายคอลัมน์ให้พอกับ SCHEMA
 check('ชีต patients ถูกขยายจาก 26 คอลัมน์ให้พอกับคอลัมน์ bi ที่เพิ่มมา',
   patients.getMaxColumns() >= P.length,
   'กว้าง ' + patients.getMaxColumns() + ' ต้องการ ' + P.length);
+
+/* --------------------------- 5. เติมจังหวัด/อำเภอจากชื่อตำบล --------------------------- */
+
+// [hn, tambon, province เดิม, district เดิม, ผลที่ควรได้ 'province|district', คำอธิบาย]
+const areaCases = [
+  ['AREA1', 'อ่าวนาง', '', '', 'กระบี่|เมืองกระบี่', 'ตำบลในกระบี่ เดาอำเภอได้'],
+  ['AREA2', 'ต. เหนือคลอง', '', '', 'กระบี่|เหนือคลอง', 'มีคำนำหน้า ต. ก็ยังเดาได้'],
+  ['AREA3', 'ปากน้ำ', 'ระนอง', 'เมืองระนอง', 'ระนอง|เมืองระนอง', 'มีพื้นที่อยู่แล้ว ห้ามเขียนทับ'],
+  ['AREA4', 'สะกดผิด', '', '', '|', 'ไม่ตรงตำบลไหนในกระบี่ ปล่อยว่างให้คนตรวจ'],
+  ['AREA5', '', '', '', '|', 'ไม่มีตำบลให้ดู ปล่อยว่าง'],
+];
+
+const firstAreaRow = patients.getLastRow() + 1;
+areaCases.forEach((c, i) => {
+  const r = firstAreaRow + i;
+  patients.getRange(r, idx_(SHEETS.PATIENTS, 'hn')).setValues([[c[0]]]);
+  patients.getRange(r, idx_(SHEETS.PATIENTS, 'tambon')).setValues([[c[1]]]);
+  patients.getRange(r, idx_(SHEETS.PATIENTS, 'province'), 1, 2).setValues([[c[2], c[3]]]);
+});
+
+const report = backfillPatientAreas_();
+const readArea = (r) => patients.getRange(r, idx_(SHEETS.PATIENTS, 'province'), 1, 2).getValues()[0].join('|');
+
+areaCases.forEach((c, i) => check(c[5], readArea(firstAreaRow + i) === c[4], readArea(firstAreaRow + i)));
+check('รายงานนับที่เติมได้ถูกต้อง', report.filled === 2, 'เติม ' + report.filled);
+check('รายงานนับที่ข้ามเพราะมีข้อมูลอยู่แล้วถูกต้อง', report.kept === 1, 'ข้าม ' + report.kept);
+check('รายงานบอกชื่อตำบลที่เดาไม่ได้ ไว้ให้ไล่ตรวจ',
+  report.skipped.join(',') === 'สะกดผิด', report.skipped.join(','));
+check('ผู้ป่วยเดิมที่ไม่มีตำบลไม่ถูกแตะ', readArea(2) === '|', readArea(2));
+
+const areaSnapshot = areaCases.map((c, i) => readArea(firstAreaRow + i)).join(' / ');
+const again = backfillPatientAreas_();
+check('เรียกซ้ำแล้วผลเหมือนเดิม และไม่มีอะไรให้เติมเพิ่ม',
+  again.filled === 0 && areaCases.map((c, i) => readArea(firstAreaRow + i)).join(' / ') === areaSnapshot);
 
 console.log(`\nรวม: ${pass} ผ่าน / ${fail} ไม่ผ่าน`);
 process.exit(fail ? 1 : 0);

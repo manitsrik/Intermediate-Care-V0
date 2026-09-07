@@ -269,8 +269,68 @@ function onOpen() {
     .addItem('นำเข้าข้อมูลเดิมจากชีต ตยเคส', 'runMigration')
     .addItem('ล้างข้อมูลที่นำเข้ามา', 'clearMigratedData')
     .addSeparator()
+    .addItem('เติมจังหวัด/อำเภอจากชื่อตำบล', 'fixPatientAreas')
+    .addSeparator()
     .addItem('ตรวจสอบระบบ', 'diagnose')
     .addToUi();
+}
+
+/**
+ * เติมจังหวัด/อำเภอให้ผู้ป่วยที่นำเข้ามาก่อนจะมีช่องพื้นที่ โดยดูจากชื่อตำบล
+ *
+ * เติมเฉพาะรายที่ยังไม่มีทั้งจังหวัดและอำเภอ ของที่กรอกไว้แล้วไม่แตะ
+ * และเติมเฉพาะชื่อตำบลที่ตรงกับตำบลในกระบี่เพียงแห่งเดียว ที่เหลือปล่อยว่างไว้
+ * ให้คนไปตรวจเอง ดีกว่าเดาผิดแล้วสถิติรายพื้นที่เพี้ยนโดยไม่มีใครรู้ตัว
+ *
+ * เรียกซ้ำได้ รอบสองจะไม่เหลืออะไรให้เติมแล้ว
+ */
+function backfillPatientAreas_() {
+  var sh = sheet_(SHEETS.PATIENTS);
+  var last = sh.getLastRow();
+  if (last < 2) return { filled: 0, kept: 0, skipped: [] };
+
+  var lookup = tambonToDistrict_();
+  var pCol = idx_(SHEETS.PATIENTS, 'province');
+  var pIdx = pCol - 1;
+  var dIdx = idx_(SHEETS.PATIENTS, 'district') - 1;
+  var tIdx = idx_(SHEETS.PATIENTS, 'tambon') - 1;
+
+  var rows = sh.getRange(2, 1, last - 1, SCHEMA[SHEETS.PATIENTS].length).getValues();
+  var block = [], filled = 0, kept = 0, skipped = [];
+
+  rows.forEach(function (row) {
+    var province = String(plain_(row[pIdx]) || '').trim();
+    var district = String(plain_(row[dIdx]) || '').trim();
+    if (province || district) { kept++; block.push([province, district]); return; }
+
+    var tambon = areaName_(plain_(row[tIdx]), 'tambon');
+    var found = tambon && Object.prototype.hasOwnProperty.call(lookup, tambon) ? lookup[tambon] : '';
+    if (found) { filled++; block.push([GEOGRAPHY.province, found]); return; }
+    if (tambon) skipped.push(tambon);
+    block.push(['', '']);
+  });
+
+  // province กับ district ต่อกันท้ายตาราง จึงเขียนทีเดียวสองคอลัมน์ได้
+  sh.getRange(2, pCol, block.length, 2).setValues(block);
+  return { filled: filled, kept: kept, skipped: skipped };
+}
+
+/** เมนู: เติมพื้นที่ให้ข้อมูลเก่า แล้วบอกว่าเติมได้เท่าไร เหลือให้ตรวจมือกี่ราย */
+function fixPatientAreas() {
+  var r = withLock_(function () { return backfillPatientAreas_(); });
+  var lines = [
+    'เติมจังหวัด/อำเภอให้ ' + r.filled + ' ราย',
+    'ข้ามเพราะมีข้อมูลพื้นที่อยู่แล้ว ' + r.kept + ' ราย'
+  ];
+  if (r.skipped.length) {
+    var uniq = r.skipped.filter(function (t, i, a) { return a.indexOf(t) === i; });
+    lines.push('');
+    lines.push('เดาไม่ได้ ' + r.skipped.length + ' ราย เพราะชื่อตำบลไม่ตรงกับตำบลใดในกระบี่');
+    lines.push('ชื่อที่พบ: ' + uniq.join(', '));
+    lines.push('รายเหล่านี้ต้องเปิดเวชระเบียนแล้วแก้ที่อยู่เอง');
+  }
+  var ui = SpreadsheetApp.getUi();
+  ui.alert('เติมพื้นที่จากชื่อตำบล', lines.join('\n'), ui.ButtonSet.OK);
 }
 
 /**

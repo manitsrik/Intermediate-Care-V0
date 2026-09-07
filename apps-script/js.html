@@ -1571,6 +1571,13 @@ function optionHtml(value, label, selected) {
   return '<option value="' + esc(value) + '"' + (value === selected ? ' selected' : '') + '>' + esc(label) + '</option>';
 }
 
+/** ป้ายแท็บรายตำบล บอกด้วยว่ากำลังดูตำบลของอำเภอไหนอยู่ */
+function tambonTabLabel() {
+  var geo = BOOT.geography || {};
+  var d = (dashCache && dashCache.tambonDistrict) || geo.city || '';
+  return 'ตำบล อ.' + (d === geo.city ? 'เมือง' : d);
+}
+
 function areaLabel(f) {
   f = f || dashFilter;
   if (f.scope === 'outside') return 'ต่างจังหวัด';
@@ -1584,6 +1591,8 @@ function areaControls(d) {
   var geo = d.geography || BOOT.geography;
   if (!geo) return '';
   var f = dashFilter;
+  // เลือกตำบลได้เมื่อเจาะอำเภอไว้แล้ว ไม่ว่าอำเภอไหนก็ตาม ไม่ใช่แค่อำเภอเมือง
+  var picked = Object.prototype.hasOwnProperty.call(geo.districts, f.district) ? f.district : '';
   return '<section class="area-controls' + (areaFilterOpen ? ' open' : '') + '" aria-label="กรองพื้นที่ผู้ป่วย">' +
     '<div class="area-current"><span class="area-pin">' + icon('target', 17, 1.8) + '</span>' +
     '<span class="area-current-text"><small>พื้นที่ที่กำลังดู</small><b>' + esc(areaLabel()) + '</b></span>' +
@@ -1594,8 +1603,8 @@ function areaControls(d) {
     [['all', 'ทุกพื้นที่'], ['krabi', 'ทั้งจังหวัดกระบี่'], ['outside', 'ต่างจังหวัด'], ['unknown', 'ยังไม่ระบุพื้นที่']].map(function (x) { return optionHtml(x[0], x[1], f.scope); }).join('') + '</select></label>' +
     '<label class="area-field"><span>อำเภอ</span><select onchange="changeArea(\'district\',this.value)"' + (f.scope !== 'krabi' ? ' disabled' : '') + '>' +
     optionHtml('', 'ทุกอำเภอ', f.district) + Object.keys(geo.districts).map(function (x) { return optionHtml(x, x, f.district); }).join('') + optionHtml('__unknown', 'ยังไม่ระบุอำเภอ / ต้องตรวจสอบ', f.district) + '</select></label>' +
-    '<label class="area-field area-tambon"><span>ตำบล</span><select onchange="changeArea(\'tambon\',this.value)"' + (f.district !== geo.city ? ' disabled' : '') + '>' +
-    optionHtml('', 'ทุกตำบล', f.tambon) + geo.districts[geo.city].map(function (x) { return optionHtml(x, x, f.tambon); }).join('') + optionHtml('__unknown', 'ยังไม่ระบุตำบล / ต้องตรวจสอบ', f.tambon) + '</select></label>' +
+    '<label class="area-field area-tambon"><span>ตำบล</span><select onchange="changeArea(\'tambon\',this.value)"' + (picked ? '' : ' disabled') + '>' +
+    optionHtml('', 'ทุกตำบล', f.tambon) + (picked ? geo.districts[picked] : []).map(function (x) { return optionHtml(x, x, f.tambon); }).join('') + optionHtml('__unknown', 'ยังไม่ระบุตำบล / ต้องตรวจสอบ', f.tambon) + '</select></label>' +
     '<button class="area-clear" onclick="resetArea()"' + (f.scope === 'all' ? ' disabled' : '') + ' title="ล้างตัวกรองพื้นที่">ล้าง</button></div></section>';
 }
 
@@ -1678,7 +1687,7 @@ function areaPanels(d) {
   return '<section class="panel area-panel area-section"><div class="area-panel-head">' +
     '<span class="area-context">' + esc(areaLabel()) + ' · <b class="num">' + d.total + '</b> ราย</span>' +
     '<div class="area-tabs" role="tablist"><button role="tab" aria-selected="' + (level === 'district') + '" class="' + (level === 'district' ? 'on' : '') + '" onclick="setAreaTab(\'district\')">รายอำเภอ</button>' +
-    '<button role="tab" aria-selected="' + (level === 'tambon') + '" class="' + (level === 'tambon' ? 'on' : '') + '" onclick="setAreaTab(\'tambon\')">ตำบล อ.เมือง</button></div></div>' +
+    '<button role="tab" aria-selected="' + (level === 'tambon') + '" class="' + (level === 'tambon' ? 'on' : '') + '" onclick="setAreaTab(\'tambon\')">' + esc(tambonTabLabel()) + '</button></div></div>' +
     '<div class="area-table-wrap"><table class="area-table"><thead><tr><th scope="col">พื้นที่</th><th scope="col">ทั้งหมด</th><th scope="col">IMC</th><th scope="col">ดูแล</th><th scope="col">จบ</th><th scope="col"><span class="sr-only">เลือกพื้นที่</span></th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
     '<div class="area-panel-foot">' + more + '<button class="area-empty-toggle" onclick="toggleAreaEmpty()">' +
     (areaShowEmpty ? 'ซ่อนพื้นที่ยอดศูนย์' : 'แสดงพื้นที่ยอดศูนย์' + (zeroCount ? ' (' + zeroCount + ')' : '')) + '</button></div></section>';
@@ -1703,7 +1712,7 @@ function toggleAreaRows() {
 
 function areaRowFilter(level, index) {
   var key = (level === 'district' ? dashCache.districts : dashCache.tambons)[index].key;
-  if (level === 'tambon') return { scope: 'krabi', district: 'เมืองกระบี่', tambon: key };
+  if (level === 'tambon') return { scope: 'krabi', district: dashCache.tambonDistrict, tambon: key };
   return { scope: key === '__outside' ? 'outside' : (key === '__unknown' ? 'unknown' : 'krabi'), district: key.charAt(0) === '_' ? '' : key, tambon: '' };
 }
 
@@ -1717,7 +1726,7 @@ function openAreaPatients(level, index, metric) {
   var group = (level === 'district' ? dashCache.districts : dashCache.tambons)[index];
   var rows = dashboardPatients().filter(function (p) {
     var a = p.area;
-    if (!a || (level === 'tambon' && a.districtKey !== 'เมืองกระบี่')) return false;
+    if (!a || (level === 'tambon' && a.districtKey !== dashCache.tambonDistrict)) return false;
     if ((level === 'district' ? a.districtKey : a.tambonKey) !== group.key) return false;
     if (metric === 'imc') return p.screening_result === 'IMC';
     if (metric === 'active') return p.status !== 'closed';

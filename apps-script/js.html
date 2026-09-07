@@ -219,6 +219,7 @@ var ICONS = {
   calplus: '<rect x="3.6" y="5.4" width="16.8" height="15" rx="2.4"></rect><path d="M3.6 10h16.8M8.4 3v4.4M15.6 3v4.4"></path><path d="M12 12.8v5M9.5 15.3h5"></path>',
   bell: '<path d="M18 8.6a6 6 0 1 0-12 0c0 6-2.2 7.4-2.2 7.4h16.4S18 14.6 18 8.6"></path><path d="M13.7 19.5a2 2 0 0 1-3.4 0"></path>',
   check: '<circle cx="12" cy="12" r="8.6"></circle><path d="M8.4 12.2l2.5 2.5 4.7-5"></path>',
+  edit: '<path d="M4 20h4l10-10a2.1 2.1 0 0 0-3-3L5 17z"></path><path d="M14.5 6.5l3 3"></path>',
   gear: '<circle cx="12" cy="12" r="3.1"></circle><path d="M19.6 14.6a1.6 1.6 0 0 0 .32 1.76l.06.06a1.9 1.9 0 1 1-2.7 2.7l-.06-.06a1.6 1.6 0 0 0-1.76-.32 1.6 1.6 0 0 0-1 1.46v.17a1.9 1.9 0 1 1-3.8 0v-.09a1.6 1.6 0 0 0-1.05-1.46 1.6 1.6 0 0 0-1.76.32l-.06.06a1.9 1.9 0 1 1-2.7-2.7l.06-.06a1.6 1.6 0 0 0 .32-1.76 1.6 1.6 0 0 0-1.46-1H3.7a1.9 1.9 0 1 1 0-3.8h.09a1.6 1.6 0 0 0 1.46-1.05 1.6 1.6 0 0 0-.32-1.76l-.06-.06a1.9 1.9 0 1 1 2.7-2.7l.06.06a1.6 1.6 0 0 0 1.76.32h.08a1.6 1.6 0 0 0 1-1.46V3.7a1.9 1.9 0 1 1 3.8 0v.09a1.6 1.6 0 0 0 1 1.46 1.6 1.6 0 0 0 1.76-.32l.06-.06a1.9 1.9 0 1 1 2.7 2.7l-.06.06a1.6 1.6 0 0 0-.32 1.76v.08a1.6 1.6 0 0 0 1.46 1h.17a1.9 1.9 0 1 1 0 3.8h-.09a1.6 1.6 0 0 0-1.46 1z"></path>'
 };
 
@@ -994,13 +995,13 @@ function drawDetail(d) {
 
   html += '<div class="card"><h2>คะแนน Barthel Index' +
     '<span class="sub num">ประเมินแล้ว ' + d.assessments.length + ' ครั้ง · เต็ม ' + BOOT.biMax + ' คะแนน</span></h2>' +
-    (d.assessments.length ? biChart(d.assessments) + biTable(d.assessments)
+    (d.assessments.length ? biChart(d.assessments) + biTable(d.assessments, p.hn)
       : '<div class="empty">ยังไม่มีการประเมิน</div>') +
     '</div>';
 
   html += '<div class="card"><h2>การติดตาม' +
     '<span class="sub num">' + d.followups.length + ' ครั้ง</span></h2>' +
-    (d.followups.length ? timeline(d.followups) : '<div class="empty">ยังไม่มีบันทึกการติดตาม</div>') +
+    (d.followups.length ? timeline(d.followups, p.hn) : '<div class="empty">ยังไม่มีบันทึกการติดตาม</div>') +
     '<div class="btn-row">' +
     '<button class="btn" onclick="go(\'fu\',\'' + esc(p.hn) + '\')">+ บันทึกการติดตาม</button>' +
     (p.status === 'closed' ? ''
@@ -1057,7 +1058,14 @@ function kv(k, v) {
   return '<dt>' + esc(k) + '</dt><dd>' + esc(v === '' || v === undefined || v === null ? '—' : v) + '</dd>';
 }
 
-function timeline(list) {
+/** ปุ่มแก้ไขรายการที่บันทึกไปแล้ว ส่งรหัสรายการไปให้ฟอร์มเติมค่าเดิม */
+function editBtn(view, hn, id, what) {
+  return '<button class="row-edit" title="แก้ไข' + esc(what) + '" aria-label="แก้ไข' + esc(what) + '"' +
+    ' onclick="go(\'' + view + '\', { hn: \'' + esc(hn) + '\', id: \'' + esc(id) + '\' })">' +
+    icon('edit', 15, 1.9) + '</button>';
+}
+
+function timeline(list, hn) {
   return '<div class="timeline">' + list.slice().reverse().map(function (f, i, arr) {
     var last = (i === arr.length - 1);
     return '<div class="tl-item">' +
@@ -1065,15 +1073,17 @@ function timeline(list) {
       (last ? '' : '<div class="tl-line"></div>') + '</div>' +
       '<div class="tl-body">' +
       '<div class="tl-date num">ครั้งที่ ' + esc(f.seq) + ' · ' + esc(thDate(f.fu_date)) +
-      (f.fu_type ? ' <span class="chip chip-sq">' + esc(f.fu_type) + '</span>' : '') + '</div>' +
+      (f.fu_type ? ' <span class="chip chip-sq">' + esc(f.fu_type) + '</span>' : '') +
+      (hn ? editBtn('fu', hn, f.fu_id, 'บันทึกการติดตามครั้งที่ ' + f.seq) : '') + '</div>' +
       '<div class="tl-note">' + esc(f.complications || f.note || '—') + '</div>' +
       '</div></div>';
   }).join('') + '</div>';
 }
 
-function biTable(list) {
+function biTable(list, hn) {
   return '<div class="table-wrap"><table><thead><tr>' +
     '<th>ครั้งที่</th><th>วันที่ประเมิน</th><th>คะแนน</th><th>กลุ่ม ADL</th><th>เข้าเกณฑ์</th>' +
+    '<th><span class="sr-only">แก้ไข</span></th>' +
     '</tr></thead><tbody>' +
     list.map(function (a) {
       return '<tr style="cursor:default">' +
@@ -1082,6 +1092,7 @@ function biTable(list) {
         '<td class="num"><strong>' + esc(a.total) + '</strong> / ' + BOOT.biMax + '</td>' +
         '<td>' + esc(a.adl_group || '—') + '</td>' +
         '<td>' + (String(a.imc_eligible).toUpperCase() === 'TRUE' ? 'ใช่' : '—') + '</td>' +
+        '<td>' + (hn ? editBtn('bi', hn, a.assess_id, 'ผลประเมินครั้งที่ ' + a.seq) : '') + '</td>' +
         '</tr>';
     }).join('') + '</tbody></table></div>';
 }
@@ -1132,17 +1143,33 @@ function biChart(list) {
 
 /* -------------------------------------------------------- ฟอร์มประเมิน BI */
 
-function renderBiForm(hn) {
+function renderBiForm(param) {
+  var a = formArg(param), hn = a.hn;
+  var old = cachedRecord(hn, 'assessments', 'assess_id', a.id);
   var items = BOOT.biItems;
+
+  /*
+    ผลประเมินที่นำเข้าจากไฟล์เดิมมีแต่คะแนนรวม ไม่มีคะแนนราย 10 ข้อ
+    กดแก้ไขแล้วช่องจะว่างหมด และบันทึกไม่ได้จนกว่าจะเลือกครบทุกข้อ
+    บอกไว้ตั้งแต่ต้นดีกว่าปล่อยให้กรอกไปครึ่งทางแล้วงงว่าทำไมของเดิมไม่ขึ้น
+  */
+  var noItems = !!old && !items.some(function (it) { return String(old[it.key] || '') !== ''; });
 
   var html = backBtn('detail', hn) +
     '<div class="page-head"><div class="head-text">' +
-    '<h1>ประเมิน Barthel Index</h1>' +
-    '<span class="sub num">HN ' + esc(hn) + '</span>' +
+    '<h1>' + (old ? 'แก้ไขผลประเมิน Barthel Index' : 'ประเมิน Barthel Index') + '</h1>' +
+    '<span class="sub num">HN ' + esc(hn) +
+    (old ? ' · ครั้งที่ ' + esc(old.seq) : '') + '</span>' +
     '</div></div>' +
     '<form id="bi-form"><input type="hidden" name="hn" value="' + esc(hn) + '">' +
+    (old ? '<input type="hidden" name="assess_id" value="' + esc(old.assess_id) + '">' +
+           '<input type="hidden" name="seq" value="' + esc(old.seq) + '">' : '') +
+    (noItems ? '<div class="card notice-warn">ผลประเมินครั้งนี้นำเข้ามาโดยมีแต่คะแนนรวม ' +
+      esc(old.total) + ' คะแนน ไม่มีคะแนนรายข้อ ถ้าจะแก้ต้องเลือกใหม่ให้ครบทุกข้อ ' +
+      'ถ้ายังไม่พร้อมให้กดย้อนกลับ ของเดิมจะไม่ถูกแตะ</div>' : '') +
     '<div class="card"><div class="grid">' +
-    field({ k: 'assess_date', l: 'วันที่ประเมิน', t: 'date', req: true }, BOOT.today) +
+    field({ k: 'assess_date', l: 'วันที่ประเมิน', t: 'date', req: true },
+      old ? old.assess_date : (a.date || BOOT.today)) +
     '<div class="field" style="justify-content:flex-end">' +
     '  <div style="display:flex;align-items:baseline"><span style="font-size:13px;color:var(--muted)">ความคืบหน้า</span>' +
     '  <span id="bi-progress-text" class="num" style="margin-left:auto;font-size:13px;color:var(--brand-ink);font-weight:600">0 จาก ' + items.length + ' ข้อ</span></div>' +
@@ -1161,7 +1188,8 @@ function renderBiForm(hn) {
       '<div class="bi-options">' +
       item.options.map(function (opt, score) {
         return '<label class="bi-opt">' +
-          '<input type="radio" name="' + item.key + '" value="' + score + '">' +
+          '<input type="radio" name="' + item.key + '" value="' + score + '"' +
+          (old && String(old[item.key]) === String(score) ? ' checked' : '') + '>' +
           '<span class="score num">' + score + '</span>' +
           '<span>' + esc(opt) + '</span></label>';
       }).join('') +
@@ -1169,8 +1197,9 @@ function renderBiForm(hn) {
   });
 
   html += '<div class="card"><div class="grid">' +
-    field({ k: 'multiple_impairment', l: 'มี multiple impairment', t: 'checkbox', full: true }) +
-    field({ k: 'note', l: 'หมายเหตุ', t: 'textarea', full: true }) +
+    field({ k: 'multiple_impairment', l: 'มี multiple impairment', t: 'checkbox', full: true },
+      old ? old.multiple_impairment : '') +
+    field({ k: 'note', l: 'หมายเหตุ', t: 'textarea', full: true }, old ? old.note : '') +
     '</div></div>' +
     '<div class="bi-summary">' +
     '<div class="bi-total num"><span id="bi-total">0</span><small> / ' + BOOT.biMax + ' คะแนน</small></div>' +
@@ -1206,7 +1235,8 @@ function renderBiForm(hn) {
     btn.disabled = true; btn.textContent = 'กำลังบันทึก…';
     call('apiSaveBi', data).then(function () {
       dropCache_(data.hn);
-      return toast('บันทึกผลประเมินเรียบร้อย').then(function () { go('detail', data.hn); });
+      return toast(old ? 'แก้ไขผลประเมินแล้ว' : 'บันทึกผลประเมินเรียบร้อย')
+        .then(function () { go('detail', data.hn); });
     }).catch(function (err) {
       btn.disabled = false; btn.textContent = 'บันทึกผลประเมิน';
       fail(err);
@@ -1264,16 +1294,42 @@ function updateBiSummary() {
 
 /* ------------------------------------------------------- ฟอร์มติดตามผล */
 
-function renderFuForm(hn) {
+/*
+  พารามิเตอร์ของหน้าฟอร์มอาจเป็น HN เฉย ๆ (บันทึกรายการใหม่)
+  หรือเป็นก้อนที่มีรหัสรายการที่จะแก้ และวันที่ตั้งต้น
+  ฝั่งเซิร์ฟเวอร์รองรับการแก้ไขอยู่แล้ว ถ้าส่งรหัสเดิมกลับไปมันจะเขียนทับแทนการเพิ่มใหม่
+*/
+function formArg(param) {
+  return typeof param === 'string' ? { hn: param } : (param || {});
+}
+
+/** รายการเดิมที่จะแก้ อ่านจากข้อมูลหน้าเวชระเบียนที่โหลดไว้แล้ว */
+function cachedRecord(hn, listKey, idKey, id) {
+  var d = detailCache[hn];
+  if (!d || !id) return null;
+  return (d[listKey] || []).filter(function (r) { return String(r[idKey]) === String(id); })[0] || null;
+}
+
+function renderFuForm(param) {
+  var a = formArg(param), hn = a.hn;
+  var old = cachedRecord(hn, 'followups', 'fu_id', a.id);
   main().innerHTML = backBtn('detail', hn) +
-    '<div class="page-head"><div class="head-text"><h1>บันทึกการติดตาม</h1>' +
-    '<span class="sub num">HN ' + esc(hn) + '</span></div></div>' +
+    '<div class="page-head"><div class="head-text">' +
+    '<h1>' + (old ? 'แก้ไขบันทึกการติดตาม' : 'บันทึกการติดตาม') + '</h1>' +
+    '<span class="sub num">HN ' + esc(hn) +
+    (old ? ' · ครั้งที่ ' + esc(old.seq) : '') + '</span></div></div>' +
     '<form id="fu-form"><input type="hidden" name="hn" value="' + esc(hn) + '">' +
+    // ส่งรหัสกับลำดับเดิมกลับไปด้วย เซิร์ฟเวอร์จะได้เขียนทับรายการเดิมและคงลำดับไว้
+    (old ? '<input type="hidden" name="fu_id" value="' + esc(old.fu_id) + '">' +
+           '<input type="hidden" name="seq" value="' + esc(old.seq) + '">' : '') +
     '<div class="card"><div class="grid">' +
-    field({ k: 'fu_date', l: 'วัน เดือน ปี', t: 'date', req: true }, BOOT.today) +
-    field({ k: 'fu_type', l: 'ประเภทการติดตาม', t: 'select', o: BOOT.vocab.FU_TYPE, req: true }) +
-    field({ k: 'complications', l: 'ภาวะแทรกซ้อนที่พบ', t: 'textarea', full: true }) +
-    field({ k: 'note', l: 'หมายเหตุ', t: 'textarea', full: true }) +
+    field({ k: 'fu_date', l: 'วัน เดือน ปี', t: 'date', req: true }, old ? old.fu_date : (a.date || BOOT.today)) +
+    field({ k: 'fu_type', l: 'ประเภทการติดตาม', t: 'select', o: BOOT.vocab.FU_TYPE, req: true }, old ? old.fu_type : '') +
+    field({ k: 'complications', l: 'ภาวะแทรกซ้อนที่พบ', t: 'textarea', full: true }, old ? old.complications : '') +
+    field({ k: 'note', l: 'หมายเหตุ', t: 'textarea', full: true }, old ? old.note : '') +
+    // ตรวจครั้งเดียวแล้วต้องบันทึกสองที่ ติ๊กไว้แล้วระบบพาไปหน้าประเมินต่อโดยเติมวันที่ให้
+    (old ? '' : '<label class="check full"><input type="checkbox" id="fu-then-bi">' +
+           '<span>ประเมิน BI ต่อหลังบันทึก</span></label>') +
     '</div><div class="btn-row"><button type="submit" class="btn btn-primary">บันทึก</button></div></div></form>';
 
   $('#fu-form').addEventListener('submit', function (e) {
@@ -1281,9 +1337,13 @@ function renderFuForm(hn) {
     var data = readForm(e.target);
     var btn = e.target.querySelector('button[type=submit]');
     btn.disabled = true; btn.textContent = 'กำลังบันทึก…';
+    var thenBi = $('#fu-then-bi') && $('#fu-then-bi').checked;
     call('apiSaveFollowup', data).then(function () {
       dropCache_(data.hn);
-      return toast('บันทึกการติดตามเรียบร้อย').then(function () { go('detail', data.hn); });
+      return toast(old ? 'แก้ไขบันทึกการติดตามแล้ว' : 'บันทึกการติดตามเรียบร้อย').then(function () {
+        // ไปต่อหน้าประเมินโดยพกวันที่เดิมไป จะได้ไม่ต้องกรอกซ้ำ
+        return thenBi ? go('bi', { hn: data.hn, date: data.fu_date }) : go('detail', data.hn);
+      });
     }).catch(function (err) {
       btn.disabled = false; btn.textContent = 'บันทึก';
       fail(err);

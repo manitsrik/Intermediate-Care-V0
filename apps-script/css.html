@@ -966,6 +966,21 @@ table.cards td.head { display: none; }
 
 /* ตัวกรองพื้นที่แบบ toolbar และตารางสรุปใบเดียว เพื่อรักษาพื้นที่แนวตั้ง */
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+/* แถบเตือนในฟอร์ม ใช้โทนเดียวกับแถบโหมดทดสอบ จะได้อ่านออกว่าเป็นคำเตือน ไม่ใช่ข้อมูล */
+.notice-warn {
+  border-color: #f3ddd3; background: #fdf5f1; color: #8a4b2c;
+  font-size: 13px; line-height: 1.55;
+}
+
+/* ปุ่มแก้ไขรายการที่บันทึกแล้ว จางไว้ก่อน ชัดขึ้นเมื่อเอาเมาส์ไปวางบนแถว */
+.row-edit {
+  display: inline-grid; place-items: center; width: 26px; height: 26px; vertical-align: middle;
+  margin-left: 6px; border: 0; border-radius: 7px; background: transparent;
+  color: var(--faint); cursor: pointer;
+}
+.row-edit:hover, .row-edit:focus-visible { color: var(--brand-ink); background: var(--brand-soft); }
+tr:hover .row-edit, .tl-item:hover .row-edit { color: var(--brand-ink); }
+
 /* แถวงานค้าง กดได้ทั้งแถว จำนวนชิดขวาเพื่อให้กวาดตาเทียบกันได้เร็ว */
 .todo-row {
   display: flex; align-items: center; gap: 10px; width: 100%;

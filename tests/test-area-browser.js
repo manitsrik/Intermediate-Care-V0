@@ -17,6 +17,14 @@ let ws, nextId = 0, checks = 0;
 const pending = new Map(), exceptions = [];
 let launchError;
 chrome.on('error', e => { launchError = e; });
+// toast ของแอปเป็นโมดัลที่รอคนกดตกลง ไม่ใช่ข้อความที่หายเอง
+// ถ้าไม่ปิดให้ ลำดับหลังบันทึกจะไม่เดินต่อ และเทสต์จะค้างจนหมดเวลา
+async function submitAndDismiss(formId) {
+  await evaluate('document.getElementById("' + formId + '").requestSubmit()');
+  await until(() => evaluate('!document.getElementById("modal").hidden'));
+  await evaluate('document.getElementById("modal-ok").click()');
+}
+
 async function until(fn, timeout = 15000) {
   const start = Date.now();
   while (Date.now() - start < timeout) { if (await fn()) return; await sleep(100); }
@@ -88,6 +96,49 @@ async function screenshot(name) {
     await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
     await check('Mobile layout has no horizontal page overflow', 'document.documentElement.scrollWidth <= innerWidth');
     await screenshot('dashboard-areas-mobile.png');
+    await evaluate('go("detail", "TEST001")');
+    await until(() => evaluate('!!detailCache["TEST001"]'));
+    await check('Saved records offer an edit button', 'document.querySelectorAll(".row-edit").length >= 2');
+
+    await evaluate('go("bi", { hn: "TEST001", id: "TEST001-BI2" })');
+    await check('Editing an assessment carries the id, seq and every saved score',
+      'document.querySelector("[name=assess_id]").value === "TEST001-BI2"' +
+      ' && document.querySelector("[name=seq]").value === "2"' +
+      ' && document.querySelectorAll("#bi-form input[type=radio]:checked").length === BOOT.biItems.length');
+    await evaluate('window.__biBefore = detailCache["TEST001"].assessments.length');
+    await submitAndDismiss('bi-form');
+    await until(() => evaluate('VIEW.name === "detail" && !!detailCache["TEST001"]'));
+    await check('Saving an edit replaces the record instead of adding one',
+      'detailCache["TEST001"].assessments.length === window.__biBefore' +
+      ' && detailCache["TEST001"].assessments.filter(a => String(a.assess_id) === "TEST001-BI2").length === 1' +
+      ' && detailCache["TEST001"].assessments.filter(a => Number(a.seq) === 2).length === 1');
+
+    await evaluate('go("fu", { hn: "TEST001", id: "TEST001-FU1" })');
+    await check('Editing a follow-up prefills what was saved and hides the continue option',
+      'document.querySelector("[name=fu_id]").value === "TEST001-FU1"' +
+      ' && document.querySelector("[name=fu_date]").value === "2025-12-09"' +
+      ' && document.querySelector("[name=fu_type]").value === "PT"' +
+      ' && !document.getElementById("fu-then-bi")');
+    await evaluate('window.__fuBefore = detailCache["TEST001"].followups.length;' +
+      'document.querySelector("#fu-form [name=note]").value = "แก้ไขแล้ว"');
+    await submitAndDismiss('fu-form');
+    await until(() => evaluate('VIEW.name === "detail" && !!detailCache["TEST001"]'));
+    await check('Saving a follow-up edit keeps one row and stores the change',
+      'detailCache["TEST001"].followups.length === window.__fuBefore' +
+      ' && detailCache["TEST001"].followups.filter(f => String(f.fu_id) === "TEST001-FU1")[0].note === "แก้ไขแล้ว"');
+
+    await evaluate('go("fu", "TEST001")');
+    await check('A new follow-up offers to continue to the assessment',
+      '!document.querySelector("[name=fu_id]") && !!document.getElementById("fu-then-bi")');
+    await evaluate('document.getElementById("fu-then-bi").checked = true;' +
+      'document.querySelector("[name=fu_date]").value = "2026-03-04";' +
+      'document.querySelector("[name=fu_type]").value = "PT"');
+    await submitAndDismiss('fu-form');
+    await until(() => evaluate('VIEW.name === "bi"'));
+    await check('Continuing to the assessment carries the visit date over',
+      'document.querySelector("[name=assess_date]").value === "2026-03-04"' +
+      ' && !document.querySelector("[name=assess_id]")');
+
     await evaluate('go("patient", "TEST001")');
     await check('Patient form restores province and dependent district/tambon selects', 'document.querySelector("[name=district]").tagName === "SELECT" && document.querySelector("[name=district]").value === "เมืองกระบี่" && document.querySelector("[name=tambon]").value === "ปากน้ำ"');
     await evaluate('var d = document.querySelector("[name=district]"); d.value = "เหนือคลอง"; d.dispatchEvent(new Event("change"))');

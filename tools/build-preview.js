@@ -100,13 +100,23 @@ DB.patients.forEach(function (pt) {
   var step = (Number(pt.latest_bi) - Number(pt.first_bi)) / Math.max(n - 1, 1);
   for (var i = 0; i < n; i++) {
     var total = Math.round(Number(pt.first_bi) + step * i);
-    DB.bi.push({
+    // กระจายคะแนนรวมลงราย 10 ข้อ ให้เหมือนของที่บันทึกผ่านแอปจริง
+    // ไม่งั้นพรีวิวจะเป็นแบบข้อมูลนำเข้าที่มีแต่คะแนนรวม ทดสอบการแก้ไขไม่ได้
+    var left = total, scores = {};
+    BI_ITEMS.forEach(function (it) {
+      var s = Math.max(0, Math.min(it.options.length - 1, left));
+      scores[it.key] = s;
+      left -= s;
+    });
+    var rec = {
       assess_id: pt.hn + '-BI' + (i + 1), hn: pt.hn, seq: i + 1,
       assess_date: ['2025-10-27', '2025-11-11', '2025-12-09', '2026-02-16'][i] || '2026-02-16',
       total: total, multiple_impairment: 'FALSE',
       imc_eligible: total < 15 ? 'TRUE' : 'FALSE', adl_group: adlGroup_(total),
       note: 'ข้อมูลตัวอย่างสำหรับพรีวิว', assessed_by: 'preview@local', created_at: ''
-    });
+    };
+    Object.keys(scores).forEach(function (k) { rec[k] = scores[k]; });
+    DB.bi.push(rec);
   }
   ['เดินด้วย walker ได้เอง ไม่มีแผลกดทับ', 'ฝึกลุกนั่งและยืนทรงตัว ขาขวาแรงขึ้น']
     .forEach(function (txt, i) {
@@ -221,24 +231,41 @@ var API = {
     return { ok: true, hn: rec.hn };
   },
 
+  /*
+    ส่งรหัสรายการมาด้วยถือเป็นการแก้ของเดิม ไม่ใช่เพิ่มใหม่ ให้ตรงกับของจริง
+    ถ้าตัวจำลองเพิ่มรายการใหม่เสมอ พรีวิวจะดูเหมือนแก้ไขแล้วได้รายการซ้ำ
+  */
   apiSaveBi: function (form) {
     var result = evaluateBi_(form, form.multiple_impairment);
-    var seq = DB.bi.filter(function (b) { return b.hn === form.hn; }).length + 1;
-    var rec = { assess_id: 'new' + seq, hn: form.hn, seq: seq, assess_date: form.assess_date,
+    var mine = DB.bi.filter(function (b) { return b.hn === form.hn; });
+    var old = mine.filter(function (b) { return String(b.assess_id) === String(form.assess_id); })[0];
+    var seq = old ? old.seq : mine.length + 1;
+    var rec = { assess_id: old ? old.assess_id : 'new' + seq, hn: form.hn, seq: seq,
+      assess_date: form.assess_date,
       total: result.total, multiple_impairment: form.multiple_impairment ? 'TRUE' : 'FALSE',
       imc_eligible: result.imc_eligible ? 'TRUE' : 'FALSE', adl_group: result.adl_group,
       note: form.note || '', assessed_by: 'preview@local', created_at: '' };
-    DB.bi.push(rec);
+    if (old) DB.bi[DB.bi.indexOf(old)] = rec; else DB.bi.push(rec);
+
     var pt = DB.patients.filter(function (x) { return x.hn === form.hn; })[0];
-    if (pt) { pt.latest_bi = result.total; pt.bi_count = seq; if (!pt.first_bi) pt.first_bi = result.total; }
+    if (pt) {
+      var all = DB.bi.filter(function (b) { return b.hn === form.hn; })
+        .sort(function (a, b) { return a.seq - b.seq; });
+      pt.first_bi = all[0].total;
+      pt.latest_bi = all[all.length - 1].total;
+      pt.bi_count = all.length;
+    }
     return { ok: true, result: result, seq: seq };
   },
 
   apiSaveFollowup: function (form) {
-    var seq = DB.fu.filter(function (f) { return f.hn === form.hn; }).length + 1;
-    DB.fu.push({ fu_id: 'new' + seq, hn: form.hn, seq: seq, fu_date: form.fu_date,
+    var mine = DB.fu.filter(function (f) { return f.hn === form.hn; });
+    var old = mine.filter(function (f) { return String(f.fu_id) === String(form.fu_id); })[0];
+    var seq = old ? old.seq : mine.length + 1;
+    var rec = { fu_id: old ? old.fu_id : 'new' + seq, hn: form.hn, seq: seq, fu_date: form.fu_date,
       fu_type: form.fu_type, complications: form.complications || '', note: form.note || '',
-      recorded_by: 'preview@local', created_at: '' });
+      recorded_by: 'preview@local', created_at: '' };
+    if (old) DB.fu[DB.fu.indexOf(old)] = rec; else DB.fu.push(rec);
     return { ok: true, seq: seq };
   },
 

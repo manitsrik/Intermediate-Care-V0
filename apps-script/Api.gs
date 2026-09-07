@@ -336,6 +336,7 @@ function apiReport() {
 
 function apiBootstrap() {
   var user = currentUser_();
+  ensurePatientAreaHeaders_();
   var today = todayIso_();
   var weekAhead = addDaysIso_(today, 7);
   var patients = readAll_(SHEETS.PATIENTS).map(displayPatient_).sort(function (a, b) {

@@ -105,6 +105,15 @@ check(`คอลัมน์ bi_1..bi_${CONFIG.BI_SUMMARY_COLUMNS} ยังต�
     Array.from({ length: CONFIG.BI_SUMMARY_COLUMNS }, (_, i) => 'bi_' + (i + 1)).join(','));
 check('จังหวัดและอำเภอต่อท้ายคอลัมน์เดิม', cols.slice(-2).join(',') === 'province,district');
 
+/* ------------------------------------- 1.1 เติมหัวคอลัมน์พื้นที่ให้ชีตเดิมอัตโนมัติ */
+
+const legacyPatients = new FakeSheet(SHEETS.PATIENTS, 1000, 53);
+sheets[SHEETS.PATIENTS] = legacyPatients;
+check('เติมหัวคอลัมน์พื้นที่ในชีตเดิมเมื่อเปิดแอป', ensurePatientAreaHeaders_() === true);
+check('หัวคอลัมน์พื้นที่อยู่ตำแหน่งท้ายสุดและเรียงถูกต้อง',
+  legacyPatients.getRange(1, idx_(SHEETS.PATIENTS, 'province'), 1, 2).getValues()[0].join(',') === 'province,district');
+check('เรียกซ้ำแล้วไม่เขียนหัวคอลัมน์ใหม่', ensurePatientAreaHeaders_() === false);
+
 /* ------------------------------------------------ 2. สูตรในชีต summary */
 
 // ชีตของจริงกว้าง 26 คอลัมน์ตอนสร้าง แคบกว่า SCHEMA อยู่แล้ว ใช้ทดสอบการขยายไปในตัว

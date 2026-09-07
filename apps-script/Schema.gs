@@ -82,6 +82,38 @@ function col_(sheetName, field) {
 }
 
 /**
+ * เติมหัวคอลัมน์พื้นที่ที่เพิ่มในภายหลังให้ชีตเดิมโดยไม่เขียนทับข้อมูล
+ * เรียกตอนเปิดแอปเพื่อให้ deployment ใหม่พร้อมใช้ได้ทันทีโดยไม่ต้องรัน setupSystem()
+ */
+function ensurePatientAreaHeaders_() {
+  var sh = sheet_(SHEETS.PATIENTS);
+  var start = idx_(SHEETS.PATIENTS, 'province');
+  var expected = ['province', 'district'];
+  var range = sh.getRange(1, start, 1, expected.length);
+  var actual = range.getValues()[0];
+  var changed = false;
+
+  expected.forEach(function (name, i) {
+    var current = String(actual[i] || '').trim();
+    if (!current) {
+      actual[i] = name;
+      changed = true;
+      return;
+    }
+    if (current !== name) {
+      throw new Error('หัวคอลัมน์พื้นที่ในชีต patients ไม่ตรงกับโครงสร้างระบบ: คอลัมน์ ' +
+        letter_(start + i) + ' ต้องเป็น ' + name + ' แต่พบ ' + current);
+    }
+  });
+
+  if (changed) {
+    range.setValues([actual]).setFontWeight('bold').setBackground('#e8f0fe');
+    sh.getRange(1, start, sh.getMaxRows(), expected.length).setNumberFormat('@');
+  }
+  return changed;
+}
+
+/**
  * ติดตั้งระบบครั้งแรก - สร้างชีตทั้งหมดพร้อมหัวคอลัมน์
  * เรียกซ้ำได้ ไม่ลบข้อมูลเดิม
  */

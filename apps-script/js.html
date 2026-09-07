@@ -193,6 +193,7 @@ var detailCache = {};
 var CACHE_FRESH_MS = 30000;
 
 function dropCache_(hn) {
+  dashRequest++;
   patientCache = null;
   patientCacheAt = 0;
   dashCache = null;
@@ -334,6 +335,7 @@ function renderNav() {
 }
 
 function go(name, param) {
+  dashRequest++;
   VIEW = { name: name, param: param };
   closeDropdown();
   closeList();
@@ -815,6 +817,8 @@ function patientSections() {
     ]],
     ['ที่อยู่และการติดต่อ', [
       { k: 'address', l: 'ที่อยู่', t: 'text', full: true },
+      { k: 'province', l: 'จังหวัด', t: 'text', ph: 'เช่น กระบี่' },
+      { k: 'district', l: 'อำเภอ', t: 'text' },
       { k: 'tambon', l: 'ตำบล', t: 'text' },
       { k: 'phone1', l: 'เบอร์โทรศัพท์', t: 'text' },
       { k: 'phone2', l: 'เบอร์โทรศัพท์สำรอง', t: 'text' }
@@ -857,6 +861,7 @@ function drawPatientForm(p) {
   html += '<div class="btn-row"><button type="submit" class="btn btn-primary">บันทึก</button></div></form>';
   main().innerHTML = html;
 
+  wirePatientArea();
   $('#patient-form').addEventListener('submit', function (e) {
     e.preventDefault();
     var form = e.target;
@@ -883,6 +888,45 @@ function drawPatientForm(p) {
 }
 
 /** ตรวจเลขบัตรประชาชนแบบหลักตรวจสอบ คืนข้อความเตือนถ้าผิด */
+function wirePatientArea() {
+  var form = $('#patient-form'), geo = BOOT.geography;
+  if (!geo) return;
+  var province = form.querySelector('[name="province"]');
+  var clean = function (v) { return String(v || '').trim().replace(/^(จังหวัด|อำเภอ|ตำบล|[จอต]\.)\s*/, '').trim(); };
+  var replace = function (name, options, value) {
+    var old = form.querySelector('[name="' + name + '"]');
+    var el = document.createElement(options ? 'select' : 'input');
+    el.name = name;
+    if (options) {
+      var choices = options.slice();
+      // เก็บค่าเดิมที่ยังต้องตรวจสอบไว้ ไม่ล้างเงียบ ๆ ตอนเปิดฟอร์ม
+      if (value && choices.indexOf(value) === -1) choices.push(value);
+      el.innerHTML = optionHtml('', '— ยังไม่ระบุ —', value) + choices.map(function (x) { return optionHtml(x, x, value); }).join('');
+    } else { el.type = 'text'; }
+    el.value = value || '';
+    old.parentNode.replaceChild(el, old);
+    return el;
+  };
+  var refreshTambon = function (reset) {
+    var d = clean(form.querySelector('[name="district"]').value);
+    var value = reset ? '' : clean(form.querySelector('[name="tambon"]').value);
+    replace('tambon', clean(province.value) === geo.province ? (Object.prototype.hasOwnProperty.call(geo.districts, d) ? geo.districts[d] : []) : null, value);
+  };
+  var refreshDistrict = function (reset) {
+    var value = reset ? '' : clean(form.querySelector('[name="district"]').value);
+    if (clean(province.value) === geo.province && value === 'เมือง') value = geo.city;
+    var district = replace('district', clean(province.value) === geo.province ? Object.keys(geo.districts) : null, value);
+    district.addEventListener('change', function () { refreshTambon(true); });
+    refreshTambon(reset);
+  };
+  province.setAttribute('list', 'province-options');
+  var list = document.createElement('datalist');
+  list.id = 'province-options'; list.innerHTML = '<option value="กระบี่"></option>';
+  province.parentNode.appendChild(list);
+  province.addEventListener('change', function () { refreshDistrict(true); });
+  refreshDistrict(false);
+}
+
 function validateCid(cid) {
   var s = String(cid || '').replace(/\D/g, '');
   if (!s) return '';
@@ -1000,7 +1044,7 @@ function infoCard(p) {
     kv('CT / MRI', p.ct_mri) +
     kv('Operation', p.operation) +
     kv('ปัญหาอื่น ๆ', p.other_problems) +
-    kv('ที่อยู่', [p.address, p.tambon ? 'ต.' + p.tambon : ''].filter(String).join(' ')) +
+    kv('ที่อยู่', [p.address, p.tambon ? 'ต.' + p.tambon : '', p.district ? 'อ.' + p.district : '', p.province ? 'จ.' + p.province : ''].filter(String).join(' ')) +
     kv('โทรศัพท์', [p.phone1, p.phone2].filter(String).join(' / ')) +
     kv('วันนัด OPD', thDate(p.kbh_appt_date)) +
     kv('หมายเหตุ', p.note) +
@@ -1486,14 +1530,26 @@ function renderSettings() {
 var dashCache = null;
 var reportCache = null;
 var chartMode = 'months';
+var dashFilter = { scope: 'all', district: '', tambon: '' };
+var dashRequest = 0;
+var areaTab = 'district';
+var areaShowEmpty = false;
+var areaRowsExpanded = false;
+var areaFilterOpen = false;
 
 function renderDashboard() {
   if (dashCache) { drawDashboard(dashCache); return Promise.resolve(); }
+  var request = ++dashRequest;
   busy(3);
-  return call('apiDashboard').then(function (d) {
+  return call('apiDashboard', dashFilter).then(function (d) {
+    if (request !== dashRequest || VIEW.name !== 'dashboard') return;
     dashCache = d;
     drawDashboard(d);
-  }).catch(fail);
+  }).catch(function (e) {
+    if (request !== dashRequest || VIEW.name !== 'dashboard') return;
+    main().innerHTML = dashHead() + '<div class="panel"><h2>โหลดข้อมูลพื้นที่ไม่สำเร็จ</h2><p>' + esc(e.message || String(e)) +
+      '</p><button class="btn btn-primary" onclick="renderDashboard()">ลองใหม่</button> <button class="btn" onclick="resetArea()">กลับไปทุกพื้นที่</button></div>';
+  });
 }
 
 function setChartMode(mode) {
@@ -1502,11 +1558,174 @@ function setChartMode(mode) {
 }
 
 function drawDashboard(d) {
-  main().innerHTML = dashHead() + statCards(d) +
+  dashCache = d;
+  dashFilter = d.filter || { scope: 'all', district: '', tambon: '' };
+  main().innerHTML = dashHead() + areaControls(d) + statCards(d) +
     '<div class="cols"><div>' + chartPanel(d) + '</div><div>' +
     screeningPanel(d) + upcomingPanel(d) +
     '</div></div>';
   startClock();
+}
+
+function optionHtml(value, label, selected) {
+  return '<option value="' + esc(value) + '"' + (value === selected ? ' selected' : '') + '>' + esc(label) + '</option>';
+}
+
+function areaLabel(f) {
+  f = f || dashFilter;
+  if (f.scope === 'outside') return 'ต่างจังหวัด';
+  if (f.scope === 'unknown') return 'ยังไม่ระบุพื้นที่';
+  if (f.scope === 'all') return 'ทุกพื้นที่';
+  return ['จังหวัดกระบี่', f.district ? (f.district === '__unknown' ? 'ยังไม่ระบุอำเภอ' : 'อ.' + f.district) : '',
+    f.tambon ? (f.tambon === '__unknown' ? 'ยังไม่ระบุตำบล / ต้องตรวจสอบ' : 'ต.' + f.tambon) : ''].filter(String).join(' · ');
+}
+
+function areaControls(d) {
+  var geo = d.geography || BOOT.geography;
+  if (!geo) return '';
+  var f = dashFilter;
+  return '<section class="area-controls' + (areaFilterOpen ? ' open' : '') + '" aria-label="กรองพื้นที่ผู้ป่วย">' +
+    '<div class="area-current"><span class="area-pin">' + icon('target', 17, 1.8) + '</span>' +
+    '<span class="area-current-text"><small>พื้นที่ที่กำลังดู</small><b>' + esc(areaLabel()) + '</b></span>' +
+    '<button class="area-result" onclick="openDashboardPatients()" title="ดูรายชื่อผู้ป่วยในพื้นที่นี้"><strong class="num">' + d.total + '</strong> ราย</button>' +
+    '<button class="btn area-summary-button" onclick="openAreaSummary()" aria-label="เปิดสรุปข้อมูลตามพื้นที่">' + icon('chart', 15, 1.9) + '<span>สรุปพื้นที่</span></button>' +
+    '<button class="btn area-mobile-toggle" onclick="toggleAreaFilters()">' + (areaFilterOpen ? 'ซ่อนตัวเลือก' : 'เลือกพื้นที่') + '</button></div>' +
+    '<div class="area-selects"><label class="area-field"><span>พื้นที่</span><select onchange="changeArea(\'scope\',this.value)">' +
+    [['all', 'ทุกพื้นที่'], ['krabi', 'ทั้งจังหวัดกระบี่'], ['outside', 'ต่างจังหวัด'], ['unknown', 'ยังไม่ระบุพื้นที่']].map(function (x) { return optionHtml(x[0], x[1], f.scope); }).join('') + '</select></label>' +
+    '<label class="area-field"><span>อำเภอ</span><select onchange="changeArea(\'district\',this.value)"' + (f.scope !== 'krabi' ? ' disabled' : '') + '>' +
+    optionHtml('', 'ทุกอำเภอ', f.district) + Object.keys(geo.districts).map(function (x) { return optionHtml(x, x, f.district); }).join('') + optionHtml('__unknown', 'ยังไม่ระบุอำเภอ / ต้องตรวจสอบ', f.district) + '</select></label>' +
+    '<label class="area-field area-tambon"><span>ตำบล</span><select onchange="changeArea(\'tambon\',this.value)"' + (f.district !== geo.city ? ' disabled' : '') + '>' +
+    optionHtml('', 'ทุกตำบล', f.tambon) + geo.districts[geo.city].map(function (x) { return optionHtml(x, x, f.tambon); }).join('') + optionHtml('__unknown', 'ยังไม่ระบุตำบล / ต้องตรวจสอบ', f.tambon) + '</select></label>' +
+    '<button class="area-clear" onclick="resetArea()"' + (f.scope === 'all' ? ' disabled' : '') + ' title="ล้างตัวกรองพื้นที่">ล้าง</button></div></section>';
+}
+
+function toggleAreaFilters() {
+  areaFilterOpen = !areaFilterOpen;
+  if (dashCache) drawDashboard(dashCache);
+}
+
+function changeArea(key, value) {
+  var next = { scope: dashFilter.scope, district: dashFilter.district, tambon: dashFilter.tambon };
+  next[key] = value;
+  if (key === 'scope') { next.district = ''; next.tambon = ''; }
+  if (key === 'district') next.tambon = '';
+  areaRowsExpanded = false;
+  dashFilter = next; dashCache = null;
+  return renderDashboard();
+}
+
+function resetArea() { return changeArea('scope', 'all'); }
+
+function dashboardPatients() { return dashCache && dashCache.patients ? dashCache.patients : []; }
+
+function openDashboardPatients() { openList('ผู้ป่วย · ' + areaLabel(), dashboardPatients(), 'imc-area'); }
+
+function openAreaSummary() {
+  if (!dashCache) return;
+  document.getElementById('area-summary-body').innerHTML = areaPanels(dashCache);
+  var modal = document.getElementById('areamodal');
+  modal.hidden = false;
+  modal.onclick = function (e) { if (e.target === modal) closeAreaSummary(); };
+  document.addEventListener('keydown', areaSummaryKeys);
+}
+
+function closeAreaSummary() {
+  document.getElementById('areamodal').hidden = true;
+  document.removeEventListener('keydown', areaSummaryKeys);
+}
+
+function areaSummaryKeys(e) {
+  if (e.key === 'Escape') { e.preventDefault(); closeAreaSummary(); }
+}
+
+function refreshAreaSummary() {
+  var modal = document.getElementById('areamodal');
+  if (dashCache && modal && !modal.hidden) {
+    document.getElementById('area-summary-body').innerHTML = areaPanels(dashCache);
+  }
+}
+
+function openUpcomingPatients() {
+  var today = dashCache.today;
+  var rows = dashboardPatients().filter(function (p) {
+    return p.kbh_appt_date && String(p.kbh_appt_date) >= today && p.status !== 'closed';
+  }).sort(function (a, b) { return String(a.kbh_appt_date).localeCompare(String(b.kbh_appt_date)); });
+  openList('นัดหมาย · ' + areaLabel(), rows, 'imc-appointments');
+}
+
+function areaPanels(d) {
+  if (!d.districts) return '';
+  var level = areaTab;
+  var source = level === 'district' ? d.districts : d.tambons;
+  var indexed = source.map(function (row, index) { return { row: row, index: index }; });
+  var visible = areaShowEmpty ? indexed : indexed.filter(function (x) { return x.row.total > 0; });
+  var allVisible = visible.length;
+  if (!areaRowsExpanded) visible = visible.slice(0, 6);
+  var max = Math.max.apply(null, source.map(function (r) { return r.total; }).concat([1]));
+  var rows = visible.map(function (x) {
+    var r = x.row, i = x.index;
+    return '<tr><th scope="row"><button class="area-name" onclick="openAreaPatients(\'' + level + '\',' + i + ')">' +
+      '<span>' + esc(r.name) + '</span><i><b style="width:' + Math.round(r.total / max * 100) + '%"></b></i></button></th>' +
+      ['total', 'imc', 'active', 'closed'].map(function (metric) {
+        return '<td class="num"><button class="area-count" aria-label="ดูรายชื่อ ' + esc(r.name) + ' ' +
+          ({ total: 'ทั้งหมด', imc: 'IMC', active: 'กำลังดูแล', closed: 'จบแล้ว' })[metric] + '" onclick="openAreaPatients(\'' + level + '\',' + i + ',\'' + metric + '\')">' + r[metric] + '</button></td>';
+      }).join('') + '<td><button class="area-go" onclick="selectAreaRow(\'' + level + '\',' + i + ')" title="ใช้พื้นที่นี้กับแดชบอร์ด" aria-label="เลือก ' + esc(r.name) + '">' + icon('arrow', 15, 2) + '</button></td></tr>';
+  }).join('');
+  if (!rows) rows = '<tr><td colspan="6"><div class="area-empty">ไม่มีผู้ป่วยในมุมมองนี้ <button class="panel-link" onclick="toggleAreaEmpty()">แสดงพื้นที่ทั้งหมด</button></div></td></tr>';
+  var more = allVisible > 6
+    ? '<button class="area-more" onclick="toggleAreaRows()">' + (areaRowsExpanded ? 'ย่อรายการ' : 'ดูทั้งหมด ' + allVisible + ' พื้นที่') + '</button>' : '';
+  var zeroCount = source.filter(function (r) { return r.total === 0; }).length;
+  return '<section class="panel area-panel area-section"><div class="area-panel-head">' +
+    '<span class="area-context">' + esc(areaLabel()) + ' · <b class="num">' + d.total + '</b> ราย</span>' +
+    '<div class="area-tabs" role="tablist"><button role="tab" aria-selected="' + (level === 'district') + '" class="' + (level === 'district' ? 'on' : '') + '" onclick="setAreaTab(\'district\')">รายอำเภอ</button>' +
+    '<button role="tab" aria-selected="' + (level === 'tambon') + '" class="' + (level === 'tambon' ? 'on' : '') + '" onclick="setAreaTab(\'tambon\')">ตำบล อ.เมือง</button></div></div>' +
+    '<div class="area-table-wrap"><table class="area-table"><thead><tr><th scope="col">พื้นที่</th><th scope="col">ทั้งหมด</th><th scope="col">IMC</th><th scope="col">ดูแล</th><th scope="col">จบ</th><th scope="col"><span class="sr-only">เลือกพื้นที่</span></th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+    '<div class="area-panel-foot">' + more + '<button class="area-empty-toggle" onclick="toggleAreaEmpty()">' +
+    (areaShowEmpty ? 'ซ่อนพื้นที่ยอดศูนย์' : 'แสดงพื้นที่ยอดศูนย์' + (zeroCount ? ' (' + zeroCount + ')' : '')) + '</button></div></section>';
+}
+
+function setAreaTab(tab) {
+  areaTab = tab === 'tambon' ? 'tambon' : 'district';
+  areaRowsExpanded = false;
+  refreshAreaSummary();
+}
+
+function toggleAreaEmpty() {
+  areaShowEmpty = !areaShowEmpty;
+  areaRowsExpanded = false;
+  refreshAreaSummary();
+}
+
+function toggleAreaRows() {
+  areaRowsExpanded = !areaRowsExpanded;
+  refreshAreaSummary();
+}
+
+function areaRowFilter(level, index) {
+  var key = (level === 'district' ? dashCache.districts : dashCache.tambons)[index].key;
+  if (level === 'tambon') return { scope: 'krabi', district: 'เมืองกระบี่', tambon: key };
+  return { scope: key === '__outside' ? 'outside' : (key === '__unknown' ? 'unknown' : 'krabi'), district: key.charAt(0) === '_' ? '' : key, tambon: '' };
+}
+
+function selectAreaRow(level, index) {
+  closeAreaSummary();
+  dashFilter = areaRowFilter(level, index); dashCache = null;
+  return renderDashboard();
+}
+
+function openAreaPatients(level, index, metric) {
+  var group = (level === 'district' ? dashCache.districts : dashCache.tambons)[index];
+  var rows = dashboardPatients().filter(function (p) {
+    var a = p.area;
+    if (!a || (level === 'tambon' && a.districtKey !== 'เมืองกระบี่')) return false;
+    if ((level === 'district' ? a.districtKey : a.tambonKey) !== group.key) return false;
+    if (metric === 'imc') return p.screening_result === 'IMC';
+    if (metric === 'active') return p.status !== 'closed';
+    if (metric === 'closed') return p.status === 'closed';
+    return true;
+  });
+  closeAreaSummary();
+  openList(group.name + ' · ' + ({ imc: 'เข้าโปรแกรม IMC', active: 'กำลังดูแล', closed: 'จบแล้ว' }[metric] || 'ผู้ป่วยทั้งหมด'), rows, 'imc-area-' + level + '-' + index);
 }
 
 function dashHead() {
@@ -1686,7 +1905,7 @@ function screeningPanel(d) {
 function upcomingPanel(d) {
   var head = '<div class="panel-head"><span class="panel-ico">' + icon('calendar', 20, 1.9) + '</span>' +
     '<h2>นัดหมายที่ใกล้ถึง</h2>' +
-    '<button class="panel-link" onclick="go(\'list\')">ดูทั้งหมด ' + icon('arrow', 14, 2) + '</button></div>';
+    '<button class="panel-link" onclick="openUpcomingPatients()">ดูทั้งหมด ' + icon('arrow', 14, 2) + '</button></div>';
 
   var body = (d.upcoming && d.upcoming.length)
     ? d.upcoming.map(function (u) {
@@ -1757,13 +1976,13 @@ function matchPeriod(p, key) {
 }
 
 function openPeriod(key) {
-  var rows = (patientCache || []).filter(function (p) { return matchPeriod(p, key); });
+  var rows = dashboardPatients().filter(function (p) { return matchPeriod(p, key); });
   var label = (chartMode === 'years' ? 'ปีงบ ' : '') + seriesLabel(key);
   openList('เริ่มโปรแกรม ' + label, rows, 'imc-start-' + key);
 }
 
 function openScreening(kind) {
-  var rows = (patientCache || []).filter(function (p) {
+  var rows = (VIEW.name === 'dashboard' ? dashboardPatients() : (patientCache || [])).filter(function (p) {
     return String(p.screening_result) === kind;
   });
   openList(kind === 'IMC' ? 'เข้าเกณฑ์ IMC' : 'ไม่เข้าเกณฑ์ IMC', rows, 'imc-screening-' + kind);
@@ -1781,7 +2000,7 @@ function donutClick(e, pct) {
   var r = Math.sqrt(dx * dx + dy * dy) / (box.width / 2);
 
   if (r < 0.42) {
-    openList('ผู้ป่วยทั้งหมด', patientCache || [], 'imc-all');
+    openList('ผลคัดกรอง · ' + areaLabel(), dashboardPatients().filter(function (p) { return p.screening_result === 'IMC' || p.screening_result === 'NoIMC'; }), 'imc-all');
     return;
   }
   var deg = (Math.atan2(dx, -dy) * 180 / Math.PI + 360) % 360;
@@ -1794,6 +2013,7 @@ function donutClick(e, pct) {
 */
 var EXPORT_COLS = [
   ['hn', 'HN'], ['full_name', 'ชื่อ-สกุล'], ['sex', 'เพศ'], ['age', 'อายุ'],
+  ['province', 'จังหวัด'], ['district', 'อำเภอ'], ['tambon', 'ตำบล'],
   ['dx', 'การวินิจฉัย'], ['ward', 'Ward'], ['start_date', 'วัน Start'],
   ['first_bi', 'BI แรกรับ'], ['latest_bi', 'BI ล่าสุด'],
   ['screening_result', 'ผลคัดกรอง'], ['status', 'สถานะ'],

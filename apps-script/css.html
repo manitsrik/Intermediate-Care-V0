@@ -916,4 +916,107 @@ table.cards td.head { display: none; }
   .page-head, .panel, .stat-card { break-inside: avoid; }
 }
 
+/* ตัวกรองพื้นที่แบบ toolbar และตารางสรุปใบเดียว เพื่อรักษาพื้นที่แนวตั้ง */
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.area-controls {
+  display: flex; align-items: center; gap: 14px; min-height: 66px;
+  padding: 10px 14px; margin-bottom: 16px; border: 1px solid var(--line);
+  border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow-sm);
+}
+.area-current { display: flex; align-items: center; gap: 9px; min-width: 190px; }
+.area-pin { display: grid; place-items: center; width: 32px; height: 32px; flex: 0 0 auto; border-radius: 9px; color: var(--brand-ink); background: var(--brand-soft); }
+.area-current-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+.area-current-text small { color: var(--muted); font-size: 10px; }
+.area-current-text b { max-width: 210px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 600; }
+.area-result { display: inline-flex; align-items: baseline; gap: 3px; flex: 0 0 auto; padding: 6px 9px; border: 0; border-radius: 999px; color: var(--brand-ink); background: var(--brand-soft); cursor: pointer; font: inherit; font-size: 11px; }
+.area-result strong { font-size: 14px; }
+.area-summary-button { display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto; height: 38px; padding: 0 12px; color: var(--brand-ink); border-color: var(--brand-line); background: var(--brand-soft); font-size: 12px; }
+.area-selects { display: grid; grid-template-columns: minmax(145px, .9fr) minmax(145px, 1fr) minmax(145px, 1fr) auto; align-items: end; gap: 8px; flex: 1; }
+.area-field { display: flex; flex-direction: column; gap: 3px; min-width: 0; color: var(--muted); font-size: 10px; }
+.area-field select { width: 100%; height: 38px; padding: 0 30px 0 10px; border: 1px solid var(--line); border-radius: 9px; background-color: #fff; color: var(--text); font: inherit; font-size: 12px; }
+.area-field select:disabled { color: var(--faint); background-color: #f7f9fa; }
+.area-clear { height: 38px; padding: 0 10px; border: 0; background: transparent; color: var(--brand-ink); cursor: pointer; font: inherit; font-size: 12px; }
+.area-clear:disabled { color: var(--faint); cursor: default; }
+.area-mobile-toggle { display: none; margin-left: auto; padding: 8px 12px; }
+
+.area-summary-sheet { max-width: 860px; }
+.area-summary-sheet .sheet-x { margin-left: auto; }
+.area-summary-body { overflow-y: auto; overscroll-behavior: contain; padding: 14px 18px 12px; }
+.area-summary-body .area-section { margin: 0; padding: 0; border: 0; box-shadow: none; }
+.area-section { padding-bottom: 12px; }
+.area-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 7px; }
+.area-context { color: var(--muted); font-size: 12px; }
+.area-context b { color: var(--brand-ink); }
+.area-tabs { display: flex; flex: 0 0 auto; padding: 3px; border-radius: 10px; background: #f0f3f5; }
+.area-tabs button { min-height: 32px; padding: 0 13px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); cursor: pointer; font: inherit; font-size: 12px; }
+.area-tabs button.on { background: var(--surface); color: var(--brand-ink); box-shadow: 0 1px 4px rgba(15, 62, 66, .12); font-weight: 600; }
+.area-table-wrap { overflow-x: auto; }
+.area-table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 12px; }
+.area-table th, .area-table td { height: 43px; padding: 5px 8px; border-bottom: 1px solid var(--line-soft); text-align: center; white-space: nowrap; }
+.area-table th:first-child { width: 44%; text-align: left; white-space: normal; }
+.area-table th:last-child { width: 42px; }
+.area-table thead th { height: 34px; color: var(--muted); font-weight: 500; font-size: 10px; }
+.area-table tbody th { font-weight: 400; }
+.area-table tbody tr:last-child > * { border-bottom: 0; }
+.area-table tbody tr:hover { background: #fbfdfd; }
+.area-name { display: grid; grid-template-columns: minmax(90px, 145px) minmax(70px, 1fr); align-items: center; gap: 10px; width: 100%; padding: 0; border: 0; background: transparent; color: var(--brand-ink); cursor: pointer; text-align: left; font: inherit; }
+.area-name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.area-name i { height: 5px; overflow: hidden; border-radius: 999px; background: #edf2f3; }
+.area-name i b { display: block; height: 100%; min-width: 3px; border-radius: inherit; background: var(--brand); }
+.area-count { min-width: 29px; min-height: 29px; padding: 0 5px; border: 0; border-radius: 7px; background: transparent; color: var(--body); cursor: pointer; font: inherit; }
+.area-count:hover, .area-count:focus-visible { color: var(--brand-ink); background: var(--brand-soft); }
+.area-table td:nth-child(2) .area-count { color: var(--brand-ink); font-weight: 600; }
+.area-go { display: inline-grid; place-items: center; width: 29px; height: 29px; border: 0; border-radius: 8px; background: transparent; color: var(--brand-ink); cursor: pointer; }
+.area-go:hover { background: var(--brand-soft); }
+.area-empty { padding: 18px; color: var(--muted); }
+.area-panel-foot { display: flex; justify-content: space-between; align-items: center; min-height: 31px; padding-top: 6px; border-top: 1px solid var(--line-soft); }
+.area-more, .area-empty-toggle { padding: 5px 2px; border: 0; background: transparent; color: var(--brand-ink); cursor: pointer; font: inherit; font-size: 11px; }
+.area-empty-toggle { margin-left: auto; color: var(--muted); }
+.area-panel button:focus-visible, .area-controls button:focus-visible, .area-controls select:focus-visible { outline: 2px solid var(--brand-ink); outline-offset: 2px; }
+
+@media (max-width: 1050px) {
+  .area-controls { align-items: flex-end; flex-wrap: wrap; }
+  .area-current { flex: 1 1 100%; }
+  .area-current-text b { max-width: none; }
+  .area-selects { width: 100%; }
+}
+@media (max-width: 600px) {
+  .area-controls { display: block; min-height: 0; padding: 11px 12px; margin-bottom: 12px; }
+  .area-current { width: 100%; min-width: 0; }
+  .area-pin { width: 30px; height: 30px; }
+  .area-current-text { flex: 1; }
+  .area-current-text b { max-width: 150px; }
+  .area-result { padding: 5px 8px; }
+  .area-summary-button { justify-content: center; width: 34px; height: 34px; margin-left: 2px; padding: 0; }
+  .area-summary-button span { display: none; }
+  .area-mobile-toggle { display: inline-flex; flex: 0 0 auto; }
+  .area-selects { display: none; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; padding-top: 11px; margin-top: 10px; border-top: 1px solid var(--line-soft); }
+  .area-controls.open .area-selects { display: grid; }
+  .area-selects .area-tambon { grid-column: 1 / -1; }
+  .area-clear { grid-column: 1 / -1; justify-self: start; height: 30px; padding: 0; }
+  .area-summary-sheet { max-height: 88vh; }
+  .area-summary-body { padding: 12px 10px 8px; }
+  .area-section { padding: 0 0 5px; }
+  .area-panel-head { align-items: flex-start; flex-direction: column; gap: 9px; }
+  .area-tabs { width: 100%; }
+  .area-tabs button { flex: 1; }
+  .area-table { min-width: 0; table-layout: fixed; }
+  .area-table th:first-child { width: 42%; }
+  .area-table th:last-child { width: 29px; }
+  .area-table th, .area-table td { height: 40px; padding: 4px 2px; }
+  .area-table thead th { font-size: 9px; }
+  .area-name { grid-template-columns: minmax(64px, 82px) minmax(32px, 1fr); gap: 5px; }
+  .area-count { min-width: 25px; min-height: 27px; padding: 0 2px; }
+  .area-go { width: 27px; height: 27px; }
+}
+@media print {
+  .area-mobile-toggle, .area-selects, .area-result, .area-tabs, .area-panel-foot,
+  .area-table th:last-child, .area-table td:last-child { display: none !important; }
+  .area-controls { min-height: 0; padding: 7px 10px; margin-bottom: 8px; box-shadow: none; }
+  .area-current-text small { display: none; }
+  .area-summary-sheet { display: none; }
+  .area-table-wrap { overflow: visible; }
+  .area-table { min-width: 0; }
+  .area-count { background: transparent; }
+}
 </style>

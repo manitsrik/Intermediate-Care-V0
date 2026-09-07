@@ -98,11 +98,12 @@ const check = (label, ok, detail) => {
 const cols = SCHEMA[SHEETS.PATIENTS];
 const before = ['status', 'legacy_row', 'created_by', 'created_at', 'updated_by', 'updated_at'];
 check('คอลัมน์เดิมยังอยู่ตำแหน่งเดิม ไม่มีอะไรแทรกกลาง',
-  cols.slice(cols.length - 5 - before.length, cols.length - 5).join(',') === before.join(','),
+  cols.slice(cols.indexOf('bi_1') - before.length, cols.indexOf('bi_1')).join(',') === before.join(','),
   'ท้ายรายการคือ ' + cols.slice(-11).join(','));
-check(`ต่อ bi_1..bi_${CONFIG.BI_SUMMARY_COLUMNS} ไว้ท้ายสุด`,
-  cols.slice(-CONFIG.BI_SUMMARY_COLUMNS).join(',') ===
+check(`คอลัมน์ bi_1..bi_${CONFIG.BI_SUMMARY_COLUMNS} ยังต่อกันที่ตำแหน่งเดิม`,
+  cols.indexOf('bi_1') === 48 && cols.slice(48, 48 + CONFIG.BI_SUMMARY_COLUMNS).join(',') ===
     Array.from({ length: CONFIG.BI_SUMMARY_COLUMNS }, (_, i) => 'bi_' + (i + 1)).join(','));
+check('จังหวัดและอำเภอต่อท้ายคอลัมน์เดิม', cols.slice(-2).join(',') === 'province,district');
 
 /* ------------------------------------------------ 2. สูตรในชีต summary */
 

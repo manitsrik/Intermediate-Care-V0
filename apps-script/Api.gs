@@ -360,6 +360,7 @@ function apiBootstrap() {
     biItems: BI_ITEMS,
     biMax: BI_MAX,
     vocab: VOCAB,
+    geography: GEOGRAPHY,
     today: todayIso_()
   };
 }
@@ -369,6 +370,7 @@ function apiBootstrap() {
 function displayPatient_(p) {
   var o = {};
   Object.keys(p).forEach(function (k) { o[k] = p[k]; });
+  o.area = patientArea_(p);
   o.full_name = [p.prefix, p.first_name, p.last_name].filter(String).join(' ').trim();
   o.admit_date_th = toThaiDate_(p.admit_date);
   o.start_date_th = toThaiDate_(p.start_date);
@@ -456,6 +458,7 @@ function apiSavePatient(form) {
       rec[f] = (form[f] !== undefined) ? form[f] : (target[f] !== undefined ? target[f] : '');
     });
 
+    validatePatientArea_(rec, target);
     rec.dx_group = dxGroupOf_(rec.dx);
     rec.six_month_status = computeSixMonth_(rec.start_date, rec.imc_end_date);
     if (rec.start_date && !rec.imc_end_date) {
@@ -687,10 +690,14 @@ function avgOf_(list) {
   return Math.round((sum / list.length) * 10) / 10;
 }
 
-function apiDashboard() {
+function apiDashboard(opts) {
   currentUser_();
-  var patients = readAll_(SHEETS.PATIENTS);
-  var today = todayIso_();
+  var filter = areaFilter_(opts);
+  var patients = readAll_(SHEETS.PATIENTS).filter(function (p) { return matchesArea_(p, filter); });
+  return buildDashboard_(patients, readAll_(SHEETS.BI), todayIso_(), filter);
+}
+
+function buildDashboard_(patients, assessments, today, filter) {
   var thisMonth = today.substring(0, 7);
   var cutoff = prevMonthEnd_(today);
 
@@ -734,7 +741,10 @@ function apiDashboard() {
     ไม่ใช่เอา latest_bi ปัจจุบันมาใช้ ไม่งั้นตัวเลขเทียบจะเท่ากันเสมอ
   */
   var byHn = {};
-  readAll_(SHEETS.BI).forEach(function (r) {
+  var includedHns = Object.create(null);
+  patients.forEach(function (p) { includedHns[String(p.hn)] = true; });
+  assessments.forEach(function (r) {
+    if (!includedHns[String(r.hn)]) return;
     var d = String(r.assess_date || '');
     var v = parseFloat(r.total);
     if (!d || isNaN(v) || d > cutoff) return;
@@ -769,6 +779,12 @@ function apiDashboard() {
     });
 
   return {
+    filter: filter,
+    today: today,
+    patients: patients.map(displayPatient_),
+    geography: GEOGRAPHY,
+    districts: areaSummary_(patients, 'district'),
+    tambons: areaSummary_(patients, 'tambon'),
     upcoming: upcoming,
     total: patients.length,
     imc: imc,

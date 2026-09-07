@@ -33,6 +33,8 @@ SCHEMA[SHEETS.PATIENTS] = [
 for (var biSeq = 1; biSeq <= CONFIG.BI_SUMMARY_COLUMNS; biSeq++) {
   SCHEMA[SHEETS.PATIENTS].push('bi_' + biSeq);
 }
+// ต่อท้ายคอลัมน์เดิมทั้งหมด รวมถึง BI เพื่อไม่ให้ข้อมูลเก่าเลื่อนช่อง
+SCHEMA[SHEETS.PATIENTS].push('province', 'district');
 
 SCHEMA[SHEETS.BI] = [
   'assess_id', 'hn', 'seq', 'assess_date',

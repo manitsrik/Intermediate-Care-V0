@@ -27,11 +27,19 @@ const shell = read('index.html');
 /** Config.gs กับ Bi.gs เป็น JavaScript ล้วน เอามาใช้ในตัวจำลองได้เลย ไม่ต้องเขียนซ้ำ */
 const config = read('Config.gs');
 const bi = read('Bi.gs');
+const geography = read('Geography.gs');
+// ใช้การคำนวณแดชบอร์ดจริง เพื่อให้พรีวิวตรวจยอดพื้นที่และค่าเทียบเดือนก่อนได้
+const apiSource = read('Api.gs');
+const dashboard = apiSource.slice(apiSource.indexOf('function prevMonthEnd_('));
+const displayPatient = apiSource.match(/function displayPatient_\(p\)[\s\S]*?\r?\n\}/)[0];
 
 const mock = `
 <script>
 ${config}
 ${bi}
+${geography}
+${dashboard}
+${displayPatient}
 
 /* ---------------------------------------------------- ข้อมูลปลอมสำหรับพรีวิว */
 
@@ -66,7 +74,10 @@ function p(id, hn, prefix, name, sex, age, rights, dx, ward, start, screening, s
     first_name: name, last_name: '', sex: sex, age: age, rights: rights,
     dx: dx, dx_group: 'stroke', dx_detail: '', rt_pa: '', hemiparesis_side: side,
     ct_mri: 'Infarction at left MCA', operation: '', underlying: 'HT, DM type 2',
-    other_problems: '', address: 'xxx', tambon: 'ปากน้ำ',
+    other_problems: '', address: 'xxx',
+    province: ['', 'กระบี่', 'กระบี่', 'กระบี่', 'กระบี่', 'ตรัง', ''][id] || '',
+    district: ['', 'เมืองกระบี่', 'เมืองกระบี่', 'เหนือคลอง', 'เมืองกระบี่', 'เมืองตรัง', ''][id] || '',
+    tambon: ['', 'ปากน้ำ', 'อ่าวนาง', 'เหนือคลอง', 'ปากน้ำ', 'ทับเที่ยง', 'ปากน้ำ'][id] || '',
     phone1: '08x-xxx-xxxx', phone2: '',
     admit_date: '2025-10-21', dc_date: '2025-11-02', ward: ward,
     imc_program: program, kbh_appt_date: appt, kbh_appt_time: '', kbh_hospital: '',
@@ -114,6 +125,12 @@ function thai_(iso) {
 }
 
 function full_(pt) { return [pt.prefix, pt.first_name, pt.last_name].filter(String).join(' ').trim(); }
+function currentUser_() { return { email: 'preview@local' }; }
+function readAll_(name) { return name === SHEETS.PATIENTS ? DB.patients : DB.bi; }
+function dateToIso_(d) { return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); }
+function todayIso_() { return dateToIso_(new Date()); }
+function toThaiDate_(iso) { return thai_(iso); }
+function daysBetweenIso_(a, b) { return Math.round((new Date(b) - new Date(a)) / 86400000); }
 
 var API = {
   apiListUsers: function () {
@@ -158,7 +175,7 @@ var API = {
       orgUnit: CONFIG.ORG_UNIT, orgPlace: CONFIG.ORG_PLACE, maskMode: true,
       patients: API.apiListPatients({}),
       alerts: DB.patients.filter(function (x) { return x.kbh_appt_date; }).length,
-      biItems: BI_ITEMS, biMax: BI_MAX, vocab: VOCAB,
+      biItems: BI_ITEMS, biMax: BI_MAX, vocab: VOCAB, geography: GEOGRAPHY,
       today: new Date().toISOString().slice(0, 10)
     };
   },
@@ -192,6 +209,7 @@ var API = {
 
   apiSavePatient: function (form) {
     var pt = DB.patients.filter(function (x) { return String(x.patient_id) === String(form.patient_id); })[0];
+    validatePatientArea_(form, pt);
     if (pt) { Object.keys(form).forEach(function (k) { pt[k] = form[k]; }); return { ok: true, hn: pt.hn }; }
     var rec = p(DB.patients.length + 1, form.hn, form.prefix, form.first_name, form.sex,
       form.age, form.rights, form.dx, form.ward, form.start_date, '', 'active', '', '', 0, '', form.imc_program, form.kbh_appt_date);
@@ -239,40 +257,7 @@ var API = {
     });
   },
 
-  apiDashboard: function () {
-    var imc = DB.patients.filter(function (x) { return x.screening_result === 'IMC'; }).length;
-    var noImc = DB.patients.filter(function (x) { return x.screening_result === 'NoIMC'; }).length;
-    var closed = DB.patients.filter(function (x) { return x.status === 'closed'; }).length;
-    var gains = DB.patients.map(function (x) { return Number(x.latest_bi) - Number(x.first_bi); })
-      .filter(function (v) { return !isNaN(v); });
-    var byMonth = {}, byQuarter = {}, byYear = {};
-    DB.patients.forEach(function (x) {
-      var d = String(x.start_date || '');
-      if (d.length < 7) return;
-      var mKey = periodKey_(d, 'months');
-      var qKey = periodKey_(d, 'quarters');
-      var yKey = periodKey_(d, 'years');
-      byMonth[mKey] = (byMonth[mKey] || 0) + 1;
-      byQuarter[qKey] = (byQuarter[qKey] || 0) + 1;
-      byYear[yKey] = (byYear[yKey] || 0) + 1;
-    });
-    var series = function (map) {
-      return Object.keys(map).sort().map(function (k) { return { key: k, count: map[k] }; });
-    };
-    return {
-      upcoming: DB.patients.filter(function (x) { return x.kbh_appt_date; })
-        .map(function (x, i) {
-          return { hn: x.hn, name: full_(x), program: x.imc_program,
-                   date: x.kbh_appt_date, days_left: i };
-        }),
-      total: DB.patients.length, imc: imc, noImc: noImc,
-      active: DB.patients.length - closed, closed: closed,
-      avgGain: Math.round(gains.reduce(function (s, v) { return s + v; }, 0) / gains.length * 10) / 10,
-      improved: gains.filter(function (v) { return v > 0; }).length,
-      months: series(byMonth), quarters: series(byQuarter), years: series(byYear),
-      delta: { total: 5, imc: 3, active: -2, avgGain: 0.4 }
-    };
-  },
+  apiDashboard: function (opts) { return apiDashboard(opts); },
 
   apiReport: function () {
     var tally = function (pick) {

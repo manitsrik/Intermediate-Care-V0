@@ -34,6 +34,11 @@ const dashboard = apiSource.slice(apiSource.indexOf('function prevMonthEnd_('));
 // หน้ารายงานใช้การคำนวณจริงเช่นกัน พรีวิวจะได้ไม่เพี้ยนจากของที่ deploy
 const report = apiSource.slice(apiSource.indexOf('var ADL_RANK'), apiSource.indexOf('function apiBootstrap()'));
 const displayPatient = apiSource.match(/function displayPatient_\(p, today\)[\s\S]*?\r?\n\}/)[0];
+// การเรียงการติดตามกับการคัดรายชื่อที่ถึงกำหนดใช้ของจริง พรีวิวจะได้ไม่ตอบคนละอย่างกับที่ deploy
+const followupLogic = [
+  /function compareFollowup_\(a, b\)[\s\S]*?\r?\n\}/,
+  /function dueFollowups_\(patients, rows, today\)[\s\S]*?\r?\n\}/
+].map((re) => apiSource.match(re)[0]).join('\n\n');
 
 const mock = `
 <script>
@@ -43,6 +48,7 @@ ${geography}
 ${dashboard}
 ${report}
 ${displayPatient}
+${followupLogic}
 
 /* ---------------------------------------------------- ข้อมูลปลอมสำหรับพรีวิว */
 
@@ -126,9 +132,20 @@ DB.patients.forEach(function (pt) {
       DB.fu.push({
         fu_id: pt.hn + '-FU' + (i + 1), hn: pt.hn, seq: i + 1,
         fu_date: ['2025-12-09', '2026-02-16'][i], fu_type: ['PT', 'เยี่ยมบ้าน'][i],
-        complications: txt, note: '', recorded_by: 'preview@local', created_at: ''
+        complications: txt, note: ['', 'ญาติดูแลต่อเนื่องดี'][i], recorded_by: 'preview@local', created_at: ''
       });
     });
+});
+
+/*
+  รายการที่ไม่มีวันที่ มาจากการนำเข้าไฟล์เดิมที่อ่านวันที่ไม่ออก แล้วเก็บข้อความไว้ให้คนมาเติมเอง
+  ใส่ไว้ในพรีวิวหนึ่งอัน จะได้เห็นว่าหน้าการติดตามยังแสดงมันอยู่และหาเจอจากตัวกรอง
+*/
+DB.fu.push({
+  fu_id: 'TEST001-FU3', hn: 'TEST001', seq: 3,
+  fu_date: '', fu_type: 'เยี่ยมบ้าน',
+  complications: '', note: 'ยบ.IMC 11/11 (นำเข้าจากไฟล์เดิม)',
+  recorded_by: 'preview@local', created_at: ''
 });
 
 /* ------------------------------------------------- ตัวจำลอง google.script.run */
@@ -141,6 +158,7 @@ function thai_(iso) {
 }
 
 function full_(pt) { return [pt.prefix, pt.first_name, pt.last_name].filter(String).join(' ').trim(); }
+function fullName_(pt) { return full_(pt); }
 function currentUser_() { return { email: 'preview@local' }; }
 function readAll_(name) { return name === SHEETS.PATIENTS ? DB.patients : DB.bi; }
 function dateToIso_(d) { return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); }
@@ -192,6 +210,7 @@ var API = {
       patients: API.apiListPatients({}),
       alerts: DB.patients.filter(function (x) { return x.kbh_appt_date; }).length,
       biItems: BI_ITEMS, biMax: BI_MAX, attention: ATTENTION, vocab: VOCAB, geography: GEOGRAPHY,
+      dueAheadDays: CONFIG.FU_DUE_AHEAD_DAYS,
       today: new Date().toISOString().slice(0, 10)
     };
   },
@@ -220,7 +239,7 @@ var API = {
     return {
       patient: o,
       assessments: DB.bi.filter(function (b) { return b.hn === hn; }),
-      followups: DB.fu.filter(function (f) { return f.hn === hn; })
+      followups: DB.fu.filter(function (f) { return f.hn === hn; }).sort(compareFollowup_)
     };
   },
 
@@ -265,12 +284,22 @@ var API = {
   apiSaveFollowup: function (form) {
     var mine = DB.fu.filter(function (f) { return f.hn === form.hn; });
     var old = mine.filter(function (f) { return String(f.fu_id) === String(form.fu_id); })[0];
-    var seq = old ? old.seq : mine.length + 1;
-    var rec = { fu_id: old ? old.fu_id : 'new' + seq, hn: form.hn, seq: seq, fu_date: form.fu_date,
+    var rec = { fu_id: old ? old.fu_id : 'new' + (DB.fu.length + 1), hn: form.hn, seq: 0,
+      fu_date: form.fu_date,
       fu_type: form.fu_type, complications: form.complications || '', note: form.note || '',
-      recorded_by: 'preview@local', created_at: '' };
+      recorded_by: 'preview@local', created_at: old ? old.created_at : new Date().toISOString() };
     if (old) DB.fu[DB.fu.indexOf(old)] = rec; else DB.fu.push(rec);
-    return { ok: true, seq: seq };
+
+    // นัดครั้งถัดไปเขียนกลับไปที่วันนัดของผู้ป่วย เหมือนของจริง
+    var pt = DB.patients.filter(function (x) { return x.hn === form.hn; })[0];
+    if (pt && form.next_appt) pt.kbh_appt_date = form.next_appt;
+
+    // ไล่เลขครั้งที่ใหม่ตามวันที่ ให้บันทึกย้อนหลังแล้วได้ลำดับเหมือนของจริง
+    DB.fu.filter(function (f) { return f.hn === form.hn; })
+      .sort(compareFollowup_)
+      .forEach(function (f, i) { f.seq = i + 1; });
+
+    return { ok: true, seq: rec.seq };
   },
 
   apiClosePatient: function (form) {
@@ -279,16 +308,19 @@ var API = {
     return { ok: true };
   },
 
-  apiListFollowups: function (limit) {
-    return DB.fu.slice().sort(function (a, b) {
-      return String(b.fu_date).localeCompare(String(a.fu_date));
-    }).slice(0, limit || 60).map(function (f) {
+  apiListFollowups: function () {
+    var rows = DB.fu.map(function (f) {
       var pt = DB.patients.filter(function (x) { return x.hn === f.hn; })[0];
       var o = JSON.parse(JSON.stringify(f));
       o.patient_name = pt ? full_(pt) : '';
       o.fu_date_th = thai_(f.fu_date);
       return o;
+    }).sort(function (a, b) {
+      var ad = String(a.fu_date || ''), bd = String(b.fu_date || '');
+      if (!ad !== !bd) return ad ? -1 : 1;
+      return ad === bd ? compareFollowup_(a, b) : (ad > bd ? -1 : 1);
     });
+    return { rows: rows, due: dueFollowups_(DB.patients, rows, todayIso_()) };
   },
 
   apiDashboard: function (opts) { return apiDashboard(opts); },

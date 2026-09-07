@@ -720,6 +720,8 @@ function apiBootstrap() {
     biMax: BI_MAX,
     // คำเต็มกับป้ายสั้นของงานค้าง หน้าจอจะได้ไม่ต้องมีรายการของตัวเองให้หลุดกัน
     attention: ATTENTION,
+    // หน้าการติดตามเขียนคำว่า "ใน N วัน" จากค่านี้ ป้ายบนจอกับของที่เซิร์ฟเวอร์คัดมาจะได้ตรงกัน
+    dueAheadDays: CONFIG.FU_DUE_AHEAD_DAYS,
     vocab: VOCAB,
     geography: GEOGRAPHY,
     today: todayIso_()
@@ -742,7 +744,7 @@ function displayPatient_(p, today) {
   var o = {};
   Object.keys(p).forEach(function (k) { o[k] = p[k]; });
   o.area = patientArea_(p);
-  o.full_name = [p.prefix, p.first_name, p.last_name].filter(String).join(' ').trim();
+  o.full_name = fullName_(p);
   o.admit_date_th = toThaiDate_(p.admit_date);
   o.start_date_th = toThaiDate_(p.start_date);
   o.imc_end_date_th = toThaiDate_(p.imc_end_date);
@@ -785,9 +787,14 @@ function apiGetPatient(hn) {
     .sort(function (a, b) { return Number(a.seq) - Number(b.seq); })
     .map(function (r) { r.assess_date_th = toThaiDate_(r.assess_date); return r; });
 
+  /*
+    เรียงตามวันที่จริง ไม่ใช่ตามเลขครั้งที่ที่เก็บไว้ในชีต
+    ข้อมูลเก่าที่ยังไม่มีใครกดบันทึกซ้ำอาจมีเลขครั้งที่ค้างจากลำดับที่กด
+    ถ้าเรียงตามเลขนั้น ไทม์ไลน์จะสลับที่โดยที่คนอ่านไม่มีทางรู้
+  */
   var fu = readAll_(SHEETS.FOLLOWUPS)
     .filter(function (r) { return String(r.hn) === String(hn); })
-    .sort(function (a, b) { return Number(a.seq) - Number(b.seq); })
+    .sort(compareFollowup_)
     .map(function (r) { r.fu_date_th = toThaiDate_(r.fu_date); return r; });
 
   return { patient: displayPatient_(p), assessments: bi, followups: fu };
@@ -951,6 +958,44 @@ function refreshPatientBiStats_(hn) {
 
 /* -------------------------------------------------------------- ติดตามผล */
 
+/**
+ * ลำดับที่ถูกต้องของการติดตามคือลำดับ "วันที่จริง" ไม่ใช่ลำดับที่กดบันทึก
+ *
+ * ของจริงมีการกรอกย้อนหลังตลอด เช่น นึกได้ทีหลังว่าลืมลงเยี่ยมบ้านของเดือนก่อน
+ * ถ้านับครั้งที่ตามลำดับที่กด รายการนั้นจะกลายเป็นครั้งที่ 5 ที่วันที่เก่ากว่าครั้งที่ 4
+ * แล้วไทม์ไลน์ในเวชระเบียนจะเรียงสลับกันโดยไม่มีอะไรบอก
+ *
+ * รายการที่ยังไม่มีวันที่ (นำเข้ามาจากไฟล์เดิมที่อ่านวันที่ไม่ออก) ไปต่อท้ายเสมอ
+ * เรียงตามเวลาที่บันทึก ลำดับจะได้คงที่ ไม่สลับไปมาทุกครั้งที่เรียก
+ */
+function compareFollowup_(a, b) {
+  var ad = String(a.fu_date || ''), bd = String(b.fu_date || '');
+  if (!ad !== !bd) return ad ? -1 : 1;
+  if (ad !== bd) return ad < bd ? -1 : 1;
+  return String(a.created_at || '') < String(b.created_at || '') ? -1 : 1;
+}
+
+/**
+ * เขียนเลข "ครั้งที่" ของผู้ป่วยหนึ่งรายใหม่ทั้งชุดให้ตรงลำดับวันที่
+ *
+ * เขียนเฉพาะแถวที่เลขเปลี่ยนจริง และเขียนแค่ช่องเดียว ไม่ยกทั้งแถว
+ * คนที่บันทึกตามลำดับปกติจึงไม่ต้องรอการเขียนเพิ่มเลยสักช่อง
+ *
+ * คืนตารางจากรหัสรายการไปเลขใหม่ ผู้เรียกจะได้ตอบกลับได้ว่ารายการที่เพิ่งบันทึกเป็นครั้งที่เท่าไร
+ */
+function resequenceFollowups_(hn) {
+  var seqOf = {};
+  readAll_(SHEETS.FOLLOWUPS)
+    .filter(function (r) { return String(r.hn) === String(hn); })
+    .sort(compareFollowup_)
+    .forEach(function (r, i) {
+      seqOf[String(r.fu_id)] = i + 1;
+      if (Number(r.seq) === i + 1) return;
+      updateCell_(SHEETS.FOLLOWUPS, r._row, 'seq', i + 1);
+    });
+  return seqOf;
+}
+
 function apiSaveFollowup(form) {
   var user = currentUser_();
   return withLock_(function () {
@@ -959,59 +1004,124 @@ function apiSaveFollowup(form) {
     if (!form.fu_date) throw new Error('กรุณาเลือกวันที่ติดตาม');
 
     var existing = readAll_(SHEETS.FOLLOWUPS).filter(function (r) { return String(r.hn) === hn; });
+    var old = existing.filter(function (r) { return String(r.fu_id) === String(form.fu_id); })[0];
     var rec = {
-      fu_id: form.fu_id || uid_('FU'),
+      fu_id: old ? old.fu_id : (form.fu_id || uid_('FU')),
       hn: hn,
-      seq: form.seq || (existing.length + 1),
+      // เลขชั่วคราว เดี๋ยว resequenceFollowups_ เขียนทับให้ตรงลำดับวันที่อีกที
+      seq: old ? old.seq : (existing.length + 1),
       fu_date: form.fu_date,
       fu_type: form.fu_type || '',
       complications: form.complications || '',
       note: form.note || '',
       recorded_by: user.email,
-      created_at: nowIso_()
+      created_at: old ? old.created_at : nowIso_()
     };
 
-    var old = existing.filter(function (r) { return String(r.fu_id) === String(form.fu_id); })[0];
-    if (old) {
-      rec.created_at = old.created_at;
-      updateObject_(SHEETS.FOLLOWUPS, old._row, rec);
-    } else {
-      appendObject_(SHEETS.FOLLOWUPS, rec);
-    }
+    if (old) updateObject_(SHEETS.FOLLOWUPS, old._row, rec);
+    else appendObject_(SHEETS.FOLLOWUPS, rec);
 
-    refreshPtVisitCount_(hn);
-    return { ok: true, seq: rec.seq };
+    var seqOf = resequenceFollowups_(hn);
+
+    /*
+      นัดครั้งถัดไปเขียนกลับไปที่วันนัด OPD ของผู้ป่วย
+
+      เดิมตามคนไข้เสร็จแล้ววันนัดเดิมยังค้างอยู่ที่เดิม ธง "เลยกำหนดนัดแล้ว" จึงไม่มีวัน
+      หายไปเอง จนกว่าจะมีคนเข้าไปแก้เวชระเบียนแยกอีกที ปล่อยช่องว่าง = ไม่แตะวันนัดเดิม
+    */
+    refreshPtVisitCount_(hn, form.next_appt
+      ? { kbh_appt_date: form.next_appt, updated_by: user.email }
+      : null);
+
+    return { ok: true, seq: seqOf[String(rec.fu_id)] || rec.seq };
   });
 }
 
-function refreshPtVisitCount_(hn) {
+/**
+ * นับจำนวนครั้งที่ได้ PT ใหม่ พร้อมเขียนค่าอื่นบนแถวผู้ป่วยที่ต้องเปลี่ยนไปพร้อมกัน
+ * รวมเป็นการเขียนครั้งเดียว เพราะทุกครั้งที่แตะชีตคือเวลาที่คนกดบันทึกต้องนั่งรอ
+ */
+function refreshPtVisitCount_(hn, changes) {
   var n = readAll_(SHEETS.FOLLOWUPS).filter(function (r) {
     return String(r.hn) === String(hn) && String(r.fu_type) === 'PT';
   }).length;
   var p = findPatientByHn_(hn);
   if (!p) return;
   p.pt_visit_count = n;
+  if (changes) Object.keys(changes).forEach(function (k) { p[k] = changes[k]; });
   p.updated_at = nowIso_();
   updateObject_(SHEETS.PATIENTS, p._row, p);
 }
 
-/** การติดตามทั้งหมดเรียงจากใหม่ไปเก่า พร้อมชื่อผู้ป่วยเพื่อให้หน้าเว็บไม่ต้องดึงซ้ำ */
-function apiListFollowups(limit) {
-  currentUser_();
-  var nameByHn = {};
-  readAll_(SHEETS.PATIENTS).forEach(function (p) {
-    nameByHn[String(p.hn)] = [p.prefix, p.first_name, p.last_name].filter(String).join(' ').trim();
+/**
+ * ผู้ป่วยที่ถึงกำหนดต้องตาม เรียงจากเลยนัดนานที่สุดลงมาหาที่ยังไม่ถึง
+ *
+ * หน้าการติดตามต้องตอบให้ได้ว่าวันนี้ต้องตามใคร ไม่ใช่เป็นสมุดบันทึกย้อนหลังอย่างเดียว
+ * ใช้ช่องวันนัด OPD ช่องเดียวกับที่แดชบอร์ดกับธง "เลยกำหนดนัดแล้ว" ใช้
+ * ทั้งสามที่จึงพูดถึงนัดเดียวกันเสมอ
+ *
+ * ติดวันที่ติดตามครั้งล่าสุดไปด้วย คนที่เปิดดูจะได้แยกออกว่ารายไหนตามไปแล้วแต่ยังไม่ได้
+ * เลื่อนนัด กับรายไหนที่ยังไม่มีใครแตะเลย
+ */
+function dueFollowups_(patients, rows, today) {
+  var lastFu = {};
+  rows.forEach(function (r) {
+    var d = String(r.fu_date || '');
+    if (!d) return;
+    var hn = String(r.hn);
+    if (!lastFu[hn] || d > lastFu[hn]) lastFu[hn] = d;
   });
 
-  return readAll_(SHEETS.FOLLOWUPS)
-    .filter(function (r) { return r.fu_date; })
-    .sort(function (a, b) { return String(b.fu_date).localeCompare(String(a.fu_date)); })
-    .slice(0, limit || 60)
+  return patients
+    .filter(function (p) {
+      if (String(p.status) === 'closed') return false;
+      var d = String(p.kbh_appt_date || '');
+      return !!d && daysBetweenIso_(today, d) <= CONFIG.FU_DUE_AHEAD_DAYS;
+    })
+    .map(function (p) {
+      return {
+        hn: p.hn,
+        name: fullName_(p),
+        program: p.imc_program || '',
+        appt: p.kbh_appt_date,
+        days_left: daysBetweenIso_(today, String(p.kbh_appt_date)),
+        last_fu: lastFu[String(p.hn)] || ''
+      };
+    })
+    .sort(function (a, b) { return a.days_left - b.days_left; });
+}
+
+/**
+ * การติดตามทั้งหมดพร้อมชื่อผู้ป่วย และรายชื่อที่ถึงกำหนดต้องตาม
+ *
+ * ส่งไปทุกแถว ไม่ตัดที่ 60 รายการเงียบ ๆ อย่างเดิม เพราะหน้าจอกรองเองได้แล้ว
+ * และการตัดทิ้งโดยไม่มีอะไรบอกทำให้ของเก่าหายไปทั้งที่คนเปิดดูคิดว่าเห็นครบ
+ *
+ * รายการที่ยังไม่มีวันที่ก็ส่งไปด้วย ไม่กรองทิ้ง ตอนนำเข้าไฟล์เดิมมีรายการที่อ่านวันที่
+ * ไม่ออกแล้วเก็บข้อความไว้ให้คนมาเติมวันที่เอง ถ้ากรองทิ้งตรงนี้ แถวที่ต้องตามงานมากที่สุด
+ * จะกลายเป็นแถวเดียวที่มองไม่เห็นจากหน้าการติดตาม
+ */
+function apiListFollowups() {
+  currentUser_();
+  var today = todayIso_();
+  var patients = readAll_(SHEETS.PATIENTS);
+  var nameByHn = {};
+  patients.forEach(function (p) { nameByHn[String(p.hn)] = fullName_(p); });
+
+  var rows = readAll_(SHEETS.FOLLOWUPS)
     .map(function (r) {
       r.patient_name = nameByHn[String(r.hn)] || '';
       r.fu_date_th = toThaiDate_(r.fu_date);
       return r;
+    })
+    .sort(function (a, b) {
+      var ad = String(a.fu_date || ''), bd = String(b.fu_date || '');
+      // ใหม่ไปเก่า แต่รายการที่ยังไม่มีวันที่ไปท้ายสุดเสมอ ไม่ใช่ปนอยู่หัวตาราง
+      if (!ad !== !bd) return ad ? -1 : 1;
+      return ad === bd ? compareFollowup_(a, b) : (ad > bd ? -1 : 1);
     });
+
+  return { rows: rows, due: dueFollowups_(patients, rows, today) };
 }
 
 /* -------------------------------------------------------------- จบโปรแกรม */
@@ -1236,7 +1346,7 @@ function buildDashboard_(patients, assessments, today, filter) {
     .map(function (p) {
       return {
         hn: p.hn,
-        name: [p.prefix, p.first_name, p.last_name].filter(String).join(' ').trim(),
+        name: fullName_(p),
         program: p.imc_program,
         date: p.kbh_appt_date,
         days_left: daysBetweenIso_(today, String(p.kbh_appt_date))

@@ -69,8 +69,11 @@ var win = {
 var src = scripts.join('\n;\n')
   .replace(/\bboot\(\);\s*$/, '')                 // อย่าให้บูตเอง จะไปเรียกเซิร์ฟเวอร์ปลอมแบบ async
   + '\n; return { API: API, fn: { drawDashboard: drawDashboard, drawReport: drawReport,' +
-    ' drawList: drawList, drawDetail: drawDetail, paintRows: paintRows },' +
-    ' setBoot: function (b) { BOOT = b; }, setPatients: function (p) { patientCache = p; } };';
+    ' drawList: drawList, drawDetail: drawDetail, paintRows: paintRows,' +
+    ' drawFollowups: drawFollowups, drawFuForm: drawFuForm },' +
+    ' setBoot: function (b) { BOOT = b; }, setPatients: function (p) { patientCache = p; },' +
+    ' setFollowups: function (d) { fuAll = d.rows; fuDue = d.due; },' +
+    ' setPick: function (v) { listPick = v; } };';
 
 var app;
 try {
@@ -90,7 +93,25 @@ var cases = [
   ['หน้าภาพรวม', function () { app.fn.drawDashboard(API.apiDashboard()); }],
   ['หน้ารายงาน / BI', function () { app.fn.drawReport(API.apiReport()); }],
   ['หน้ารายชื่อผู้ป่วย', function () { app.fn.drawList(); }],
-  ['หน้าเวชระเบียน', function () { app.fn.drawDetail(API.apiGetPatient(boot.patients[0].hn)); }]
+  ['หน้าเวชระเบียน', function () { app.fn.drawDetail(API.apiGetPatient(boot.patients[0].hn)); }],
+  ['หน้าการติดตาม', function () {
+    app.setFollowups(API.apiListFollowups());
+    app.fn.drawFollowups();
+  }],
+  // หน้ารายชื่อถูกยืมไปเลือกผู้ป่วยให้ฟอร์มติดตาม ต้องวาดได้เหมือนกันและมีทางถอยออก
+  ['หน้ารายชื่อ ตอนใช้เลือกผู้ป่วย', function () {
+    app.setPick('fu');
+    app.fn.drawList();
+    app.setPick('');
+  }],
+  ['ฟอร์มบันทึกการติดตาม', function () {
+    var hn = boot.patients[0].hn;
+    app.fn.drawFuForm({ hn: hn }, API.apiGetPatient(hn));
+  }],
+  ['ฟอร์มแก้ไขบันทึกการติดตาม', function () {
+    var d = API.apiGetPatient(boot.patients[0].hn);
+    app.fn.drawFuForm({ hn: d.patient.hn, id: d.followups[0].fu_id }, d);
+  }]
 ];
 
 var pass = 0, fail = 0;

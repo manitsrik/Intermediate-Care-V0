@@ -252,6 +252,19 @@ function updateObject_(name, rowNumber, obj) {
 }
 
 /**
+ * เขียนช่องเดียวของแถวเดียว ใช้ตอนแก้ค่าที่ระบบคำนวณเองอย่างเลข "ครั้งที่"
+ * ไม่ยกทั้งแถวไปเขียนทับ เพราะแถวนั้นอาจมีคนอื่นเพิ่งแก้ช่องอื่นไว้ในจังหวะเดียวกัน
+ */
+function updateCell_(name, rowNumber, field, value) {
+  sheet_(name).getRange(rowNumber, idx_(name, field)).setValue(value);
+}
+
+/** ชื่อเต็มของผู้ป่วยหนึ่งราย ประกอบที่เดียว ทุกหน้าจะได้เห็นชื่อในรูปแบบเดียวกัน */
+function fullName_(p) {
+  return [p.prefix, p.first_name, p.last_name].filter(String).join(' ').trim();
+}
+
+/**
  * ครอบการเขียนด้วย lock กันสองคนบันทึกชนกัน
  * ผู้ใช้ 5 คนโอกาสชนต่ำ แต่ความเสียหายสูงถ้าเกิด จึงกันไว้
  */

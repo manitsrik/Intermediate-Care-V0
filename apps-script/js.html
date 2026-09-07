@@ -283,7 +283,9 @@ function field(f, value) {
       ' autocomplete="off"' + (f.ph ? ' placeholder="' + esc(f.ph) + '"' : '') +
       (f.req ? ' required' : '') + '>';
   }
-  return '<label class="' + cls + '">' + label + input + '</label>';
+  // คำอธิบายใต้ช่อง สำหรับช่องที่ผลของมันไปโผล่ที่อื่น คนกรอกจะได้รู้ว่ากรอกแล้วเกิดอะไรขึ้น
+  var hint = f.hint ? '<small class="field-hint">' + esc(f.hint) + '</small>' : '';
+  return '<label class="' + cls + '">' + label + input + hint + '</label>';
 }
 
 function readForm(formEl) {
@@ -704,12 +706,23 @@ var listFilter = { q: '', status: '', screening: '', todo: '' };
 // แถวที่ผ่านตัวกรองอยู่ตอนนี้ ปุ่มส่งออกหยิบชุดเดียวกับที่ตาเห็นบนจอ ไม่ใช่ทั้งฐาน
 var listRows = [];
 
+/*
+  หน้ารายชื่อทำหน้าที่เป็นตัวเลือกผู้ป่วยให้หน้าอื่นได้ด้วย
+  กุญแจคือชื่อหน้าที่จะไปต่อเมื่อเลือกแล้ว ค่าคือข้อความบนแถบที่บอกว่ากำลังเลือกอะไรอยู่
+  ว่าง = ใช้งานตามปกติ กดแถวแล้วเปิดเวชระเบียน
+*/
+var LIST_PICK = { fu: 'เลือกผู้ป่วยที่จะบันทึกการติดตาม' };
+var listPick = '';
+
 /**
  * ดึงรายชื่อทั้งหมดครั้งเดียวแล้วค้นหากับกรองในเครื่อง
  * เดิมพิมพ์ค้นหาหนึ่งคำคือยิงไปเซิร์ฟเวอร์หนึ่งรอบ รอหลายวินาทีต่อคำ
  * และหน้าจอถูกวาดใหม่ทั้งหน้าจนเคอร์เซอร์หลุดจากช่องค้นหาทุกครั้ง
  */
-function renderList() {
+function renderList(param) {
+  // โหมดเลือกผู้ป่วยติดมากับการเรียกหน้า ไม่ได้ค้างไว้เป็นสถานะ กดเมนูรายชื่อตามปกติจึงหลุดออกเอง
+  var pick = param && param.pick;
+  listPick = LIST_PICK[pick] ? pick : '';
   if (patientCache) {
     drawList();
     if (Date.now() - patientCacheAt > CACHE_FRESH_MS) {
@@ -786,6 +799,23 @@ function attentionOf(key) {
   return { key: key, kind: 'care', short: key, label: key };
 }
 
+/**
+ * แถบบอกว่าตอนนี้หน้ารายชื่อถูกยืมมาใช้เลือกผู้ป่วย ไม่ใช่กำลังดูรายชื่อตามปกติ
+ * ต้องมีทางถอยออกเสมอ คนที่กดมาแล้วเปลี่ยนใจจะได้ไม่ต้องเดาว่าออกจากโหมดนี้ยังไง
+ */
+function pickBanner() {
+  if (!listPick) return '';
+  return '<div class="card notice-pick">' +
+    '<span><b>' + esc(LIST_PICK[listPick]) + '</b> คลิกที่ชื่อในตารางด้านล่าง ' +
+    'ค้นหาหรือกรองก่อนได้</span>' +
+    '<button class="btn btn-sm" onclick="cancelPick()">ยกเลิก</button></div>';
+}
+
+function cancelPick() {
+  listPick = '';
+  go('followups');
+}
+
 function drawList() {
   var html =
     '<div class="page-head">' +
@@ -800,6 +830,7 @@ function drawList() {
     '    <button class="btn btn-primary" onclick="go(\'patient\')">+ ลงทะเบียนเคสใหม่</button>' +
     '  </div>' +
     '</div>' +
+    pickBanner() +
     '<div class="filters">' +
     '  <input id="f-q" autocomplete="off" placeholder="ค้นหา HN ชื่อ ตำบล หรือ Dx" value="' + esc(listFilter.q) + '">' +
     '  <select id="f-status" autocomplete="off">' +
@@ -907,7 +938,7 @@ function emptyListText() {
 
 function patientRow(p) {
   var meta = [p.sex, p.age ? p.age + ' ปี' : ''].filter(String).join(' · ');
-  return '<tr onclick="go(\'detail\',\'' + esc(p.hn) + '\')">' +
+  return '<tr onclick="go(\'' + (listPick || 'detail') + '\',\'' + esc(p.hn) + '\')">' +
     '<td class="head"><strong>' + esc(p.hn) + '</strong> ' + esc(p.full_name || '') + '</td>' +
     '<td data-l="ผู้ป่วย" class="name-cell"><div class="cell-person">' +
       '<span class="avatar row">' + esc(initials(p.first_name)) + '</span>' +
@@ -1266,10 +1297,13 @@ function kv(k, v) {
   return '<dt>' + esc(k) + '</dt><dd>' + esc(v === '' || v === undefined || v === null ? '—' : v) + '</dd>';
 }
 
-/** ปุ่มแก้ไขรายการที่บันทึกไปแล้ว ส่งรหัสรายการไปให้ฟอร์มเติมค่าเดิม */
+/**
+ * ปุ่มแก้ไขรายการที่บันทึกไปแล้ว ส่งรหัสรายการไปให้ฟอร์มเติมค่าเดิม
+ * หยุดคลิกไม่ให้ทะลุไปถึงแถว ไม่งั้นบนตารางที่กดทั้งแถวได้ การกดแก้ไขจะพาไปหน้าอื่นแทน
+ */
 function editBtn(view, hn, id, what) {
   return '<button class="row-edit" title="แก้ไข' + esc(what) + '" aria-label="แก้ไข' + esc(what) + '"' +
-    ' onclick="go(\'' + view + '\', { hn: \'' + esc(hn) + '\', id: \'' + esc(id) + '\' })">' +
+    ' onclick="event.stopPropagation(); go(\'' + view + '\', { hn: \'' + esc(hn) + '\', id: \'' + esc(id) + '\' })">' +
     icon('edit', 15, 1.9) + '</button>';
 }
 
@@ -1280,12 +1314,39 @@ function timeline(list, hn) {
       '<div class="tl-rail"><div class="tl-dot' + (i ? ' past' : '') + '"></div>' +
       (last ? '' : '<div class="tl-line"></div>') + '</div>' +
       '<div class="tl-body">' +
-      '<div class="tl-date num">ครั้งที่ ' + esc(f.seq) + ' · ' + esc(thDate(f.fu_date)) +
+      '<div class="tl-date num">ครั้งที่ ' + esc(f.seq) + ' · ' + fuDateCell(f) +
       (f.fu_type ? ' <span class="chip chip-sq">' + esc(f.fu_type) + '</span>' : '') +
       (hn ? editBtn('fu', hn, f.fu_id, 'บันทึกการติดตามครั้งที่ ' + f.seq) : '') + '</div>' +
-      '<div class="tl-note">' + esc(f.complications || f.note || '—') + '</div>' +
+      '<div class="tl-note">' + fuText(f) + '</div>' +
       '</div></div>';
   }).join('') + '</div>';
+}
+
+/**
+ * ข้อความของการติดตามหนึ่งครั้ง
+ *
+ * เดิมแสดงภาวะแทรกซ้อนอย่างเดียวถ้ามี หมายเหตุที่กรอกไว้คู่กันจะหายไปเงียบ ๆ
+ * ทั้งที่หัวตารางเขียนไว้ว่าแสดงทั้งสองอย่าง
+ */
+function fuText(f) {
+  var parts = [f.complications, f.note].filter(String);
+  if (!parts.length) return '—';
+  // ห่อไว้ก้อนเดียว เพราะบนมือถือช่องในตารางเป็น flex ถ้าปล่อยสองก้อนจะไปเรียงข้างกันแทนที่จะซ้อนบรรทัด
+  return '<span class="fu-texts">' + parts.map(function (t) {
+    return '<span class="fu-text">' + esc(t) + '</span>';
+  }).join('') + '</span>';
+}
+
+/**
+ * วันที่ของการติดตามหนึ่งครั้ง
+ *
+ * รายการที่นำเข้ามาจากไฟล์เดิมโดยอ่านวันที่ไม่ออก จะไม่มีวันที่ติดมา
+ * ต้องเห็นว่าเป็นช่องที่รอคนมาเติม ไม่ใช่ขีดกลางเฉย ๆ ที่ดูเหมือนไม่มีอะไรต้องทำ
+ */
+function fuDateCell(f) {
+  return f.fu_date
+    ? esc(thDate(f.fu_date))
+    : '<span class="chip chip-warn chip-sq">ยังไม่มีวันที่</span>';
 }
 
 function biTable(list, hn) {
@@ -1518,23 +1579,54 @@ function cachedRecord(hn, listKey, idKey, id) {
   return (d[listKey] || []).filter(function (r) { return String(r[idKey]) === String(id); })[0] || null;
 }
 
+/**
+ * ฟอร์มต้องรู้จักรายการเดิมก่อน ถึงจะรู้ว่ากำลังแก้ของเดิมหรือกำลังเพิ่มรายการใหม่
+ *
+ * เดิมอ่านจากเวชระเบียนที่โหลดไว้แล้วอย่างเดียว ถ้าเข้ามาจากหน้าที่ยังไม่เคยเปิด
+ * เวชระเบียนรายนั้น (เช่นกดแก้ไขจากหน้าการติดตาม) จะได้ค่าว่าง แล้วกลายเป็นบันทึก
+ * รายการใหม่ซ้ำขึ้นมาอีกอันโดยไม่มีอะไรเตือน จึงต้องโหลดให้ครบก่อนวาดฟอร์ม
+ */
 function renderFuForm(param) {
-  var a = formArg(param), hn = a.hn;
-  var old = cachedRecord(hn, 'followups', 'fu_id', a.id);
+  var a = formArg(param);
+  if (detailCache[a.hn]) { drawFuForm(a, detailCache[a.hn]); return; }
+  busy(3);
+  loadDetail(a.hn).then(function (d) {
+    if (VIEW.name === 'fu') drawFuForm(a, d);
+  }).catch(fail);
+}
+
+function drawFuForm(a, d) {
+  var hn = a.hn, p = d.patient || {};
+  var old = (d.followups || []).filter(function (r) { return String(r.fu_id) === String(a.id); })[0] || null;
+  var appt = String(p.kbh_appt_date || '');
+
   main().innerHTML = backBtn('detail', hn) +
     '<div class="page-head"><div class="head-text">' +
     '<h1>' + (old ? 'แก้ไขบันทึกการติดตาม' : 'บันทึกการติดตาม') + '</h1>' +
-    '<span class="sub num">HN ' + esc(hn) +
+    // ชื่อผู้ป่วยกำกับไว้ด้วย เพราะเข้าหน้านี้จากรายการที่ต้องตามได้โดยไม่ผ่านเวชระเบียน
+    '<span class="sub num">HN ' + esc(hn) + ' · ' + esc(p.full_name || '') +
     (old ? ' · ครั้งที่ ' + esc(old.seq) : '') + '</span></div></div>' +
     '<form id="fu-form"><input type="hidden" name="hn" value="' + esc(hn) + '">' +
-    // ส่งรหัสกับลำดับเดิมกลับไปด้วย เซิร์ฟเวอร์จะได้เขียนทับรายการเดิมและคงลำดับไว้
-    (old ? '<input type="hidden" name="fu_id" value="' + esc(old.fu_id) + '">' +
-           '<input type="hidden" name="seq" value="' + esc(old.seq) + '">' : '') +
+    // ส่งรหัสรายการเดิมกลับไปด้วย เซิร์ฟเวอร์จะได้เขียนทับของเดิมแทนการเพิ่มรายการใหม่
+    // ไม่ต้องส่งเลขครั้งที่ เซิร์ฟเวอร์ไล่เลขเองจากวันที่หลังบันทึกทุกครั้ง
+    (old ? '<input type="hidden" name="fu_id" value="' + esc(old.fu_id) + '">' : '') +
     '<div class="card"><div class="grid">' +
     field({ k: 'fu_date', l: 'วัน เดือน ปี', t: 'date', req: true }, old ? old.fu_date : (a.date || BOOT.today)) +
     field({ k: 'fu_type', l: 'ประเภทการติดตาม', t: 'select', o: BOOT.vocab.FU_TYPE, req: true }, old ? old.fu_type : '') +
     field({ k: 'complications', l: 'ภาวะแทรกซ้อนที่พบ', t: 'textarea', full: true }, old ? old.complications : '') +
     field({ k: 'note', l: 'หมายเหตุ', t: 'textarea', full: true }, old ? old.note : '') +
+    /*
+      นัดครั้งถัดไปมีเฉพาะตอนบันทึกรายการใหม่ การแก้บันทึกเก่าไม่ควรไปขยับวันนัดที่ใช้อยู่
+
+      ช่องนี้เขียนกลับไปที่วันนัด OPD ของผู้ป่วย ซึ่งเป็นช่องเดียวกับที่ธง "เลยกำหนดนัดแล้ว"
+      กับรายการที่ต้องตามอ่าน ตามคนไข้เสร็จแล้วเลื่อนนัดตรงนี้ที่เดียว งานค้างจะหายไปเอง
+    */
+    (old ? '' : field({
+      k: 'next_appt', l: 'นัดครั้งถัดไป', t: 'date',
+      hint: appt
+        ? 'ตอนนี้นัดไว้ ' + thDate(appt) + ' · ใส่วันใหม่เพื่อเลื่อนนัด ปล่อยว่างถ้ายังไม่เปลี่ยน'
+        : 'ยังไม่มีวันนัดในระบบ · ใส่ไว้แล้วรายนี้จะขึ้นในรายการที่ต้องตามเมื่อใกล้ถึงวัน'
+    }, '')) +
     // ตรวจครั้งเดียวแล้วต้องบันทึกสองที่ ติ๊กไว้แล้วระบบพาไปหน้าประเมินต่อโดยเติมวันที่ให้
     (old ? '' : '<label class="check full"><input type="checkbox" id="fu-then-bi">' +
            '<span>ประเมิน BI ต่อหลังบันทึก</span></label>') +
@@ -1584,31 +1676,219 @@ function renderCloseForm(hn) {
 
 /* ------------------------------------------------------ หน้าการติดตาม */
 
+/*
+  หน้านี้มีสองงานที่ไม่เหมือนกันวางอยู่ด้วยกัน
+
+    ด้านบน  งานที่ต้องลงมือ - ใครถึงกำหนดต้องตามแล้วบ้าง
+    ด้านล่าง สมุดบันทึก - ตามใครไปแล้วบ้าง ค้นและกรองย้อนหลังได้
+
+  เดิมมีแต่ก้อนล่าง และตัดมาให้แค่ 60 รายการล่าสุด หน้าที่ทีมเปิดเพื่อจะตามคนไข้
+  จึงตอบไม่ได้เลยว่าวันนี้ต้องตามใคร และดูของเก่าที่เกิน 60 รายการก็ไม่ได้
+*/
+var fuAll = [];      // ทุกรายการที่เซิร์ฟเวอร์ส่งมา
+var fuRows = [];     // เฉพาะที่ผ่านตัวกรอง ใช้ตอนนับและวาดแถว
+var fuDue = [];      // รายชื่อที่ถึงกำหนดต้องตาม
+var fuDueAll = false;
+var fuFilter = { q: '', type: '', when: '' };
+
+/** ตัวเลือกช่วงเวลาของสมุดบันทึก เก็บคู่กันไว้ที่เดียวเพื่อให้ค่ากับป้ายไม่มีทางหลุดจากกัน */
+var FU_WHEN = [
+  ['', 'ทุกช่วงเวลา'],
+  ['30', '30 วันล่าสุด'],
+  ['90', '90 วันล่าสุด'],
+  ['fy', 'ปีงบนี้'],
+  ['nodate', 'ยังไม่มีวันที่']
+];
+
+/* แสดงรายชื่อที่ต้องตามเท่านี้ก่อน ที่เหลือกางดูได้ ไม่ให้ตารางบันทึกถูกดันตกจอไปตั้งแต่แรก */
+var FU_DUE_SHOWN = 8;
+
 function renderFollowups() {
   busy();
-  call('apiListFollowups', 60).then(function (rows) {
-    var html = '<div class="page-head"><div class="head-text"><h1>การติดตาม</h1>' +
-      '<span class="sub num">' + rows.length + ' รายการล่าสุด</span></div></div>';
-
-    if (!rows.length) {
-      html += '<div class="card"><div class="empty">ยังไม่มีบันทึกการติดตาม</div></div>';
-    } else {
-      html += '<div class="card flush"><div class="table-wrap"><table class="cards"><thead><tr>' +
-        '<th>วันที่</th><th>ผู้ป่วย</th><th>ประเภท</th><th>ภาวะแทรกซ้อน / หมายเหตุ</th>' +
-        '</tr></thead><tbody>' +
-        rows.map(function (f) {
-          return '<tr onclick="go(\'detail\',\'' + esc(f.hn) + '\')">' +
-            '<td class="head"><strong class="num">' + esc(thDate(f.fu_date)) + '</strong> ' + esc(f.patient_name) + '</td>' +
-            '<td data-l="วันที่" class="hn-cell num">' + esc(thDate(f.fu_date)) + '</td>' +
-            '<td data-l="ผู้ป่วย" class="name-cell">' + esc(f.patient_name || f.hn) + '</td>' +
-            '<td data-l="ประเภท">' + (f.fu_type ? '<span class="chip chip-sq">' + esc(f.fu_type) + '</span>' : '—') + '</td>' +
-            '<td data-l="บันทึก">' + esc(f.complications || f.note || '—') + '</td>' +
-            '</tr>';
-        }).join('') +
-        '</tbody></table></div></div>';
-    }
-    main().innerHTML = html;
+  call('apiListFollowups').then(function (d) {
+    fuAll = d.rows || [];
+    fuDue = d.due || [];
+    drawFollowups();
   }).catch(fail);
+}
+
+function drawFollowups() {
+  main().innerHTML =
+    '<div class="page-head"><div class="head-text"><h1>การติดตาม</h1>' +
+    '<span class="sub num" id="fu-count"></span></div>' +
+    '<div class="head-actions">' +
+    '  <button class="btn btn-primary" onclick="pickPatientForFu()">+ บันทึกการติดตาม</button>' +
+    '</div></div>' +
+    duePanel() +
+    '<div class="filters">' +
+    '  <input id="fu-q" autocomplete="off" placeholder="ค้นหา HN ชื่อ หรือข้อความในบันทึก" value="' + esc(fuFilter.q) + '">' +
+    '  <select id="fu-type" autocomplete="off">' +
+    '    <option value="">ทุกประเภท</option>' +
+    (BOOT.vocab.FU_TYPE || []).map(function (t) { return optionHtml(t, t, fuFilter.type); }).join('') +
+    '  </select>' +
+    '  <select id="fu-when" autocomplete="off">' +
+    FU_WHEN.map(function (w) { return optionHtml(w[0], w[1], fuFilter.when); }).join('') +
+    '  </select>' +
+    '</div>' +
+    // data-l ใช้เป็นป้ายกำกับตอนตารางกลายเป็นการ์ดบนมือถือ (ดู css.html)
+    // จำนวนช่องที่มองเห็นต้องเท่ากับจำนวนหัวตารางเสมอ ไม่งั้นข้อมูลจะเลื่อนคอลัมน์
+    '<div class="card flush" id="fu-card"><div class="table-wrap"><table class="cards"><thead><tr>' +
+    '<th>วันที่</th><th>ผู้ป่วย</th><th>ครั้งที่</th><th>ประเภท</th>' +
+    '<th>ภาวะแทรกซ้อน / หมายเหตุ</th><th><span class="sr-only">แก้ไข</span></th>' +
+    '</tr></thead><tbody id="fu-body"></tbody></table></div></div>' +
+    '<div id="fu-empty" hidden><div class="card"><div class="empty" id="fu-empty-text"></div></div></div>' +
+    '<p class="count-line num" id="fu-shown"></p>';
+
+  // กรองในเครื่องแล้ววาดใหม่เฉพาะแถว ช่องค้นหาไม่ถูกสร้างใหม่ เคอร์เซอร์จึงอยู่ที่เดิม
+  $('#fu-q').addEventListener('input', function (e) { fuFilter.q = e.target.value; paintFuRows(); });
+  $('#fu-type').addEventListener('change', function (e) { fuFilter.type = e.target.value; paintFuRows(); });
+  $('#fu-when').addEventListener('change', function (e) { fuFilter.when = e.target.value; paintFuRows(); });
+
+  paintFuRows();
+}
+
+/**
+ * รายชื่อที่ถึงกำหนดต้องตาม อ่านจากวันนัด OPD ช่องเดียวกับที่แดชบอร์ดกับธงงานค้างใช้
+ * ทั้งสามที่จึงพูดถึงนัดเดียวกันเสมอ ไม่มีหน้าไหนตีความคำว่า "ถึงกำหนด" เป็นของตัวเอง
+ */
+function duePanel() {
+  if (!fuDue.length) return '';
+
+  var over = fuDue.filter(function (u) { return u.days_left < 0; }).length;
+  var today = fuDue.filter(function (u) { return u.days_left === 0; }).length;
+  var soon = fuDue.length - over - today;
+  var shown = fuDueAll ? fuDue : fuDue.slice(0, FU_DUE_SHOWN);
+
+  return '<div class="panel">' +
+    '<div class="panel-head"><span class="panel-ico">' + icon('bell', 20, 1.9) + '</span>' +
+    '<h2>ถึงกำหนดต้องตาม' +
+    '<span class="sub num">' + [
+      over ? 'เลยนัด ' + over + ' ราย' : '',
+      today ? 'วันนี้ ' + today + ' ราย' : '',
+      soon ? 'ใน ' + BOOT.dueAheadDays + ' วัน ' + soon + ' ราย' : ''
+    ].filter(String).join(' · ') + '</span></h2>' +
+    (fuDue.length > FU_DUE_SHOWN
+      ? '<button class="panel-link" onclick="toggleDueAll()">' +
+        (fuDueAll ? 'ย่อลง' : 'ดูทั้งหมด ' + fuDue.length + ' ราย') + ' ' + icon('arrow', 14, 2) + '</button>'
+      : '') +
+    '</div>' + shown.map(dueRow).join('') + '</div>';
+}
+
+function dueRow(u) {
+  var when = u.days_left < 0 ? 'เลยนัด ' + (-u.days_left) + ' วัน'
+    : (u.days_left === 0 ? 'วันนี้' : (u.days_left === 1 ? 'พรุ่งนี้' : 'อีก ' + u.days_left + ' วัน'));
+  // บอกด้วยว่าตามครั้งล่าสุดเมื่อไร จะได้แยกออกว่ารายไหนตามไปแล้วแต่ลืมเลื่อนนัด
+  var last = u.last_fu ? 'ตามล่าสุด ' + thDate(u.last_fu) : 'ยังไม่เคยบันทึกการติดตาม';
+  var who = esc(u.name || u.hn);
+
+  return '<div class="list-row" onclick="go(\'detail\',\'' + esc(u.hn) + '\')">' +
+    '<span class="avatar row">' + esc(initials(u.name)) + '</span>' +
+    '<span class="who"><b>' + who + '</b>' +
+    '<small class="num">HN ' + esc(u.hn) + ' · นัด ' + esc(thDate(u.appt)) + ' · ' + esc(last) + '</small></span>' +
+    '<span class="when num' + (u.days_left <= 0 ? ' soon' : '') + '">' + esc(when) + '</span>' +
+    '<button class="row-edit" title="บันทึกการติดตามของ ' + who + '" aria-label="บันทึกการติดตามของ ' + who + '"' +
+    ' onclick="event.stopPropagation(); go(\'fu\',\'' + esc(u.hn) + '\')">' + icon('calplus', 16, 1.9) + '</button>' +
+    '</div>';
+}
+
+function toggleDueAll() {
+  fuDueAll = !fuDueAll;
+  drawFollowups();
+}
+
+function matchesFu(f) {
+  if (fuFilter.type && String(f.fu_type) !== fuFilter.type) return false;
+  if (!matchesFuWhen(f)) return false;
+  var q = String(fuFilter.q || '').trim().toLowerCase();
+  if (!q) return true;
+  return [f.hn, f.patient_name, f.fu_type, f.complications, f.note]
+    .join(' ').toLowerCase().indexOf(q) !== -1;
+}
+
+/**
+ * ช่วงเวลาของรายการหนึ่ง
+ * "ยังไม่มีวันที่" เป็นตัวเลือกในดรอปดาวน์เดียวกัน เพราะเป็นกองงานที่ต้องไล่เติม
+ * ไม่ใช่ของเสียที่ควรซ่อน ถ้าไม่มีทางเลือกดู ก็ไม่มีใครรู้ว่ามันค้างอยู่
+ */
+function matchesFuWhen(f) {
+  var key = fuFilter.when, d = String(f.fu_date || '');
+  if (!key) return true;
+  if (key === 'nodate') return !d;
+  if (!d) return false;
+  if (key === 'fy') return periodKey(d, 'years') === periodKey(BOOT.today, 'years');
+  return daysAgo_(d) <= Number(key);
+}
+
+/** ห่างจากวันนี้กี่วัน คิดจากข้อความ yyyy-MM-dd ตรง ๆ ทั้งสองฝั่งจึงไม่ขึ้นกับเขตเวลาของเครื่อง */
+function daysAgo_(iso) {
+  return Math.round((new Date(BOOT.today) - new Date(iso)) / 86400000);
+}
+
+function paintFuRows() {
+  var body = document.getElementById('fu-body');
+  if (!body) return;   // ผู้ใช้เปลี่ยนหน้าไปแล้วระหว่างรอข้อมูล
+
+  fuRows = fuAll.filter(matchesFu);
+  var nodate = fuAll.filter(function (f) { return !f.fu_date; }).length;
+
+  body.innerHTML = fuRows.map(followupRow).join('');
+  document.getElementById('fu-card').hidden = !fuRows.length;
+  document.getElementById('fu-empty').hidden = !!fuRows.length;
+  if (!fuRows.length) document.getElementById('fu-empty-text').innerHTML = emptyFuText();
+  document.getElementById('fu-shown').textContent = fuRows.length ? 'แสดง ' + fuRows.length + ' รายการ' : '';
+
+  /*
+    นับจากทุกรายการเสมอ ไม่ใช่เฉพาะที่กรองอยู่ เพราะบรรทัดนี้เป็นภาพรวมของทั้งระบบ
+    แยกรายการที่ยังไม่มีวันที่ออกมาให้เห็น เป็นช่องที่ต้องไล่เติมจากแฟ้มเก่า เลือกดูได้จากตัวกรอง
+  */
+  document.getElementById('fu-count').textContent =
+    'ทั้งหมด ' + fuAll.length + ' รายการ' +
+    (nodate ? ' · ยังไม่มีวันที่ ' + nodate + ' รายการ' : '');
+}
+
+function followupRow(f) {
+  return '<tr onclick="go(\'detail\',\'' + esc(f.hn) + '\')">' +
+    '<td class="head"><strong class="num">' + fuDateCell(f) + '</strong> ' + esc(f.patient_name) + '</td>' +
+    // hn-cell = ช่องที่ซ่อนบนมือถือเพราะหัวการ์ดบอกไปแล้ว (ดู css.html) ที่นี่คือวันที่
+    '<td data-l="วันที่" class="num hn-cell">' + fuDateCell(f) + '</td>' +
+    '<td data-l="ผู้ป่วย" class="name-cell"><div class="cell-person">' +
+      '<span class="avatar row">' + esc(initials(f.patient_name)) + '</span>' +
+      '<span class="who"><b>' + esc(f.patient_name || '—') + '</b>' +
+      '<small class="num">' + esc(f.hn) + '</small></span>' +
+    '</div></td>' +
+    '<td data-l="ครั้งที่" class="num">' + esc(f.seq) + '</td>' +
+    '<td data-l="ประเภท">' + (f.fu_type ? '<span class="chip chip-sq">' + esc(f.fu_type) + '</span>' : '—') + '</td>' +
+    '<td data-l="บันทึก">' + fuText(f) + '</td>' +
+    '<td>' + editBtn('fu', f.hn, f.fu_id, 'บันทึกการติดตามครั้งที่ ' + f.seq) + '</td>' +
+    '</tr>';
+}
+
+/** หน้าว่างบอกด้วยว่าว่างเพราะกรองไว้หรือเพราะยังไม่มีใครบันทึก แล้วเสนอทางออกให้ตรงกัน */
+function emptyFuText() {
+  if (fuFilter.q || fuFilter.type || fuFilter.when) {
+    return 'ไม่มีรายการตามเงื่อนไขที่กรองอยู่' +
+      '<div class="btn-row" style="justify-content:center">' +
+      '<button class="btn" onclick="clearFuFilters()">ล้างตัวกรอง</button></div>';
+  }
+  return 'ยังไม่มีบันทึกการติดตาม' +
+    '<div class="btn-row" style="justify-content:center">' +
+    '<button class="btn btn-primary" onclick="pickPatientForFu()">+ บันทึกการติดตามครั้งแรก</button></div>';
+}
+
+function clearFuFilters() {
+  fuFilter = { q: '', type: '', when: '' };
+  drawFollowups();
+}
+
+/*
+  บันทึกการติดตามต้องเริ่มจากรู้ว่าเป็นของใคร เดิมเริ่มจากหน้านี้ไม่ได้เลย
+  ต้องอ้อมไปหน้ารายชื่อแล้วเปิดเวชระเบียนก่อน ทั้งที่หน้านี้คือหน้าที่คนเปิดเพื่อจะบันทึก
+
+  ยืมหน้ารายชื่อมาเป็นตัวเลือกคน แทนที่จะสร้างรายการให้เลือกขึ้นมาใหม่ เพราะที่นั่นมีทั้ง
+  ช่องค้นหาและตัวกรองอยู่แล้ว คนที่นึกชื่อไม่ออกจะได้ค้นด้วย HN หรือกรองตาม Ward ได้
+*/
+function pickPatientForFu() {
+  go('list', { pick: 'fu' });
 }
 
 /* ------------------------------------------------------ ตั้งค่าผู้ใช้งาน */

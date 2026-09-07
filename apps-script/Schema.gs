@@ -137,14 +137,55 @@ function setupSystem() {
   });
 
   var filled = backfillBiColumns_();
+  var renumbered = backfillFollowupSeq_();
   buildSummarySheet_(ss);
   ensureCurrentUserIsRegistered_();
 
   var ui = SpreadsheetApp.getUi();
   ui.alert('ติดตั้งเรียบร้อย',
     (created.length ? 'สร้างชีตใหม่: ' + created.join(', ') : 'ชีตครบอยู่แล้ว อัปเดตหัวคอลัมน์ให้แล้ว') +
-    '\nเติมคะแนน BI ย้อนหลังบนแถวผู้ป่วย ' + filled + ' แถว',
+    '\nเติมคะแนน BI ย้อนหลังบนแถวผู้ป่วย ' + filled + ' แถว' +
+    '\nไล่เลขครั้งที่ของการติดตามให้ตรงลำดับวันที่ ' + renumbered + ' แถว',
     ui.ButtonSet.OK);
+}
+
+/**
+ * ไล่เลข "ครั้งที่" ของการติดตามทั้งชีตให้ตรงลำดับวันที่
+ *
+ * ตอนบันทึกปกติ resequenceFollowups_() ทำให้อยู่แล้วทีละคน ตัวนี้มีไว้ซ่อมข้อมูลเก่า
+ * ที่บันทึกไว้ก่อนจะมีการไล่เลข ซึ่งเลขครั้งที่เป็นลำดับที่กด ไม่ใช่ลำดับวันที่
+ * เรียกซ้ำได้ ผลลัพธ์เหมือนเดิมเสมอ
+ *
+ * อ่านทีเดียวเขียนทีเดียวทั้งคอลัมน์ ไม่ไล่เขียนทีละแถว เพราะข้อมูลที่นำเข้ามามีหลายพันแถวได้
+ */
+function backfillFollowupSeq_() {
+  var sh = sheet_(SHEETS.FOLLOWUPS);
+  var last = sh.getLastRow();
+  if (last < 2) return 0;
+
+  var byHn = {};
+  readAll_(SHEETS.FOLLOWUPS).forEach(function (r) {
+    var hn = String(r.hn);
+    if (!byHn[hn]) byHn[hn] = [];
+    byHn[hn].push(r);
+  });
+
+  var seqOfRow = {}, changed = 0;
+  Object.keys(byHn).forEach(function (hn) {
+    byHn[hn].sort(compareFollowup_).forEach(function (r, i) {
+      seqOfRow[r._row] = i + 1;
+      if (Number(r.seq) !== i + 1) changed++;
+    });
+  });
+
+  var col = sh.getRange(2, idx_(SHEETS.FOLLOWUPS, 'seq'), last - 1, 1);
+  var values = col.getValues();
+  values.forEach(function (row, i) {
+    // แถวว่างไม่มีในตาราง ปล่อยค่าเดิมไว้ ไม่ต้องไปเขียนอะไรลงไป
+    if (seqOfRow[i + 2] !== undefined) row[0] = seqOfRow[i + 2];
+  });
+  col.setValues(values);
+  return changed;
 }
 
 /**

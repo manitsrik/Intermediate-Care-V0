@@ -652,8 +652,23 @@ tbody tr:last-child td { border-bottom: 0; }
 .hbar-row { display: grid; grid-template-columns: 1fr auto; gap: 5px 10px; font-size: 13px; }
 .hbar-row .lbl { color: var(--body); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hbar-row .n { color: var(--muted); font-size: 12px; white-space: nowrap; }
-.hbar-track { grid-column: 1 / -1; height: 9px; border-radius: 999px; background: #eef1f3; overflow: hidden; }
-.hbar-fill { height: 100%; border-radius: 999px; background: var(--brand); min-width: 3px; }
+/*
+  แท่งเดิมสูง 9px สีอ่อนบนรางสีอ่อน ค่าความต่างน้อยจนดูเป็นสีเทาไปหมด
+  ดันสามอย่างพร้อมกันทีละนิด สูงขึ้น รางเข้มขึ้น และแท่งเข้มขึ้นหนึ่งขั้น
+  ได้ผลดีกว่าดันอย่างใดอย่างหนึ่งจนแรงเกิน
+*/
+.hbar-track { grid-column: 1 / -1; height: 11px; border-radius: 999px; background: #e4eaed; overflow: hidden; }
+/* เป็น span ต้องบอกให้เป็น block ชัด ๆ ไม่งั้น width กับ min-width ไม่มีผล */
+.hbar-fill { display: block; height: 100%; border-radius: 999px; background: #38b2b7; min-width: 3px; }
+/*
+  สองการ์ดที่มีลำดับความรุนแรงในตัว (การกระจายคะแนน BI กับกลุ่ม ADL)
+  ใช้เฉดเดียวกันไล่จากเข้มไปอ่อน เข้มคือพึ่งพาคนอื่นมากที่สุด สีจึงสื่อความหมายจริง
+  การ์ดอื่นอย่างหอผู้ป่วยหรือเหตุจบไม่มีลำดับ จึงคงสีเดียวไว้ตามเดิม
+*/
+.hbar-fill.sev-3 { background: #1f8d92; }
+.hbar-fill.sev-2 { background: #38b2b7; }
+.hbar-fill.sev-1 { background: #7bd0d3; }
+.hbar-fill.sev-0 { background: #a9e0e2; }
 
 /* ------------------------------------------------------------------ toast */
 

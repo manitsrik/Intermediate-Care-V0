@@ -2208,8 +2208,8 @@ function drawReport(r) {
     '</div>';
 
   html += '<div class="rep-grid">' +
-    hbarPanel('การกระจายคะแนน BI ล่าสุด', 'chart', r.buckets) +
-    hbarPanel('กลุ่ม ADL จากผลประเมินล่าสุด', 'target', r.adl) +
+    hbarPanel('การกระจายคะแนน BI ล่าสุด', 'chart', r.buckets, true) +
+    hbarPanel('กลุ่ม ADL จากผลประเมินล่าสุด', 'target', r.adl, true) +
     hbarPanel('กลุ่มการวินิจฉัย', 'pulse', r.dxGroups) +
     hbarPanel('หอผู้ป่วย', 'people', r.wards) +
     hbarPanel('รูปแบบโปรแกรม', 'calendar', r.programs) +
@@ -2221,7 +2221,18 @@ function drawReport(r) {
   main().innerHTML = html;
 }
 
-function hbarPanel(title, ico, rows) {
+/*
+  เฉดตามระดับการพึ่งพา ดูจากคำในป้ายไม่ใช่ลำดับแถว
+  เพราะการ์ดกลุ่ม ADL เรียงตามจำนวนราย ไม่ได้เรียงตามความรุนแรง
+*/
+var SEVERITY = [['ติดเตียง', 'sev-3'], ['ติดบ้าน', 'sev-2'], ['ติดสังคม', 'sev-1'], ['เต็ม', 'sev-0']];
+
+function severityClass(label) {
+  var hit = SEVERITY.filter(function (s) { return String(label).indexOf(s[0]) !== -1; })[0];
+  return hit ? ' ' + hit[1] : '';
+}
+
+function hbarPanel(title, ico, rows, shaded) {
   rows = rows || [];
   var max = Math.max.apply(null, rows.map(function (x) { return x.count; }).concat([1]));
   var sum = rows.reduce(function (a, x) { return a + x.count; }, 0);
@@ -2233,8 +2244,12 @@ function hbarPanel(title, ico, rows) {
           return '<div class="hbar-row">' +
             '<span class="lbl">' + esc(x.label || x.name) + '</span>' +
             '<span class="n num">' + x.count + ' ราย · ' + Math.round(x.count / sum * 100) + '%</span>' +
-            '<span class="hbar-track"><span class="hbar-fill" style="width:' +
-              Math.round(x.count / max * 100) + '%"></span></span></div>';
+            // ยอดศูนย์ไม่วาดแท่งเลย ปล่อยรางว่างไว้ ดีกว่าวาดแท่งกว้างศูนย์
+            // แล้วต้องคอยกันไม่ให้เหลือจุดสีจาก min-width
+            '<span class="hbar-track">' + (x.count
+              ? '<span class="hbar-fill' + (shaded ? severityClass(x.label || x.name) : '') +
+                '" style="width:' + Math.round(x.count / max * 100) + '%"></span>'
+              : '') + '</span></div>';
         }).join('') + '</div>'
       : '<div class="empty">ยังไม่มีข้อมูล</div>') +
     '</div>';

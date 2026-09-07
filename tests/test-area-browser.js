@@ -96,6 +96,18 @@ async function screenshot(name) {
     await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
     await check('Mobile layout has no horizontal page overflow', 'document.documentElement.scrollWidth <= innerWidth');
     await screenshot('dashboard-areas-mobile.png');
+    await evaluate('go("report")');
+    await until(() => evaluate('!!reportCache'));
+    // ตรวจเชิงความหมาย ไม่นับจำนวน จำนวนแท่งเปลี่ยนได้ตามข้อมูลตัวอย่าง
+    await check('Report bars shade only the two panels that have a severity order',
+      '[...document.querySelectorAll(".hbar-fill")].length > 8' +
+      ' && [...document.querySelectorAll(".hbar-fill")].every(b =>' +
+      '   /sev-/.test(b.className) === /คะแนน BI ล่าสุด|กลุ่ม ADL/.test(b.closest(".panel").textContent))');
+    await check('A zero row draws no bar at all',
+      '[...document.querySelectorAll(".hbar-track")].some(t => !t.firstElementChild)' +
+      ' && ![...document.querySelectorAll(".hbar-fill")].some(b => b.style.width === "0%")');
+    await screenshot('report-bars-mobile.png');   // จุดนี้อยู่หลังสลับเป็นจอมือถือแล้ว
+
     await evaluate('go("detail", "TEST001")');
     await until(() => evaluate('!!detailCache["TEST001"]'));
     await check('Saved records offer an edit button', 'document.querySelectorAll(".row-edit").length >= 2');

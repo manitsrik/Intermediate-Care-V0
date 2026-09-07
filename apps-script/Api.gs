@@ -87,6 +87,41 @@ function requireAdmin_() {
   return u;
 }
 
+/* ------------------------------------------------------- โหมดทดสอบ */
+
+var MASK_PROP_ = 'MASK_MODE';
+
+/**
+ * โหมดทดสอบที่ระบบใช้อยู่จริงตอนนี้
+ *
+ * CONFIG.MASK_MODE เป็นค่าตั้งต้นของไฟล์ ส่วนค่าที่ผู้ดูแลสลับเองในหน้าตั้งค่าเก็บใน
+ * Script Properties เพราะนี่คือสวิตช์เดียวที่กั้นระหว่างข้อมูลสมมติกับข้อมูลคนไข้จริง
+ * คนที่ต้องกดคือผู้ดูแลของโรงพยาบาล ไม่ควรต้องรอให้ใครมาแก้โค้ดแล้ว push ใหม่ให้
+ */
+function maskMode_() {
+  try {
+    var v = PropertiesService.getScriptProperties().getProperty(MASK_PROP_);
+    if (v === 'TRUE') return true;
+    if (v === 'FALSE') return false;
+  } catch (e) {
+    // อ่าน property ไม่ได้ ให้ถอยไปใช้ค่าตั้งต้นในไฟล์ ซึ่งเป็นฝั่งที่ปลอดภัยกว่า
+  }
+  return CONFIG.MASK_MODE;
+}
+
+/**
+ * สลับโหมดทดสอบ
+ *
+ * มีผลกับแถบเตือนบนหน้าจอ และกับการนำเข้าข้อมูลเก่าครั้งถัดไปเท่านั้น
+ * แถวที่นำเข้าไปแล้วถูกปกปิดตั้งแต่ตอนเขียนลงชีต ปิดโหมดนี้ทีหลังไม่ได้คืนค่าจริงให้
+ */
+function apiSetMaskMode(on) {
+  requireAdmin_();
+  var want = (on === true || String(on).toUpperCase() === 'TRUE');
+  PropertiesService.getScriptProperties().setProperty(MASK_PROP_, want ? 'TRUE' : 'FALSE');
+  return { ok: true, maskMode: want };
+}
+
 /* --------------------------------------------------------- จัดการผู้ใช้ */
 
 /**
@@ -208,8 +243,8 @@ function apiSaveUser(form) {
   var active = String(form.active).toUpperCase() !== 'FALSE';
 
   var isSelf = (email === String(me.email).trim().toLowerCase());
-  if (isSelf && (!active || role !== 'admin')) {
-    throw new Error('ลดสิทธิ์หรือปิดการใช้งานบัญชีตัวเองไม่ได้ ให้ผู้ดูแลคนอื่นเป็นคนทำแทน');
+  if (isSelf && !active) {
+    throw new Error('ปิดการใช้งานบัญชีตัวเองไม่ได้ ให้ผู้ดูแลคนอื่นเป็นคนทำแทน');
   }
 
   return withLock_(function () {
@@ -228,9 +263,22 @@ function apiSaveUser(form) {
       throw new Error('ต้องเหลือผู้ดูแลระบบอย่างน้อย 1 คน');
     }
 
+    /*
+      ห้ามลดสิทธิ์ผู้ดูแลของตัวเอง แต่แก้ชื่อตัวเองได้
+      เทียบกับสิทธิ์เดิมในชีต ไม่ใช่เทียบว่า role ที่ส่งมาเป็น admin ไหม
+      เพราะช่วงที่ระบบยังไม่มีผู้ดูแลเลย คนที่เข้าหน้านี้ได้ยังเป็น staff อยู่
+      ถ้าเทียบแบบเดิมเขาจะแก้ชื่อตัวเองไม่ได้ ทั้งที่ไม่ได้ลดสิทธิ์อะไรเลย
+    */
+    if (isSelf && wasActiveAdmin && role !== 'admin') {
+      throw new Error('ลดสิทธิ์ผู้ดูแลของบัญชีตัวเองไม่ได้ ให้ผู้ดูแลคนอื่นเป็นคนทำแทน');
+    }
+
     var rec = {
       email: email,
-      name: form.name || (existing ? existing.name : ''),
+      // ส่ง name ว่างมาถือว่าตั้งใจลบชื่อออก ไม่ใช่ไม่ได้ส่งมา ไม่งั้นลบชื่อที่พิมพ์ผิดไม่ได้
+      name: (form.name === undefined || form.name === null)
+        ? (existing ? existing.name : '')
+        : String(form.name).trim(),
       role: role,
       active: active ? 'TRUE' : 'FALSE',
       added_at: existing ? (existing.added_at || nowIso_()) : nowIso_()
@@ -257,6 +305,55 @@ function apiSaveUser(form) {
       ok: true, email: email, created: false, active: false,
       revoked: revoke.revoked, alreadyRevoked: !!revoke.already, revokeError: revoke.error || ''
     };
+  });
+}
+
+/**
+ * ลบผู้ใช้ออกจากตารางถาวร
+ *
+ * มีไว้สำหรับแถวที่ใส่ผิดตั้งแต่แรก เช่นพิมพ์อีเมลผิดตัว ไม่ใช่สำหรับคนที่เคยใช้งานจริง
+ * คนที่ลาออกให้ปิดการใช้งานแทน จะได้ยังรู้ว่าเคยมีใครเข้าถึงข้อมูลผู้ป่วยบ้าง
+ *
+ * ถอนสิทธิ์ไฟล์ออกให้ด้วยเสมอ ไม่งั้นชื่อหายจากตารางแต่ยังเปิดชีตดิบอ่านข้อมูลได้อยู่
+ * ซึ่งอันตรายกว่าตอนที่ยังเห็นชื่อเขาค้างในตาราง เพราะไม่เหลือร่องรอยให้ใครสังเกต
+ */
+function apiDeleteUser(email) {
+  var me = requireAdmin_();
+  var target = String(email || '').trim().toLowerCase();
+  if (!target) throw new Error('กรุณาระบุอีเมล');
+  if (target === String(me.email).trim().toLowerCase()) {
+    throw new Error('ลบบัญชีตัวเองไม่ได้ ให้ผู้ดูแลคนอื่นเป็นคนทำแทน');
+  }
+
+  return withLock_(function () {
+    var rows = readAll_(SHEETS.USERS);
+    var row = rows.filter(function (u) {
+      return String(u.email).trim().toLowerCase() === target;
+    })[0];
+    if (!row) throw new Error('ไม่พบผู้ใช้ ' + target + ' ในตาราง');
+
+    var admins = rows.filter(function (u) {
+      return String(u.role).toLowerCase() === 'admin' && String(u.active).toUpperCase() !== 'FALSE';
+    });
+    var isActiveAdmin = String(row.role).toLowerCase() === 'admin' &&
+      String(row.active).toUpperCase() !== 'FALSE';
+    if (isActiveAdmin && admins.length <= 1) {
+      throw new Error('ต้องเหลือผู้ดูแลระบบอย่างน้อย 1 คน');
+    }
+
+    /*
+      ถอนสิทธิ์ไฟล์ให้สำเร็จก่อนถึงจะลบแถวได้
+      ถ้าลบแถวทั้งที่ถอนไม่ผ่าน จะกลายเป็นคนที่ยังเปิดชีตดิบอ่านข้อมูลผู้ป่วยได้
+      แต่ไม่เหลือชื่ออยู่ในตารางให้ใครสังเกตเห็น ซึ่งแย่กว่าการลบไม่สำเร็จไปเลย
+      แถวที่ยังอยู่จะขึ้นสถานะเตือนในคอลัมน์การเข้าถึงไฟล์ให้ตามแก้ต่อได้
+    */
+    var revoke = revokeEditor_(target);
+    if (!revoke.revoked) {
+      throw new Error('ถอนสิทธิ์ไฟล์ของ ' + target + ' ไม่สำเร็จ จึงยังไม่ลบออกจากตาราง: ' + revoke.error);
+    }
+
+    deleteRow_(SHEETS.USERS, row._row);
+    return { ok: true, email: target };
   });
 }
 
@@ -715,7 +812,7 @@ function apiBootstrap() {
     org: CONFIG.ORG,
     orgUnit: CONFIG.ORG_UNIT,
     orgPlace: CONFIG.ORG_PLACE,
-    maskMode: CONFIG.MASK_MODE,
+    maskMode: maskMode_(),
     biItems: BI_ITEMS,
     biMax: BI_MAX,
     // คำเต็มกับป้ายสั้นของงานค้าง หน้าจอจะได้ไม่ต้องมีรายการของตัวเองให้หลุดกัน

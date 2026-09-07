@@ -57,7 +57,7 @@ function runMigration() {
 
   var answer = ui.alert('ยืนยันการนำเข้า',
     'จะนำเข้าข้อมูลจากแท็บ ' + legacy.getName() + '\n' +
-    (CONFIG.MASK_MODE
+    (maskMode_()
       ? 'โหมดทดสอบเปิดอยู่ ชื่อ HN เบอร์โทร และที่อยู่จะถูกแทนด้วยข้อมูลสมมติ'
       : 'โหมดใช้งานจริง ข้อมูลจะถูกนำเข้าตามต้นฉบับ') + '\n\nดำเนินการต่อหรือไม่',
     ui.ButtonSet.YES_NO);
@@ -110,6 +110,9 @@ function migrateLegacy_(legacy) {
   var patients = [], assessments = [], followups = [];
   var now = nowIso_();
   var user = Session.getActiveUser().getEmail() || 'migration';
+  // อ่านโหมดทดสอบครั้งเดียวก่อนเข้าลูป ไม่ถาม Script Properties ใหม่ทุกแถว
+  // และทั้งไฟล์ที่นำเข้ารอบเดียวกันจะได้ถูกปกปิดแบบเดียวกันทั้งหมดแน่นอน
+  var mask = maskMode_();
 
   for (var r = 1; r < rows.length; r++) {
     var row = rows[r];
@@ -122,7 +125,7 @@ function migrateLegacy_(legacy) {
       report.push([legacyRow, rawHn, col, String(raw), issue, action]);
     };
 
-    var hn = CONFIG.MASK_MODE ? maskHn_(seq || legacyRow) : String(rawHn).trim();
+    var hn = mask ? maskHn_(seq || legacyRow) : String(rawHn).trim();
     var phones = String(cell_(row, LEGACY.PHONE)).split(/[\/,]/).map(function (s) { return s.trim(); });
 
     // ที่อยู่: ถ้ากลายเป็นวันที่ แปลว่าต้นฉบับเป็นบ้านเลขที่แบบ 3/11
@@ -163,17 +166,17 @@ function migrateLegacy_(legacy) {
       cid: '',                                          // ไฟล์เดิมไม่มีเลขบัตร คอลัมน์ B เก็บลำดับเคส
       hn: hn,
       prefix: cell_(row, LEGACY.PREFIX),
-      first_name: CONFIG.MASK_MODE ? maskName_(seq) : cell_(row, LEGACY.FIRST),
-      last_name: CONFIG.MASK_MODE ? '' : cell_(row, LEGACY.LAST),
+      first_name: mask ? maskName_(seq) : cell_(row, LEGACY.FIRST),
+      last_name: mask ? '' : cell_(row, LEGACY.LAST),
       sex: cell_(row, LEGACY.SEX),
       age: cell_(row, LEGACY.AGE),
       rights: cell_(row, LEGACY.RIGHTS),
       dx: dx,
       dx_group: dxGroupOf_(dx),
-      address: CONFIG.MASK_MODE ? maskAddress_(address) : address,
+      address: mask ? maskAddress_(address) : address,
       tambon: cell_(row, LEGACY.TAMBON),
-      phone1: CONFIG.MASK_MODE ? maskPhone_(phones[0]) : (phones[0] || ''),
-      phone2: CONFIG.MASK_MODE ? maskPhone_(phones[1]) : (phones[1] || ''),
+      phone1: mask ? maskPhone_(phones[0]) : (phones[0] || ''),
+      phone2: mask ? maskPhone_(phones[1]) : (phones[1] || ''),
       admit_date: admit,
       dc_date: dc,
       ward: cell_(row, LEGACY.WARD),

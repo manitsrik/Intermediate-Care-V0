@@ -167,6 +167,9 @@ function todayIso_() { return dateToIso_(new Date()); }
 function toThaiDate_(iso) { return thai_(iso); }
 function daysBetweenIso_(a, b) { return Math.round((new Date(b) - new Date(a)) / 86400000); }
 
+/* ของจริงเก็บใน Script Properties พรีวิวเก็บในตัวแปร ปิดหน้าต่างแล้วกลับเป็นค่าตั้งต้น */
+var PREVIEW_MASK = true;
+
 var API = {
   apiListUsers: function () {
     return DB.users.map(function (u) {
@@ -194,7 +197,8 @@ var API = {
     var row = DB.users.filter(function (u) { return u.email === email; })[0];
     var created = !row;
     if (created) { row = { email: email, added_at: '' }; DB.users.push(row); }
-    row.name = form.name || row.name || '';
+    row.name = (form.name === undefined || form.name === null)
+      ? (row.name || '') : String(form.name).trim();
     row.role = form.role || 'staff';
     row.active = String(form.active).toUpperCase() !== 'FALSE';
     row.fileAccess = row.active;
@@ -203,11 +207,26 @@ var API = {
       : { ok: true, email: email, created: false, active: false, revoked: true, alreadyRevoked: false, revokeError: '' };
   },
 
+  apiDeleteUser: function (email) {
+    var target = String(email || '').trim().toLowerCase();
+    var i = -1;
+    DB.users.forEach(function (u, n) { if (u.email === target) i = n; });
+    if (i === -1) throw new Error('ไม่พบผู้ใช้ ' + target + ' ในตาราง');
+    DB.users.splice(i, 1);
+    return { ok: true, email: target };
+  },
+
+  // พรีวิวเก็บค่าไว้ในหน่วยความจำเฉย ๆ ของจริงเขียนลง Script Properties
+  apiSetMaskMode: function (on) {
+    PREVIEW_MASK = (on === true || String(on).toUpperCase() === 'TRUE');
+    return { ok: true, maskMode: PREVIEW_MASK };
+  },
+
   apiBootstrap: function () {
     return {
       user: { email: 'preview@local', name: 'พรีวิวบนเครื่อง', role: 'admin', isAdmin: true },
       appName: CONFIG.APP_NAME, org: CONFIG.ORG,
-      orgUnit: CONFIG.ORG_UNIT, orgPlace: CONFIG.ORG_PLACE, maskMode: true,
+      orgUnit: CONFIG.ORG_UNIT, orgPlace: CONFIG.ORG_PLACE, maskMode: PREVIEW_MASK,
       patients: API.apiListPatients({}),
       alerts: DB.patients.filter(function (x) { return x.kbh_appt_date; }).length,
       biItems: BI_ITEMS, biMax: BI_MAX, attention: ATTENTION, vocab: VOCAB, geography: GEOGRAPHY,

@@ -284,11 +284,21 @@ function apiReport(opts) {
   opts = opts || {};
   var filter = areaFilter_(opts);
   var fy = String(opts.fy || '');
+  var fq = String(opts.fq || '');
+
+  if (fq && !fy) throw new Error('กรุณาเลือกปีงบก่อนเลือกไตรมาส');
+  if (fq && !FISCAL_QUARTERS.some(function (q) { return q.key === fq; })) {
+    throw new Error('ไตรมาสไม่ถูกต้อง');
+  }
+
+  // เลือกไตรมาสก็เทียบกุญแจระดับไตรมาส ไม่เลือกก็เทียบระดับปีงบ ใช้ตัวเดียวกันทั้งคู่
+  var wanted = fy ? (fq ? fy + '-' + fq : fy) : '';
+  var mode = fq ? 'quarters' : 'years';
 
   var all = readAll_(SHEETS.PATIENTS);
   var patients = all.filter(function (p) {
     if (!matchesArea_(p, filter)) return false;
-    return !fy || periodKey_(p.start_date, 'years') === fy;
+    return !wanted || periodKey_(p.start_date, mode) === wanted;
   });
 
   // ตัวเลือกปีงบคิดจากผู้ป่วยทุกคนก่อนกรอง ตัวเลือกจะได้ไม่หายไปตอนเปลี่ยนพื้นที่
@@ -354,7 +364,9 @@ function apiReport(opts) {
   return {
     filter: filter,
     fy: fy,
+    fq: fq,
     fiscalYears: fiscalYears,
+    fiscalQuarters: FISCAL_QUARTERS,
     total: patients.length,
     assessed: assessed.length,
     adl: tally(assessed, function (p) { return (latest[String(p.hn)] || {}).adl; }),

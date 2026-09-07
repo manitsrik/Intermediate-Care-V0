@@ -300,6 +300,31 @@ test('เคสที่ปิดแล้วแต่ไม่มีวัน�
 
   patients[1].end_date = keep;
 });
+test('หน้ารายงานกรองรายไตรมาสของปีงบได้', () => {
+  const keep = patients[0].start_date;
+  patients[0].start_date = '2026-11-05';        // ปีงบ 2570 ไตรมาส 1 (ต.ค.-ธ.ค.)
+  const others = patients.filter(x => x !== patients[0]);
+
+  // ของเดิมทุกคนเริ่ม ส.ค.-ก.ย. 2026 = ปีงบ 2569 ไตรมาส 4
+  assert.equal(ctx.apiReport({ fy: 'FY2569', fq: 'Q4' }).total, others.length);
+  assert.equal(ctx.apiReport({ fy: 'FY2569', fq: 'Q1' }).total, 0);
+  assert.equal(ctx.apiReport({ fy: 'FY2570', fq: 'Q1' }).total, 1);
+
+  // ไม่เลือกไตรมาสต้องได้ทั้งปีงบเหมือนเดิม
+  assert.equal(ctx.apiReport({ fy: 'FY2569' }).total, others.length);
+
+  const r = ctx.apiReport({ fy: 'FY2569', fq: 'Q4' });
+  assert.equal(r.fq, 'Q4');
+  assert.equal(r.fiscalQuarters.length, 4);
+  assert.equal(r.fiscalQuarters[0].key, 'Q1');
+
+  patients[0].start_date = keep;
+});
+test('ปฏิเสธไตรมาสที่ไม่มีปีงบกำกับ หรือค่าที่ไม่ถูกต้อง', () => {
+  assert.throws(() => ctx.apiReport({ fq: 'Q1' }), /เลือกปีงบ/);
+  assert.throws(() => ctx.apiReport({ fy: 'FY2569', fq: 'Q9' }));
+  assert.throws(() => ctx.apiReport({ fy: 'FY2569', fq: '__proto__' }));
+});
 test('บันทึกพื้นที่ลงคอลัมน์ใหม่ และยังเก็บคะแนน BI เดิมครบ', () => {
   patients = [{ ...patients[0], patient_id: 1, _row: 2, bi_1: 5, bi_5: 10 }];
   let saved;

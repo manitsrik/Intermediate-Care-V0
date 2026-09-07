@@ -266,13 +266,16 @@ var API = {
     opts = opts || {};
     var f = areaFilter_(opts);
     var fy = String(opts.fy || '');
+    var fq = String(opts.fq || '');
+    var wanted = fy ? (fq ? fy + '-' + fq : fy) : '';
+    var mode = fq ? 'quarters' : 'years';
     var seenFy = {};
     DB.patients.forEach(function (x) {
       var k = periodKey_(x.start_date, 'years');
       if (k) seenFy[k] = true;
     });
     var picked = DB.patients.filter(function (x) {
-      return matchesArea_(x, f) && (!fy || periodKey_(x.start_date, 'years') === fy);
+      return matchesArea_(x, f) && (!wanted || periodKey_(x.start_date, mode) === wanted);
     });
     var closedCases = picked.filter(function (x) { return x.status === 'closed'; });
     var tally = function (pick, list) {
@@ -308,7 +311,9 @@ var API = {
     return {
       filter: f,
       fy: fy,
+      fq: fq,
       fiscalYears: Object.keys(seenFy).sort().reverse(),
+      fiscalQuarters: FISCAL_QUARTERS,
       total: picked.length,
       assessed: progress.length,
       adl: tally(function (x) {

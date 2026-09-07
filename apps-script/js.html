@@ -2071,7 +2071,7 @@ function renderReport() {
   if (!reportFilter) {
     reportFilter = {
       scope: dashFilter.scope, district: dashFilter.district,
-      tambon: dashFilter.tambon, fy: ''
+      tambon: dashFilter.tambon, fy: '', fq: ''
     };
   }
   if (reportCache) { drawReport(reportCache); return; }
@@ -2092,6 +2092,13 @@ function changeReportArea(key, value) {
 
 function changeReportYear(value) {
   reportFilter.fy = value;
+  reportFilter.fq = '';        // ไตรมาสผูกกับปีงบ เปลี่ยนปีแล้วต้องล้าง ไม่งั้นค้างของปีเดิม
+  reportCache = null;
+  return renderReport();
+}
+
+function changeReportQuarter(value) {
+  reportFilter.fq = value;
   reportCache = null;
   return renderReport();
 }
@@ -2109,10 +2116,14 @@ function drawReport(r) {
     scope: (r.filter && r.filter.scope) || 'all',
     district: (r.filter && r.filter.district) || '',
     tambon: (r.filter && r.filter.tambon) || '',
-    fy: r.fy || ''
+    fy: r.fy || '',
+    fq: r.fq || ''
   };
   var geo = BOOT.geography;
-  var scope = [areaLabel(reportFilter), r.fy ? 'ปีงบ ' + r.fy.replace('FY', '') : 'ทุกปีงบ'].join(' · ');
+  var when = r.fy
+    ? 'ปีงบ ' + r.fy.replace('FY', '') + (r.fq ? ' ไตรมาส ' + r.fq.replace('Q', '') : '')
+    : 'ทุกปีงบ';
+  var scope = [areaLabel(reportFilter), when].join(' · ');
 
   var html = '<div class="page-head"><div class="head-text"><h1>รายงาน / BI</h1>' +
     '<span class="sub num">' + esc(scope) + ' · ประเมิน Barthel Index แล้ว ' +
@@ -2125,6 +2136,13 @@ function drawReport(r) {
       optionHtml('', 'ทุกปีงบ', r.fy) +
       (r.fiscalYears || []).map(function (k) {
         return optionHtml(k, k.replace('FY', ''), r.fy);
+      }).join('') + '</select></label>' +
+      // เลือกไตรมาสได้ต่อเมื่อเจาะปีงบไว้แล้ว เพราะไตรมาสอยู่ในปีงบ
+      '<label class="area-field"><span>ไตรมาส</span>' +
+      '<select onchange="changeReportQuarter(this.value)"' + (r.fy ? '' : ' disabled') + '>' +
+      optionHtml('', 'ทั้งปีงบ', r.fq) +
+      (r.fiscalQuarters || []).map(function (q) {
+        return optionHtml(q.key, q.label, r.fq);
       }).join('') + '</select></label>' +
       '</div></section>' : '') +
     '</div>';

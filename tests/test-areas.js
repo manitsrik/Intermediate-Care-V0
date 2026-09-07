@@ -129,11 +129,15 @@ test('ชื่อตำบลในกระบี่ไม่ซ้ำข้�
 // วันนี้ในเทสต์คือ 2026-09-07 เกณฑ์ BI ค้างคือเกิน 56 วัน
 const todo = (extra) => ctx.attentionFlags_({ status: 'active', screening_result: 'IMC', ...extra }, '2026-09-07');
 
-test('เคสที่ปิดแล้วไม่มีงานค้าง แม้ทุกอย่างจะเลยกำหนดหมด', () => {
-  assert.equal(ctx.attentionFlags_({
+test('เคสที่ปิดแล้วเหลือเรื่องเดียวคือวันสิ้นสุด ที่เหลือไม่ต้องตามแล้ว', () => {
+  const closed = {
     status: 'closed', screening_result: 'NoIMC',
     kbh_appt_date: '2026-01-01', imc_end_date: '2026-01-01', latest_bi_date: '2025-01-01'
-  }, '2026-09-07').join(","), "");
+  };
+  // มีวันสิ้นสุดแล้ว ของที่เลยกำหนดทั้งหลายไม่ต้องเตือน เพราะเคสจบไปแล้ว
+  assert.equal(ctx.attentionFlags_({ ...closed, end_date: '2026-02-01' }, '2026-09-07').join(","), "");
+  // ไม่มีวันสิ้นสุด ต้องเตือนข้อเดียว ไม่ใช่เตือนทุกข้อ
+  assert.equal(ctx.attentionFlags_(closed, '2026-09-07').join(","), "noend");
 });
 test('นัดที่เลยวันแล้วขึ้นเตือน ส่วนนัดข้างหน้าไม่ขึ้น', () => {
   assert.equal(todo({ kbh_appt_date: '2026-09-06' }).join(","), "appt");
@@ -165,7 +169,11 @@ test('ยอดในกล่องต้องจัดการตรงก�
   for (const a of d.attention) {
     const rows = d.patients.filter(x => x.attention.indexOf(a.key) !== -1);
     assert.equal(a.count, rows.length, a.key);
-    assert.ok(rows.every(x => x.status !== 'closed'), a.key + ' ต้องไม่มีเคสที่ปิดแล้ว');
+    if (a.key === 'noend') {
+      assert.ok(rows.every(x => x.status === 'closed'), 'ข้อนี้ต้องมีแต่เคสที่ปิดแล้ว');
+    } else {
+      assert.ok(rows.every(x => x.status !== 'closed'), a.key + ' ต้องไม่มีเคสที่ปิดแล้ว');
+    }
   }
   // มีคนเดียวที่ NoIMC แล้วยังไม่ปิดเคส คือ TEST C
   assert.equal(d.attention.filter(a => a.key === 'screen')[0].count, 1);
@@ -234,6 +242,63 @@ test('แท่งจบโปรแกรมนับจากวันสิ�
 
   const closedWithDate = patients.filter(x => x.status === 'closed' && x.end_date);
   assert.equal(d.months.reduce((s, x) => s + x.closed, 0), closedWithDate.length);
+});
+// niceTop อยู่ฝั่งหน้าจอ ดึงมาทดสอบด้วย เพราะเพดานแกนกระทบการอ่านกราฟโดยตรง
+vm.runInContext(
+  fs.readFileSync(path.join(__dirname, '../apps-script/js.html'), 'utf8')
+    .match(/function niceTop\(max\)[\s\S]*?\r?\n\}/)[0], ctx);
+
+test('เดินงวดถัดไปถูกต้องทุกโหมด รวมตอนข้ามปี', () => {
+  assert.equal(ctx.nextPeriod_('2026-01', 'months'), '2026-02');
+  assert.equal(ctx.nextPeriod_('2026-09', 'months'), '2026-10');
+  assert.equal(ctx.nextPeriod_('2026-12', 'months'), '2027-01');
+  assert.equal(ctx.nextPeriod_('FY2569-Q1', 'quarters'), 'FY2569-Q2');
+  assert.equal(ctx.nextPeriod_('FY2569-Q4', 'quarters'), 'FY2570-Q1');   // ข้ามปีงบ
+  assert.equal(ctx.nextPeriod_('FY2569', 'years'), 'FY2570');
+});
+test('งวดที่ไม่มีข้อมูลถูกเติมเป็นศูนย์ แกนนอนจึงเป็นเส้นเวลาต่อเนื่อง', () => {
+  const keep = patients[0].start_date;
+  patients[0].start_date = '2026-05-01';    // เว้น มิ.ย. กับ ก.ค. ที่ไม่มีใครเข้าเลย
+  const d = ctx.apiDashboard();
+  const keys = d.months.map(x => x.key);
+
+  assert.equal(keys[0], '2026-05');
+  assert.equal(keys[keys.length - 1], '2026-09');
+  for (let i = 1; i < keys.length; i++) {
+    assert.equal(keys[i], ctx.nextPeriod_(keys[i - 1], 'months'), keys[i - 1] + ' -> ' + keys[i]);
+  }
+
+  const june = d.months.filter(x => x.key === '2026-06')[0];
+  assert.ok(june, 'เดือนที่ไม่มีข้อมูลต้องยังอยู่บนแกน ไม่ใช่หายไปเฉย ๆ');
+  assert.equal(june.count, 0);
+  assert.equal(june.closed, 0);
+
+  patients[0].start_date = keep;
+});
+test('เพดานแกนตั้งใกล้ค่าจริง ไม่กระโดดจนแท่งเตี้ย', () => {
+  assert.equal(ctx.niceTop(25), 28);    // ของเดิมได้ 40 แท่งสูงสุดใช้พื้นที่แค่ 62%
+  for (const max of [1, 3, 4, 7, 13, 25, 40, 58, 99, 260]) {
+    const top = ctx.niceTop(max);
+    assert.ok(top >= max, 'เพดานต้องไม่ต่ำกว่าค่าสูงสุด (' + max + ')');
+    assert.equal(top % 4, 0, 'ต้องหารสี่ลงตัว ป้ายแกนจะได้เป็นจำนวนเต็ม (' + max + ')');
+    // ค่าน้อยกว่าสี่ยกเว้นให้ เพราะเส้นแบ่งมีสี่ช่อง เพดานต่ำสุดจึงเป็นสี่
+    if (max >= 4) assert.ok(max / top >= 0.6, 'แท่งสูงสุดควรใช้พื้นที่เกิน 60% (' + max + ' -> ' + top + ')');
+  }
+});
+test('เคสที่ปิดแล้วแต่ไม่มีวันสิ้นสุด ขึ้นเตือนและหายไปจากแท่งจบโปรแกรม', () => {
+  const keep = patients[1].end_date;          // TEST B เป็นเคสเดียวที่ปิดแล้ว
+  const before = ctx.apiDashboard();
+  assert.equal(before.attention.filter(a => a.key === 'noend')[0].count, 0);
+  assert.equal(before.months.reduce((s, x) => s + x.closed, 0), 1);
+
+  patients[1].end_date = '';
+  const after = ctx.apiDashboard();
+  assert.equal(after.attention.filter(a => a.key === 'noend')[0].count, 1);
+  // หายจากกราฟทั้งที่ยังนับเป็นจบแล้วบนการ์ด นี่คืออาการที่ทำให้กราฟดูเหมือนไม่มีใครจบ
+  assert.equal(after.months.reduce((s, x) => s + x.closed, 0), 0);
+  assert.equal(after.closed, before.closed);
+
+  patients[1].end_date = keep;
 });
 test('บันทึกพื้นที่ลงคอลัมน์ใหม่ และยังเก็บคะแนน BI เดิมครบ', () => {
   patients = [{ ...patients[0], patient_id: 1, _row: 2, bi_1: 5, bi_5: 10 }];

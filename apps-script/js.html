@@ -1562,8 +1562,9 @@ function drawDashboard(d) {
   main().innerHTML = dashHead(d) + statCards(d) +
     // โดนัทกับกล่องรายการอยู่คอลัมน์แคบ ซึ่งเป็นความกว้างที่พอดีตัวของมัน
     // ส่วนกราฟกินคอลัมน์กว้างและยืดสูงเต็มแถวเอง ไม่เหลือช่องว่างข้างล่าง
-    '<div class="dash-row"><div class="dash-main">' + chartPanel(d) + '</div><div>' +
-    screeningPanel(d) + attentionPanel(d) + upcomingPanel(d) +
+    '<div class="dash-row"><div class="dash-main">' +
+    chartPanel(d) + upcomingPanel(d) + '</div><div>' +
+    screeningPanel(d) + attentionPanel(d) +
     '</div></div>';
   startClock();
 }
@@ -1681,14 +1682,19 @@ function deltaChip(n, after) {
     '<span class="stat-after">' + esc(after || 'จากเดือนก่อน') + '</span></div>';
 }
 
+/*
+  วางเป็นแถวนอน: ไอคอน · ป้ายกับตัวเลข · ป้ายเทียบเดือนชิดขวา
+  เนื้อหาเดิมสี่บรรทัดจึงเหลือสอง โดยไม่ได้ตัดข้อมูลอะไรออก
+  บรรทัดรองย้ายไปต่อท้ายตัวเลขบนบรรทัดเดียวกัน เพราะมันขยายความตัวเลขนั้นอยู่แล้ว
+*/
 function statCard(cls, ico, label, value, sub, chip) {
   return '<div class="stat-card ' + cls + '">' +
-    '<div class="stat-top">' +
-    '<span class="ico">' + icon(ico, 24, 1.9) + '</span>' +
-    '<div class="stat-figure"><div class="k">' + esc(label) + '</div>' +
-    '<div class="v num">' + esc(value) + '</div></div>' +
-    '</div>' +
-    (sub ? '<div class="sub num">' + esc(sub) + '</div>' : '') +
+    '<span class="ico">' + icon(ico, 22, 1.9) + '</span>' +
+    '<div class="stat-figure">' +
+    '<div class="k">' + esc(label) + '</div>' +
+    '<div class="v-row"><span class="v num">' + esc(value) + '</span>' +
+    (sub ? '<span class="sub num">' + esc(sub) + '</span>' : '') +
+    '</div></div>' +
     (chip || '') +
     '</div>';
 }
@@ -1755,7 +1761,12 @@ function seriesLabel(key) {
 
 /** เพดานแกนตั้งที่หารสี่ลงตัว เส้นแบ่งจะได้เป็นเลขกลม ๆ อ่านง่าย */
 function niceTop(max) {
-  var steps = [1, 2, 5, 10, 20, 25, 50, 100, 200, 500, 1000];
+  /*
+    ขั้นเดิมมีแค่ 1, 2, 5, 10, 20, 25, 50 ซึ่งห่างเกินไป
+    ค่าสูงสุด 25 จะกระโดดจาก 5x4=20 ไป 10x4=40 แท่งสูงสุดเลยใช้พื้นที่แค่ 62%
+    ขั้นถี่ขึ้นทำให้เพดานแกนใกล้ค่าจริงกว่า แท่งจึงเต็มกรอบและอ่านง่ายขึ้น
+  */
+  var steps = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 15, 20, 25, 30, 40, 50, 75, 100, 150, 200, 250, 500, 750, 1000];
   for (var i = 0; i < steps.length; i++) {
     if (steps[i] * 4 >= max) return steps[i] * 4;
   }
@@ -1821,7 +1832,10 @@ function chartPanel(d) {
         (r.count ? '<span class="val num">' + r.count + '</span>' : '') + '</div>' +
         '<div class="bar bar-out' + (r.closed ? '' : ' zero') + '" style="height:' + pct(r.closed) + '%"' +
         ' title="' + esc(label + ' · จบโปรแกรม ' + r.closed + ' ราย') + '"' +
-        ' onclick="openPeriodClosed(\'' + esc(r.key) + '\')"></div>' +
+        ' onclick="openPeriodClosed(\'' + esc(r.key) + '\')">' +
+        // แท่งจบเตี้ยจนอ่านค่าจากความสูงไม่ได้ ยิ่งต้องมีตัวเลขกำกับ
+        // แต่ทำให้จางและเล็กกว่าตัวเลขหลัก จะได้ไม่แย่งสายตาไปจากแท่งเข้าใหม่
+        (r.closed ? '<span class="val val-out num">' + r.closed + '</span>' : '') + '</div>' +
         '</div>';
     }).join('') + '</div>' +
     '<div class="x-axis">' + rows.map(function (r) {

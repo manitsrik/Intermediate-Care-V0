@@ -726,6 +726,25 @@ function avgOf_(list) {
 }
 
 /**
+ * งวดถัดไปจากงวดที่ให้มา ตามรูปแบบกุญแจของ periodKey_()
+ * ใช้เดินเติมงวดที่ไม่มีข้อมูล จะได้ไม่ข้ามช่วงว่างบนแกนนอน
+ */
+function nextPeriod_(key, mode) {
+  if (mode === 'months') {
+    var y = parseInt(key.slice(0, 4), 10);
+    var m = parseInt(key.slice(5, 7), 10) + 1;
+    if (m > 12) { m = 1; y++; }
+    return y + '-' + (m < 10 ? '0' + m : String(m));
+  }
+  if (mode === 'years') return 'FY' + (parseInt(key.slice(2), 10) + 1);
+
+  var fy = parseInt(key.slice(2, 6), 10);
+  var q = parseInt(key.slice(8), 10) + 1;
+  if (q > 4) { q = 1; fy++; }
+  return 'FY' + fy + '-Q' + q;
+}
+
+/**
  * งานค้างของผู้ป่วยหนึ่งราย คืนรหัสเหตุผลที่ค้าง อาจค้างหลายข้อพร้อมกัน
  *
  * เคสที่ปิดแล้วไม่มีอะไรต้องทำต่อ จึงตัดออกตั้งแต่ต้น
@@ -733,8 +752,18 @@ function avgOf_(list) {
  * ไม่งั้นคนที่เข้าโปรแกรมมานานแต่ไม่เคยถูกประเมินจะรอดสายตาไปตลอด
  */
 function attentionFlags_(p, today) {
-  if (String(p.status) === 'closed') return [];
   var flags = [];
+
+  /*
+    เคสที่ปิดแล้วไม่มีอะไรต้องทำต่อ ยกเว้นเรื่องเดียวคือวันสิ้นสุดที่หายไป
+    ส่วนใหญ่มาจากข้อมูลที่นำเข้าจากไฟล์เดิมซึ่งช่องนั้นว่าง ฟอร์มจบโปรแกรมในแอป
+    บังคับกรอกอยู่แล้ว ถ้าไม่มีวันสิ้นสุด เคสนั้นจะหายไปจากแท่งจบโปรแกรมบนกราฟ
+    ทำให้ดูเหมือนไม่มีใครจบเลยทั้งที่จบไปแล้ว
+  */
+  if (String(p.status) === 'closed') {
+    if (String(p.end_date || '').length < 7) flags.push('noend');
+    return flags;
+  }
 
   var appt = String(p.kbh_appt_date || '');
   if (appt && appt < today) flags.push('appt');
@@ -805,12 +834,31 @@ function buildDashboard_(patients, assessments, today, filter) {
     if (!isNaN(a) && !isNaN(b)) gains.push(b - a);
   });
 
-  var series = function (map, keep) {
-    return Object.keys(map).sort().slice(-keep).map(function (k) {
-      var s = map[k];
+  /*
+    เติมงวดที่ไม่มีข้อมูลให้ครบตั้งแต่งวดแรกถึงงวดสุดท้าย
+
+    ถ้าเอาเฉพาะงวดที่มีข้อมูล แกนนอนจะไม่ใช่เส้นเวลาจริง เดือนที่ไม่มีใคร
+    เข้าหรือจบจะหายไปเฉย ๆ ทำให้ ธ.ค. ไปติดกับ พ.ค. เหมือนเป็นเดือนติดกัน
+    ทั้งที่ห่างกันห้าเดือน ระยะห่างระหว่างแท่งจะอ่านไม่ได้เลย
+    และช่วงที่ไม่มีคนเข้าโปรแกรมเลยก็หายไปด้วย ทั้งที่เป็นข้อมูลที่ควรเห็น
+  */
+  var series = function (map, mode, keep) {
+    var keys = Object.keys(map).sort();
+    if (!keys.length) return [];
+
+    var zero = { imc: 0, noImc: 0, other: 0, closed: 0 };
+    var last = keys[keys.length - 1];
+    var full = [], k = keys[0], guard = 0;
+    while (k <= last && guard++ < 400) {     // guard กันวนไม่รู้จบถ้ากุญแจผิดรูป
+      full.push(k);
+      k = nextPeriod_(k, mode);
+    }
+
+    return full.slice(-keep).map(function (key) {
+      var s = map[key] || zero;
       return {
-        key: k, imc: s.imc, noImc: s.noImc, other: s.other, closed: s.closed,
-        count: s.imc + s.noImc + s.other      // ความสูงรวมของแท่งเข้าใหม่ ความหมายเท่าเดิม
+        key: key, imc: s.imc, noImc: s.noImc, other: s.other, closed: s.closed,
+        count: s.imc + s.noImc + s.other    // ความสูงรวมของแท่งเข้าใหม่ ความหมายเท่าเดิม
       };
     });
   };
@@ -887,9 +935,9 @@ function buildDashboard_(patients, assessments, today, filter) {
     closed: closed,
     avgGain: avgGain,
     improved: gains.filter(function (v) { return v > 0; }).length,
-    months: series(byMonth, 12),
-    quarters: series(byQuarter, 8),
-    years: series(byYear, 6),
+    months: series(byMonth, 'months', 12),
+    quarters: series(byQuarter, 'quarters', 8),
+    years: series(byYear, 'years', 6),
     delta: {
       total: newThisMonth,
       imc: newImcThisMonth,

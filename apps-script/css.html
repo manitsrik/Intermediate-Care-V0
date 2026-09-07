@@ -67,7 +67,7 @@ body {
 
 .content { flex-grow: 1; display: flex; flex-direction: column; min-width: 0; }
 
-main { flex-grow: 1; padding: 26px 32px 48px; max-width: 1240px; width: 100%; }
+main { flex-grow: 1; padding: 18px 26px 32px; max-width: 1240px; width: 100%; }
 
 .loading { color: var(--muted); padding: 48px 0; text-align: center; }
 
@@ -280,12 +280,12 @@ main { flex-grow: 1; padding: 26px 32px 48px; max-width: 1240px; width: 100%; }
 */
 .page-head {
   display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
-  border-radius: 15px; padding: 12px 20px; margin-bottom: 16px;
+  border-radius: 14px; padding: 10px 18px; margin-bottom: 12px;
   background: linear-gradient(103deg, var(--bg) 0%, #f2fbfc 42%, #eaf8f9 74%, #e2f5f6 100%);
   /* ตรึงความสูงให้ทุกหน้าเท่ากัน ไม่งั้นหน้าที่มีปุ่มหรือกล่องวันที่จะสูงกว่าหน้าที่มีแต่ข้อความ */
-  min-height: 78px;
+  min-height: 62px;
 }
-.page-head h1 { margin: 0; font-size: 20px; font-weight: 600; letter-spacing: -.2px; line-height: 1.3; }
+.page-head h1 { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -.2px; line-height: 1.3; }
 .page-head .sub { font-size: 12px; color: var(--muted); line-height: 1.4; }
 .page-head .spacer { margin-left: auto; }
 .head-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
@@ -437,24 +437,16 @@ tbody tr:last-child td { border-bottom: 0; }
 
   แยกคลาสจาก .cols เพราะหน้าเวชระเบียนใช้ .cols อยู่คนละแบบ
 */
-.dash-row { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.dash-row { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 12px; align-items: start; }
 .dash-row > div > .panel:last-child { margin-bottom: 0; }
 
-@media (min-width: 901px) {
-  .dash-row { align-items: stretch; }
-  .dash-main { display: flex; flex-direction: column; }
-  .dash-main > .panel { flex: 1; display: flex; flex-direction: column; }
-  /*
-    แท่งกราฟคิดความสูงเป็นเปอร์เซ็นต์ของ .plot ซึ่งเดิมตรึงไว้ 236px
-    ปล่อยให้ยืดได้ แท่งจะสูงตามกล่องเอง เพราะ .bars วางทับเต็ม .plot อยู่แล้ว
-  */
-  /*
-    ไม่ต้องมีเพดานแล้ว เพราะคำอธิบายสีย้ายไปปิดท้ายการ์ด
-    กราฟจึงยืดได้จนชนคำอธิบาย พื้นที่ในการ์ดถูกใช้หมดโดยไม่เหลือช่องโหว่
-  */
-  .dash-main .chart { flex: 1; min-height: 236px; }
-  .dash-main .y-axis, .dash-main .plot { height: auto; }
-}
+/*
+  ทุกกล่องสูงตามเนื้อหาจริง ไม่มีการยืดให้เท่ากัน
+
+  เคยให้กราฟยืดเต็มความสูงของแถวเพื่อไม่ให้เหลือช่องว่างใต้กราฟ แต่พอคอลัมน์ขวา
+  มีหลายกล่องและกล่องต้องจัดการยาวขึ้น กราฟก็ถูกดึงให้สูงตามจนผิดสัดส่วน
+  มีไม่กี่แท่งแต่สูงเป็นครึ่งจอ แก้ด้วยการกระจายกล่องให้สองฝั่งสูงใกล้กันเองแทน
+*/
 
 .kv { display: grid; grid-template-columns: 140px 1fr; gap: 10px 14px; font-size: 13px; }
 .kv dt { color: var(--muted); }
@@ -491,32 +483,36 @@ tbody tr:last-child td { border-bottom: 0; }
 */
 .stat-grid {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 16px; margin-bottom: 18px;
+  gap: 12px; margin-bottom: 12px;
 }
 .stat-card {
-  display: flex; flex-direction: column;
-  border-radius: 18px; border: 1px solid; padding: 17px 19px 16px;
+  display: flex; align-items: center; gap: 13px;
+  border-radius: 15px; border: 1px solid; padding: 12px 15px;
 }
 .stat-card .ico {
-  width: 48px; height: 48px; flex: none; border-radius: 50%; color: #fff;
+  width: 40px; height: 40px; flex: none; border-radius: 50%; color: #fff;
   display: inline-flex; align-items: center; justify-content: center;
 }
 /*
-  จองที่ไว้สองบรรทัดเสมอ ป้ายชื่อที่ยาวไม่เท่ากันจึงไม่ดันตัวเลขกับไอคอนให้เลื่อนขึ้นลง
-  ทั้งสี่ใบอยู่ระนาบเดียวกันทุกความกว้างหน้าจอ แลกกับช่องว่างเล็กน้อยตอนป้ายสั้นบรรทัดเดียว
+  เดิมจองที่ไว้สองบรรทัดเสมอ เพื่อให้การ์ดสี่ใบเรียงระนาบกันแม้ป้ายยาวไม่เท่ากัน
+  ตอนนี้เหลือสามใบและป้ายสั้นบรรทัดเดียวทุกใบ ที่จองไว้จึงกลายเป็นช่องว่างเปล่า
 */
 .stat-card .k {
-  font-size: 13px; color: var(--body); font-weight: 500; margin: 0 0 1px;
-  line-height: 1.35; min-height: 2.7em;
+  font-size: 13px; color: var(--body); font-weight: 500; margin: 0 0 2px;
+  line-height: 1.3;
 }
-.stat-card .v { font-size: 38px; font-weight: 700; letter-spacing: -1.4px; line-height: 1.05; }
-.stat-card .sub { font-size: 12.5px; color: var(--muted); margin-top: 5px; }
+.stat-card .v { font-size: 31px; font-weight: 700; letter-spacing: -1.1px; line-height: 1.05; }
+.stat-card .sub { font-size: 12.5px; color: var(--muted); }
 
-.stat-top { display: flex; align-items: center; gap: 13px; }
-.stat-figure { min-width: 0; }
+/* ตัวเลขหลักกับบรรทัดรองอยู่แถวเดียวกัน จัดชิดเส้นฐานเดียวกันจะได้ไม่ลอย */
+.v-row { display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap; }
+.stat-figure { flex: 1; min-width: 0; }
 
-/* ป้ายเทียบเดือนก่อนของทุกใบเรียงชิดขอบล่างเท่ากัน แม้บางใบไม่มีบรรทัดรอง */
-.stat-foot { display: flex; align-items: center; gap: 8px; margin-top: auto; padding-top: 12px; }
+/* ป้ายเทียบเดือนก่อนชิดขวา ซ้อนสองบรรทัดให้สูงพอ ๆ กับฝั่งซ้าย */
+.stat-foot {
+  display: flex; flex-direction: column; align-items: flex-end; gap: 3px;
+  flex: none; margin-left: auto; text-align: right;
+}
 .stat-chip {
   background: rgba(255, 255, 255, .92); border-radius: 999px;
   padding: 4px 11px; font-size: 12px; font-weight: 600;
@@ -539,10 +535,10 @@ tbody tr:last-child td { border-bottom: 0; }
 
 .panel {
   background: var(--surface); border: 1px solid var(--line);
-  border-radius: var(--radius-lg); padding: 20px 22px; margin-bottom: 16px;
+  border-radius: var(--radius-lg); padding: 15px 18px; margin-bottom: 12px;
   box-shadow: 0 1px 2px rgba(16,24,40,.04);
 }
-.panel-head { display: flex; align-items: center; gap: 11px; margin-bottom: 18px; flex-wrap: wrap; }
+.panel-head { display: flex; align-items: center; gap: 11px; margin-bottom: 13px; flex-wrap: wrap; }
 .panel-head h2 { margin: 0; font-size: 16px; font-weight: 600; }
 .panel-head .sub { display: block; font-size: 12px; color: var(--faint); font-weight: 400; }
 .panel-ico { color: var(--brand); display: inline-flex; flex: none; }
@@ -606,6 +602,7 @@ tbody tr:last-child td { border-bottom: 0; }
   position: absolute; top: -21px; left: 50%; transform: translateX(-50%);
   font-size: 13px; font-weight: 600; color: var(--text);
 }
+.bar .val-out { top: -18px; font-size: 11px; color: var(--muted); }
 .x-axis { position: absolute; left: 0; right: 0; bottom: 0; display: flex; gap: 14px; }
 .x-axis span { flex: 1; text-align: center; font-size: 12px; color: var(--muted); min-width: 0; overflow: hidden; }
 
@@ -877,6 +874,13 @@ table.cards td.head { display: none; }
   .dash-date { margin: 0; font-size: 12px; padding: 7px 11px; }
 
   .stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  /*
+    จอแคบการ์ดเหลือครึ่งความกว้าง วางไอคอน ตัวเลข และป้ายเทียบเดือนในแถวเดียวไม่พอ
+    ป้ายเทียบเดือนจึงลงไปอยู่บรรทัดของตัวเอง ป้ายชื่อจะได้ไม่ถูกบีบจนตัดคำ
+  */
+  .stat-card { flex-wrap: wrap; }
+  .stat-foot { flex: 1 1 100%; flex-direction: row; align-items: center; gap: 8px;
+               margin-left: 0; margin-top: 8px; text-align: left; }
   /* จำนวนการ์ดเป็นเลขคี่ ใบสุดท้ายกินเต็มแถวแทนที่จะทิ้งช่องว่างข้างๆ */
   .stat-grid > :last-child:nth-child(odd) { grid-column: span 2; }
   .stat-card { padding: 14px 15px 13px; border-radius: 15px; }
@@ -924,7 +928,7 @@ table.cards td.head { display: none; }
   .stat-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 10px; }
   .stat-card { padding: 10px 12px; border-radius: 12px; }
   /* บนกระดาษการ์ดกว้างพอให้ป้ายชื่ออยู่บรรทัดเดียวเสมอ ไม่ต้องจองที่สองบรรทัด */
-  .stat-card .k { min-height: 0; }
+  .stat-card .k { line-height: 1.25; }
   .stat-card .v { font-size: 24px; letter-spacing: -.8px; }
   .stat-card .ico { width: 34px; height: 34px; }
   .stat-card .ico svg { width: 17px; height: 17px; }
@@ -965,7 +969,7 @@ table.cards td.head { display: none; }
 /* แถวงานค้าง กดได้ทั้งแถว จำนวนชิดขวาเพื่อให้กวาดตาเทียบกันได้เร็ว */
 .todo-row {
   display: flex; align-items: center; gap: 10px; width: 100%;
-  padding: 11px 2px; border: 0; border-bottom: 1px solid var(--line-soft);
+  padding: 9px 2px; border: 0; border-bottom: 1px solid var(--line-soft);
   background: transparent; color: var(--body); cursor: pointer; font: inherit; text-align: left;
 }
 .todo-row:last-child { border-bottom: 0; }

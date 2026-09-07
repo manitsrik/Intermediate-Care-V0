@@ -270,7 +270,7 @@ function apiSaveUser(form) {
  */
 /**
  * ข้อมูลหน้ารายงาน สรุปตามกลุ่มที่ใช้ตัดสินใจงานจริง
- * กลุ่ม CTF มาจากผลประเมินครั้งล่าสุดของแต่ละคน ไม่ใช่ครั้งแรก
+ * กลุ่ม ADL มาจากผลประเมินครั้งล่าสุดของแต่ละคน ไม่ใช่ครั้งแรก
  */
 function apiReport() {
   currentUser_();
@@ -278,7 +278,7 @@ function apiReport() {
   var latest = {};
   readAll_(SHEETS.BI).forEach(function (r) {
     var hn = String(r.hn), d = String(r.assess_date || '');
-    if (!latest[hn] || d >= latest[hn].date) latest[hn] = { date: d, ctf: String(r.ctf_group || ''), total: r.total };
+    if (!latest[hn] || d >= latest[hn].date) latest[hn] = { date: d, adl: String(r.adl_group || ''), total: r.total };
   });
 
   var tally = function (list, pick) {
@@ -292,7 +292,7 @@ function apiReport() {
       .sort(function (a, b) { return b.count - a.count; });
   };
 
-  // ช่วงคะแนนตามเกณฑ์ CTF ที่ใช้แบ่งกลุ่มผู้สูงอายุ ติดเตียง 0-4 ติดบ้าน 5-11 ติดสังคม 12 ขึ้นไป
+  // ช่วงคะแนนตามเกณฑ์ ADL ที่ใช้แบ่งกลุ่มผู้สูงอายุ ติดเตียง 0-4 ติดบ้าน 5-11 ติดสังคม 12 ขึ้นไป
   var buckets = [
     { label: '0–4 (ติดเตียง)', min: 0, max: 4, count: 0 },
     { label: '5–11 (ติดบ้าน)', min: 5, max: 11, count: 0 },
@@ -314,7 +314,7 @@ function apiReport() {
       first: a,
       latest: b,
       gain: b - a,
-      ctf: (latest[String(p.hn)] || {}).ctf || '',
+      adl: (latest[String(p.hn)] || {}).adl || '',
       status: p.status
     });
   });
@@ -325,7 +325,7 @@ function apiReport() {
   return {
     total: patients.length,
     assessed: assessed.length,
-    ctf: tally(assessed, function (p) { return (latest[String(p.hn)] || {}).ctf; }),
+    adl: tally(assessed, function (p) { return (latest[String(p.hn)] || {}).adl; }),
     dxGroups: tally(patients, function (p) { return p.dx_group || p.dx; }),
     wards: tally(patients, function (p) { return p.ward; }),
     programs: tally(patients, function (p) { return p.imc_program; }),
@@ -521,7 +521,7 @@ function apiSaveBi(form) {
       total: result.total,
       multiple_impairment: form.multiple_impairment ? 'TRUE' : 'FALSE',
       imc_eligible: result.imc_eligible ? 'TRUE' : 'FALSE',
-      ctf_group: result.ctf_group,
+      adl_group: result.adl_group,
       note: form.note || '',
       assessed_by: user.email,
       created_at: nowIso_()

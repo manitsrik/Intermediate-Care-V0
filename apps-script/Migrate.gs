@@ -244,7 +244,7 @@ function migrateLegacy_(legacy) {
         total: b.total,
         multiple_impairment: '',
         imc_eligible: b.total < 15 ? 'TRUE' : '',
-        ctf_group: ctfGroup_(b.total),
+        adl_group: adlGroup_(b.total),
         note: 'นำเข้าจากไฟล์เดิม มีเฉพาะคะแนนรวม',
         assessed_by: user, created_at: now
       });

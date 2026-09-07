@@ -3,7 +3,7 @@
  *
  * เกณฑ์ตามแบบฟอร์มของกลุ่มงานเวชกรรมฟื้นฟู รพ.กระบี่
  *   เข้าโปรแกรม IMC เมื่อ BI < 15 หรือ BI >= 15 ที่มี multiple impairment
- *   จัดกลุ่ม CTF: ติดสังคม ADL >= 12 / ติดบ้าน 5-11 / ติดเตียง 0-4
+ *   จัดกลุ่ม ADL: ติดสังคม >= 12 / ติดบ้าน 5-11 / ติดเตียง 0-4
  */
 
 /** รวมคะแนน 10 ข้อ พร้อมตรวจว่าคะแนนแต่ละข้อไม่เกินเพดาน */
@@ -30,7 +30,7 @@ function scoreBi_(scores) {
 }
 
 /** ติดสังคม / ติดบ้าน / ติดเตียง */
-function ctfGroup_(total) {
+function adlGroup_(total) {
   if (total >= 12) return 'ติดสังคม';
   if (total >= 5) return 'ติดบ้าน';
   return 'ติดเตียง';
@@ -51,7 +51,7 @@ function evaluateBi_(scores, multipleImpairment) {
   return {
     total: total,
     max: BI_MAX,
-    ctf_group: ctfGroup_(total),
+    adl_group: adlGroup_(total),
     imc_eligible: isImcEligible_(total, multipleImpairment),
     screening_result: isImcEligible_(total, multipleImpairment) ? 'IMC' : 'NoIMC'
   };

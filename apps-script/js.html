@@ -1027,14 +1027,14 @@ function timeline(list) {
 
 function biTable(list) {
   return '<div class="table-wrap"><table><thead><tr>' +
-    '<th>ครั้งที่</th><th>วันที่ประเมิน</th><th>คะแนน</th><th>กลุ่ม CTF</th><th>เข้าเกณฑ์</th>' +
+    '<th>ครั้งที่</th><th>วันที่ประเมิน</th><th>คะแนน</th><th>กลุ่ม ADL</th><th>เข้าเกณฑ์</th>' +
     '</tr></thead><tbody>' +
     list.map(function (a) {
       return '<tr style="cursor:default">' +
         '<td class="num">' + esc(a.seq) + '</td>' +
         '<td class="num">' + esc(thDate(a.assess_date)) + '</td>' +
         '<td class="num"><strong>' + esc(a.total) + '</strong> / ' + BOOT.biMax + '</td>' +
-        '<td>' + esc(a.ctf_group || '—') + '</td>' +
+        '<td>' + esc(a.adl_group || '—') + '</td>' +
         '<td>' + (String(a.imc_eligible).toUpperCase() === 'TRUE' ? 'ใช่' : '—') + '</td>' +
         '</tr>';
     }).join('') + '</tbody></table></div>';
@@ -1209,11 +1209,11 @@ function updateBiSummary() {
 
   var multi = form.elements.multiple_impairment.checked;
   var eligible = total < 15 || multi;
-  var ctf = total >= 12 ? 'ติดสังคม' : (total >= 5 ? 'ติดบ้าน' : 'ติดเตียง');
+  var adl = total >= 12 ? 'ติดสังคม' : (total >= 5 ? 'ติดบ้าน' : 'ติดเตียง');
   el.innerHTML =
     '<span class="chip ' + (eligible ? 'chip-brand' : '') + '">' +
     (eligible ? 'เข้าโปรแกรม IMC' : 'ไม่เข้าเกณฑ์ IMC') + '</span>' +
-    '<span class="chip">CTF: ' + ctf + '</span>';
+    '<span class="chip">ADL: ' + adl + '</span>';
 }
 
 /* ------------------------------------------------------- ฟอร์มติดตามผล */
@@ -1845,7 +1845,7 @@ function drawReport(r) {
 
   html += '<div class="rep-grid">' +
     hbarPanel('การกระจายคะแนน BI ล่าสุด', 'chart', r.buckets) +
-    hbarPanel('กลุ่ม CTF จากผลประเมินล่าสุด', 'target', r.ctf) +
+    hbarPanel('กลุ่ม ADL จากผลประเมินล่าสุด', 'target', r.adl) +
     hbarPanel('กลุ่มการวินิจฉัย', 'pulse', r.dxGroups) +
     hbarPanel('หอผู้ป่วย', 'people', r.wards) +
     hbarPanel('รูปแบบโปรแกรม', 'calendar', r.programs) +
@@ -1887,7 +1887,7 @@ function progressPanel(rows) {
     '<div style="padding:0 22px">' + head + '</div>' +
     '<div class="table-wrap"><table class="cards"><thead><tr>' +
     '<th>ผู้ป่วย</th><th>การวินิจฉัย</th><th>Ward</th>' +
-    '<th>Barthel Index</th><th>กลุ่ม CTF</th><th>สถานะ</th>' +
+    '<th>Barthel Index</th><th>กลุ่ม ADL</th><th>สถานะ</th>' +
     '</tr></thead><tbody>' +
     rows.map(function (x) {
       return '<tr onclick="go(\'detail\',\'' + esc(x.hn) + '\')">' +
@@ -1899,7 +1899,7 @@ function progressPanel(rows) {
         '<td data-l="Dx">' + esc(x.dx || '—') + '</td>' +
         '<td data-l="Ward">' + esc(x.ward || '—') + '</td>' +
         '<td data-l="BI">' + biCell(x.first, x.latest) + '</td>' +
-        '<td data-l="กลุ่ม CTF">' + (x.ctf ? '<span class="chip chip-brand">' + esc(x.ctf) + '</span>' : '—') + '</td>' +
+        '<td data-l="กลุ่ม ADL">' + (x.adl ? '<span class="chip chip-brand">' + esc(x.adl) + '</span>' : '—') + '</td>' +
         '<td data-l="สถานะ">' + statusChip(x.status) + '</td>' +
         '</tr>';
     }).join('') +

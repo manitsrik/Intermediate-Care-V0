@@ -90,7 +90,7 @@ DB.patients.forEach(function (pt) {
       assess_id: pt.hn + '-BI' + (i + 1), hn: pt.hn, seq: i + 1,
       assess_date: ['2025-10-27', '2025-11-11', '2025-12-09', '2026-02-16'][i] || '2026-02-16',
       total: total, multiple_impairment: 'FALSE',
-      imc_eligible: total < 15 ? 'TRUE' : 'FALSE', ctf_group: ctfGroup_(total),
+      imc_eligible: total < 15 ? 'TRUE' : 'FALSE', adl_group: adlGroup_(total),
       note: 'ข้อมูลตัวอย่างสำหรับพรีวิว', assessed_by: 'preview@local', created_at: ''
     });
   }
@@ -205,7 +205,7 @@ var API = {
     var seq = DB.bi.filter(function (b) { return b.hn === form.hn; }).length + 1;
     var rec = { assess_id: 'new' + seq, hn: form.hn, seq: seq, assess_date: form.assess_date,
       total: result.total, multiple_impairment: form.multiple_impairment ? 'TRUE' : 'FALSE',
-      imc_eligible: result.imc_eligible ? 'TRUE' : 'FALSE', ctf_group: result.ctf_group,
+      imc_eligible: result.imc_eligible ? 'TRUE' : 'FALSE', adl_group: result.adl_group,
       note: form.note || '', assessed_by: 'preview@local', created_at: '' };
     DB.bi.push(rec);
     var pt = DB.patients.filter(function (x) { return x.hn === form.hn; })[0];
@@ -300,7 +300,7 @@ var API = {
       progress.push({
         hn: x.hn, name: full_(x), dx: x.dx, ward: x.ward,
         first: a, latest: b, gain: b - a,
-        ctf: b >= 12 ? 'ติดสังคม' : (b >= 5 ? 'ติดบ้าน' : 'ติดเตียง'),
+        adl: b >= 12 ? 'ติดสังคม' : (b >= 5 ? 'ติดบ้าน' : 'ติดเตียง'),
         status: x.status
       });
     });
@@ -308,7 +308,7 @@ var API = {
     return {
       total: DB.patients.length,
       assessed: progress.length,
-      ctf: tally(function (x) {
+      adl: tally(function (x) {
         var b = Number(x.latest_bi);
         if (isNaN(b)) return '';
         return b >= 12 ? 'ติดสังคม' : (b >= 5 ? 'ติดบ้าน' : 'ติดเตียง');

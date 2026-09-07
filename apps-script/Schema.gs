@@ -38,7 +38,7 @@ SCHEMA[SHEETS.BI] = [
   'assess_id', 'hn', 'seq', 'assess_date',
   'feeding', 'transfer', 'grooming', 'toilet', 'bathing',
   'mobility', 'stairs', 'dressing', 'bowels', 'bladder',
-  'total', 'multiple_impairment', 'imc_eligible', 'ctf_group',
+  'total', 'multiple_impairment', 'imc_eligible', 'adl_group',
   'note', 'assessed_by', 'created_at'
 ];
 

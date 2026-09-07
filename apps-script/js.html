@@ -759,6 +759,8 @@ function matchesTodo(p) {
   if (!key) return true;
   var flags = p.attention || [];
   if (key === 'any') return flags.length > 0;
+  // ตัวเลือกที่คนเปิดตอนเช้าน่าจะใช้บ่อยที่สุด คือเรื่องที่กระทบคนไข้ ไม่ใช่ช่องที่ค้างเติม
+  if (key === 'care') return todoCount(p, 'care') > 0;
   /*
     ยังไม่เคยประเมิน BI ไม่ใช่ธงงานค้าง เพราะรายที่เพิ่งลงทะเบียนเมื่อวานยังไม่ถือว่าค้าง
     แต่เป็นช่องที่ต้องตามให้ครบอยู่ดี จึงให้เลือกดูได้จากดรอปดาวน์เดียวกัน
@@ -767,13 +769,21 @@ function matchesTodo(p) {
   return flags.indexOf(key) !== -1;
 }
 
+/** จำนวนธงชนิดนั้นของผู้ป่วยรายหนึ่ง ชนิดกำกับไว้ที่ ATTENTION ฝั่งเซิร์ฟเวอร์ */
+function todoCount(p, kind) {
+  return (p.attention || []).filter(function (k) {
+    return attentionOf(k).kind === kind;
+  }).length;
+}
+
 /** คำเต็มกับป้ายสั้นของธงหนึ่งอัน อ่านจากรายการที่เซิร์ฟเวอร์ส่งมาตอนบูต */
 function attentionOf(key) {
   var list = (BOOT && BOOT.attention) || [];
   for (var i = 0; i < list.length; i++) {
     if (list[i].key === key) return list[i];
   }
-  return { key: key, short: key, label: key };
+  // คีย์ที่ไม่รู้จักถือเป็นงานที่ต้องลงมือไว้ก่อน ปลอดภัยกว่าเงียบไปเป็นเรื่องรอได้
+  return { key: key, kind: 'care', short: key, label: key };
 }
 
 function drawList() {
@@ -806,7 +816,8 @@ function drawList() {
     // รายการงานค้างมาจากเซิร์ฟเวอร์ ป้ายในดรอปดาวน์กับที่แดชบอร์ดจึงเป็นข้อความเดียวกัน
     '  <select id="f-todo" autocomplete="off" title="กรองตามงานที่ค้างอยู่">' +
     '    <option value="">ไม่กรองงานค้าง</option>' +
-    '    <option value="any">มีงานค้าง</option>' +
+    '    <option value="care">งานค้างของเคสที่ยังดูแลอยู่</option>' +
+    '    <option value="any">มีงานค้าง (รวมข้อมูลต้องเติม)</option>' +
     (BOOT.attention || []).map(function (a) {
       return '<option value="' + esc(a.key) + '">' + esc(a.label) + '</option>';
     }).join('') +
@@ -855,7 +866,8 @@ function paintRows() {
   var all = patientCache || [];
   var rows = all.filter(matchesFilter);
   var active = all.filter(function (p) { return String(p.status) !== 'closed'; }).length;
-  var todo = all.filter(function (p) { return (p.attention || []).length; }).length;
+  var care = all.filter(function (p) { return todoCount(p, 'care'); }).length;
+  var gaps = all.filter(function (p) { return todoCount(p, 'data'); }).length;
 
   listRows = rows;
   body.innerHTML = rows.map(patientRow).join('');
@@ -867,13 +879,17 @@ function paintRows() {
   document.getElementById('list-export-n').textContent = rows.length + ' ราย';
 
   /*
-    จำนวนที่มีงานค้างนับจากทุกรายเสมอ ไม่ใช่เฉพาะที่กรองอยู่ เพราะบรรทัดนี้เป็นภาพรวม
-    ของทั้งระบบคู่กับ "ทั้งหมด" กับ "กำลังดูแล" ส่วนจำนวนที่กรองแล้วอยู่บนปุ่มส่งออก
-    และบรรทัดใต้ตารางอยู่แล้ว
+    นับจากทุกรายเสมอ ไม่ใช่เฉพาะที่กรองอยู่ เพราะบรรทัดนี้เป็นภาพรวมของทั้งระบบ
+    คู่กับ "ทั้งหมด" กับ "กำลังดูแล" ส่วนจำนวนที่กรองแล้วอยู่บนปุ่มส่งออกและใต้ตารางแล้ว
+
+    แยกสองก้อนเพราะเป็นงานคนละอย่าง "มีงานค้าง" คือเรื่องที่ต้องลงมือวันนี้
+    ส่วน "ข้อมูลต้องเติม" คือช่องที่ไล่เติมจากแฟ้มเก่าตอนว่างได้ ถ้ารวมเป็นเลขเดียว
+    ยอดจะเกือบเท่าจำนวนผู้ป่วยทั้งหมดแล้วเอาไปวางแผนวันนี้ไม่ได้
   */
   document.getElementById('list-count').textContent =
     'ทั้งหมด ' + all.length + ' ราย · กำลังดูแล ' + active + ' ราย' +
-    (todo ? ' · มีงานค้าง ' + todo + ' ราย' : '');
+    (care ? ' · มีงานค้าง ' + care + ' ราย' : '') +
+    (gaps ? ' · ข้อมูลต้องเติม ' + gaps + ' ราย' : '');
 }
 
 /** หน้าว่างบอกด้วยว่าว่างเพราะกรองไว้หรือเพราะยังไม่มีใครในระบบ แล้วเสนอทางออกให้ตรงกัน */
@@ -920,7 +936,13 @@ function todoCell(p) {
   if (!flags.length) return '<span style="color:var(--faint)">—</span>';
   return '<span class="todo-flags">' + flags.map(function (k) {
     var it = attentionOf(k);
-    return '<span class="chip chip-warn chip-sq" title="' + esc(it.label) + '">' +
+    /*
+      สีส้มเก็บไว้ให้เรื่องที่กระทบคนไข้เท่านั้น ช่องที่ค้างเติมใช้สีเทา
+      ของจริงมีเคสเก่าที่ไม่มีวันสิ้นสุดอยู่เกือบทุกแถว ถ้าย้อมส้มไปด้วยทั้งหมด
+      ตาจะเลิกมองป้าย แล้วรายที่ต้องรีบจริงจะหายไปกลางกอง
+    */
+    var tone = it.kind === 'data' ? 'chip-flat' : 'chip-warn';
+    return '<span class="chip ' + tone + ' chip-sq" title="' + esc(it.label) + '">' +
       esc(it.short) + '</span>';
   }).join('') + '</span>';
 }

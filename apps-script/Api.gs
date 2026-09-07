@@ -559,6 +559,13 @@ function refreshPatientBiStats_(hn) {
   p.latest_bi = last.total;
   p.latest_bi_date = last.assess_date;
   p.bi_count = list.length;
+
+  // ล้างก่อนเขียนทับ ไม่งั้นถ้าใบประเมินถูกแก้จนเหลือน้อยลง ค่าเก่าจะค้างอยู่
+  for (var i = 1; i <= CONFIG.BI_SUMMARY_COLUMNS; i++) p['bi_' + i] = '';
+  list.forEach(function (r) {
+    var seq = Number(r.seq);
+    if (seq >= 1 && seq <= CONFIG.BI_SUMMARY_COLUMNS) p['bi_' + seq] = r.total;
+  });
   if (!p.screening_result) {
     p.screening_result = String(first.imc_eligible).toUpperCase() === 'TRUE' ? 'IMC' : 'NoIMC';
   }
@@ -699,11 +706,12 @@ function apiDashboard() {
 
     var d = String(p.start_date || '');
     if (d.length >= 7) {
-      var year = d.substring(0, 4);
-      var month = parseInt(d.substring(5, 7), 10);
-      byMonth[d.substring(0, 7)] = (byMonth[d.substring(0, 7)] || 0) + 1;
-      byQuarter[year + '-Q' + Math.ceil(month / 3)] = (byQuarter[year + '-Q' + Math.ceil(month / 3)] || 0) + 1;
-      byYear[year] = (byYear[year] || 0) + 1;
+      var mKey = periodKey_(d, 'months');
+      var qKey = periodKey_(d, 'quarters');
+      var yKey = periodKey_(d, 'years');
+      byMonth[mKey] = (byMonth[mKey] || 0) + 1;
+      byQuarter[qKey] = (byQuarter[qKey] || 0) + 1;
+      byYear[yKey] = (byYear[yKey] || 0) + 1;
 
       if (d.substring(0, 7) === thisMonth) {
         newThisMonth++;

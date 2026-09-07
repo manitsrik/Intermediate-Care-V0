@@ -249,10 +249,12 @@ var API = {
     DB.patients.forEach(function (x) {
       var d = String(x.start_date || '');
       if (d.length < 7) return;
-      var y = d.slice(0, 4), m = parseInt(d.slice(5, 7), 10);
-      byMonth[d.slice(0, 7)] = (byMonth[d.slice(0, 7)] || 0) + 1;
-      byQuarter[y + '-Q' + Math.ceil(m / 3)] = (byQuarter[y + '-Q' + Math.ceil(m / 3)] || 0) + 1;
-      byYear[y] = (byYear[y] || 0) + 1;
+      var mKey = periodKey_(d, 'months');
+      var qKey = periodKey_(d, 'quarters');
+      var yKey = periodKey_(d, 'years');
+      byMonth[mKey] = (byMonth[mKey] || 0) + 1;
+      byQuarter[qKey] = (byQuarter[qKey] || 0) + 1;
+      byYear[yKey] = (byYear[yKey] || 0) + 1;
     });
     var series = function (map) {
       return Object.keys(map).sort().map(function (k) { return { key: k, count: map[k] }; });

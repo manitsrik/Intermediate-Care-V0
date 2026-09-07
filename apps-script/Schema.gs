@@ -21,6 +21,19 @@ SCHEMA[SHEETS.PATIENTS] = [
   'status', 'legacy_row', 'created_by', 'created_at', 'updated_by', 'updated_at'
 ];
 
+/**
+ * ต่อคอลัมน์ bi_1..bi_N ไว้ท้ายรายการ เก็บคะแนน BI แต่ละครั้งไว้บนแถวผู้ป่วย
+ *
+ * เก็บซ้ำจาก bi_assessments เพื่อให้ชีต summary ดึงค่าตรง ๆ ได้ ไม่ต้อง VLOOKUP
+ * ข้ามตารางทีละแถว ซึ่งเป็นงานเท่ากับ (จำนวนผู้ป่วย x จำนวนใบประเมิน) ต่อสูตร
+ * หนึ่งตัว และบวมขึ้นเรื่อย ๆ ตามปีที่ใช้งาน
+ *
+ * ต่อท้ายเสมอ ตำแหน่งคอลัมน์เดิมจะได้ไม่ขยับ ข้อมูลที่มีอยู่จึงไม่เลื่อนตาม
+ */
+for (var biSeq = 1; biSeq <= CONFIG.BI_SUMMARY_COLUMNS; biSeq++) {
+  SCHEMA[SHEETS.PATIENTS].push('bi_' + biSeq);
+}
+
 SCHEMA[SHEETS.BI] = [
   'assess_id', 'hn', 'seq', 'assess_date',
   'feeding', 'transfer', 'grooming', 'toilet', 'bathing',
@@ -56,9 +69,14 @@ function letter_(n) {
   return s;
 }
 
-/** อ้างช่วงทั้งคอลัมน์ของ field เช่น patients!C2:C */
+/**
+ * อ้างช่วงทั้งคอลัมน์ของ field เช่น patients!C2:C
+ * เปิดปลายไว้ได้เพราะทุกสูตรในชีต summary เป็นการดึงค่ามาตรง ๆ แถวต่อแถว
+ * ไม่มีตัวไหนไล่ค้นข้ามตารางแล้ว จำนวนแถวจึงโตได้เรื่อย ๆ โดยไม่ต้องตั้งเพดาน
+ */
 function col_(sheetName, field) {
-  return "'" + sheetName + "'!" + letter_(idx_(sheetName, field)) + '2:' + letter_(idx_(sheetName, field));
+  var L = letter_(idx_(sheetName, field));
+  return "'" + sheetName + "'!" + L + '2:' + L;
 }
 
 /**
@@ -76,6 +94,7 @@ function setupSystem() {
       created.push(name);
     }
     var headers = SCHEMA[name];
+    ensureColumns_(sh, headers.length);
     sh.getRange(1, 1, 1, headers.length).setValues([headers])
       .setFontWeight('bold').setBackground('#e8f0fe');
     sh.setFrozenRows(1);
@@ -83,13 +102,51 @@ function setupSystem() {
     sh.getRange(1, 1, sh.getMaxRows(), headers.length).setNumberFormat('@');
   });
 
+  var filled = backfillBiColumns_();
   buildSummarySheet_(ss);
   ensureCurrentUserIsRegistered_();
 
   var ui = SpreadsheetApp.getUi();
   ui.alert('ติดตั้งเรียบร้อย',
-    created.length ? 'สร้างชีตใหม่: ' + created.join(', ') : 'ชีตครบอยู่แล้ว อัปเดตหัวคอลัมน์ให้แล้ว',
+    (created.length ? 'สร้างชีตใหม่: ' + created.join(', ') : 'ชีตครบอยู่แล้ว อัปเดตหัวคอลัมน์ให้แล้ว') +
+    '\nเติมคะแนน BI ย้อนหลังบนแถวผู้ป่วย ' + filled + ' แถว',
     ui.ButtonSet.OK);
+}
+
+/**
+ * คัดลอกคะแนน BI ของทุกคนมาไว้ที่คอลัมน์ bi_1..bi_N บนแถวผู้ป่วย
+ *
+ * ตอนบันทึกปกติ refreshPatientBiStats_() ทำให้อยู่แล้วทีละคน ตัวนี้มีไว้เติมย้อนหลัง
+ * ให้ข้อมูลที่มีอยู่ก่อนจะมีคอลัมน์พวกนี้ ไม่งั้นชีต summary จะว่างจนกว่าจะมีการ
+ * ประเมินใหม่ เรียกซ้ำได้ ผลลัพธ์เหมือนเดิมเสมอ
+ *
+ * อ่านทีเดียวเขียนทีเดียว ไม่ไล่เขียนทีละแถว เพราะทุกครั้งที่แตะชีตคือค่าใช้จ่าย
+ */
+function backfillBiColumns_() {
+  var sh = sheet_(SHEETS.PATIENTS);
+  var last = sh.getLastRow();
+  if (last < 2) return 0;
+
+  var n = CONFIG.BI_SUMMARY_COLUMNS;
+  var bySeq = {};
+  readAll_(SHEETS.BI).forEach(function (r) {
+    var seq = Number(r.seq);
+    if (!(seq >= 1 && seq <= n)) return;
+    var hn = String(r.hn);
+    if (!bySeq[hn]) bySeq[hn] = {};
+    bySeq[hn][seq] = r.total;
+  });
+
+  var hns = sh.getRange(2, idx_(SHEETS.PATIENTS, 'hn'), last - 1, 1).getValues();
+  var block = hns.map(function (row) {
+    var found = bySeq[String(plain_(row[0]))] || {};
+    var out = [];
+    for (var i = 1; i <= n; i++) out.push(found[i] === undefined ? '' : found[i]);
+    return out;
+  });
+
+  sh.getRange(2, idx_(SHEETS.PATIENTS, 'bi_1'), block.length, n).setValues(block);
+  return block.length;
 }
 
 /**
@@ -101,7 +158,6 @@ function buildSummarySheet_(ss) {
   sh.clear();
 
   var P = function (f) { return col_(SHEETS.PATIENTS, f); };
-  var B = function (f) { return col_(SHEETS.BI, f); };
   var hnCol = P('hn');
   var guard = function (expr) { return '=ARRAYFORMULA(IF(' + hnCol + '="","",' + expr + '))'; };
 
@@ -121,11 +177,9 @@ function buildSummarySheet_(ss) {
     ['วัน Start',        guard(P('start_date'))]
   ];
 
-  // BI ครั้งที่ 1-5 จับคู่ด้วย HN + ลำดับครั้ง
-  for (var i = 1; i <= 5; i++) {
-    cols.push(['BI ' + i, guard(
-      'IFERROR(VLOOKUP(' + hnCol + '&"|' + i + '", {' + B('hn') + '&"|"&' + B('seq') + ',' + B('total') + '}, 2, FALSE),"")'
-    )]);
+  // BI แต่ละครั้ง อ่านจากคอลัมน์บนแถวผู้ป่วยที่เตรียมไว้ให้แล้วตั้งแต่ตอนบันทึก
+  for (var i = 1; i <= CONFIG.BI_SUMMARY_COLUMNS; i++) {
+    cols.push(['BI ' + i, guard(P('bi_' + i))]);
   }
 
   cols = cols.concat([

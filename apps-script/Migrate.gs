@@ -256,6 +256,9 @@ function migrateLegacy_(legacy) {
       patient.latest_bi = sorted[sorted.length - 1].total;
       patient.latest_bi_date = sorted[sorted.length - 1].date;
       patient.bi_count = sorted.length;
+      sorted.forEach(function (b) {
+        if (b.seq >= 1 && b.seq <= CONFIG.BI_SUMMARY_COLUMNS) patient['bi_' + b.seq] = b.total;
+      });
     }
 
     // ช่อง FU ที่มีข้อความอธิบายการติดตาม เช่น ยบ.IMC 11/11

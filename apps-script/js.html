@@ -1578,16 +1578,36 @@ function statCards(d) {
 var CHART_MODES = [
   { key: 'months', label: 'รายเดือน' },
   { key: 'quarters', label: 'รายไตรมาส' },
-  { key: 'years', label: 'รายปี' }
+  { key: 'years', label: 'รายปีงบ' }
 ];
 
+/**
+ * คู่แฝดของ periodKey_() ใน Config.gs ต้องนับให้เหมือนกันเป๊ะ
+ * ไม่งั้นตัวเลขบนแท่งกราฟกับจำนวนรายชื่อที่กดเข้าไปดูจะไม่ตรงกัน
+ */
+function periodKey(iso, mode) {
+  var s = String(iso || '');
+  if (s.length < 7) return '';
+  if (mode === 'months') return s.substring(0, 7);
+
+  var year = parseInt(s.substring(0, 4), 10);
+  var month = parseInt(s.substring(5, 7), 10);
+  var oct = month >= 10;
+  var fy = year + (oct ? 1 : 0) + 543;
+
+  if (mode === 'years') return 'FY' + fy;
+  return 'FY' + fy + '-Q' + (oct ? 1 : Math.ceil((month + 3) / 3));
+}
+
+/* กุญแจไตรมาสกับปีเก็บเป็น พ.ศ. มาแล้ว เหลือแค่ถอดคำนำหน้า FY ออก */
 function seriesLabel(key) {
-  if (chartMode === 'years') return String(parseInt(key, 10) + 543);
+  var s = String(key);
+  if (chartMode === 'years') return s.replace('FY', '');
   if (chartMode === 'quarters') {
-    var q = String(key).split('-Q');
-    return 'Q' + q[1] + '/' + String(parseInt(q[0], 10) + 543).slice(-2);
+    var q = s.replace('FY', '').split('-Q');
+    return 'Q' + q[1] + '/' + q[0].slice(-2);
   }
-  var m = String(key).split('-');
+  var m = s.split('-');
   return TH_MONTHS[parseInt(m[1], 10) - 1] + ' ' + String(parseInt(m[0], 10) + 543).slice(-2);
 }
 
@@ -1607,10 +1627,14 @@ function chartPanel(d) {
       '" onclick="setChartMode(\'' + m.key + '\')">' + m.label + '</button>';
   }).join('') + '</div>';
 
+  var title = chartMode === 'years' ? 'รายปีงบประมาณ'
+    : (chartMode === 'quarters' ? 'รายไตรมาส' : 'รายเดือน');
+  var sub = chartMode === 'months' ? 'นับจากวัน Start'
+    : 'นับจากวัน Start · ปีงบประมาณ เริ่ม 1 ต.ค.';
+
   var head = '<div class="panel-head"><span class="panel-ico">' + icon('chart', 20, 1.9) + '</span>' +
-    '<h2>ผู้ป่วยเข้าโปรแกรมใหม่' +
-    (chartMode === 'years' ? 'รายปี' : (chartMode === 'quarters' ? 'รายไตรมาส' : 'รายเดือน')) +
-    '<span class="sub">นับจากวัน Start</span></h2>' + seg + '</div>';
+    '<h2>ผู้ป่วยเข้าโปรแกรมใหม่' + title +
+    '<span class="sub">' + sub + '</span></h2>' + seg + '</div>';
 
   if (!rows.length) {
     return '<div class="panel">' + head + '<div class="empty">ยังไม่มีข้อมูลวัน Start</div></div>';
@@ -1729,19 +1753,13 @@ function listKeys(e) {
 
 /** ผู้ป่วยที่เริ่มโปรแกรมในช่วงเวลาที่กด ตรงกับวิธีนับของกราฟแท่ง */
 function matchPeriod(p, key) {
-  var d = String(p.start_date || '');
-  if (d.length < 7) return false;
-  if (chartMode === 'years') return d.substring(0, 4) === key;
-  if (chartMode === 'quarters') {
-    var q = Math.ceil(parseInt(d.substring(5, 7), 10) / 3);
-    return d.substring(0, 4) + '-Q' + q === key;
-  }
-  return d.substring(0, 7) === key;
+  return !!key && periodKey(p.start_date, chartMode) === key;
 }
 
 function openPeriod(key) {
   var rows = (patientCache || []).filter(function (p) { return matchPeriod(p, key); });
-  openList('เริ่มโปรแกรม ' + seriesLabel(key), rows, 'imc-start-' + key);
+  var label = (chartMode === 'years' ? 'ปีงบ ' : '') + seriesLabel(key);
+  openList('เริ่มโปรแกรม ' + label, rows, 'imc-start-' + key);
 }
 
 function openScreening(kind) {

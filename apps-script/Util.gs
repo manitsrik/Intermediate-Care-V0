@@ -176,6 +176,19 @@ function sheet_(name) {
     throw new Error('ยังไม่ได้ติดตั้งระบบ ไม่พบชีต ' + name +
       ' กรุณาใช้เมนู Intermediate Care แล้วเลือก ติดตั้งระบบ');
   }
+  return SCHEMA[name] ? ensureColumns_(sh, SCHEMA[name].length) : sh;
+}
+
+/**
+ * ขยายชีตให้กว้างพอกับจำนวนคอลัมน์ใน SCHEMA
+ *
+ * เวลาเพิ่มฟิลด์ใหม่ ชีตที่ใช้งานอยู่ยังกว้างเท่าเดิม ถ้าไม่ขยายก่อน
+ * getRange(...).setValues() จะโยน error ว่าอยู่นอกขอบเขต แล้วบันทึกไม่ได้ทั้งระบบ
+ * จนกว่าจะมีคนไปสั่งติดตั้งระบบ ซ่อมตรงนี้ให้เงียบ ๆ ปลอดภัยกว่าปล่อยให้ทีมเจอ
+ */
+function ensureColumns_(sh, need) {
+  var have = sh.getMaxColumns();
+  if (have < need) sh.insertColumnsAfter(have, need - have);
   return sh;
 }
 

@@ -217,6 +217,8 @@ var ICONS = {
   pulse: '<path d="M2.8 12.4h4L9 7.6l3.4 9.2 2.4-5.2h6.4"></path>',
   calendar: '<rect x="3.6" y="5.4" width="16.8" height="15" rx="2.4"></rect><path d="M3.6 10h16.8M8.4 3v4.4M15.6 3v4.4"></path>',
   calplus: '<rect x="3.6" y="5.4" width="16.8" height="15" rx="2.4"></rect><path d="M3.6 10h16.8M8.4 3v4.4M15.6 3v4.4"></path><path d="M12 12.8v5M9.5 15.3h5"></path>',
+  bell: '<path d="M18 8.6a6 6 0 1 0-12 0c0 6-2.2 7.4-2.2 7.4h16.4S18 14.6 18 8.6"></path><path d="M13.7 19.5a2 2 0 0 1-3.4 0"></path>',
+  check: '<circle cx="12" cy="12" r="8.6"></circle><path d="M8.4 12.2l2.5 2.5 4.7-5"></path>',
   gear: '<circle cx="12" cy="12" r="3.1"></circle><path d="M19.6 14.6a1.6 1.6 0 0 0 .32 1.76l.06.06a1.9 1.9 0 1 1-2.7 2.7l-.06-.06a1.6 1.6 0 0 0-1.76-.32 1.6 1.6 0 0 0-1 1.46v.17a1.9 1.9 0 1 1-3.8 0v-.09a1.6 1.6 0 0 0-1.05-1.46 1.6 1.6 0 0 0-1.76.32l-.06.06a1.9 1.9 0 1 1-2.7-2.7l.06-.06a1.6 1.6 0 0 0 .32-1.76 1.6 1.6 0 0 0-1.46-1H3.7a1.9 1.9 0 1 1 0-3.8h.09a1.6 1.6 0 0 0 1.46-1.05 1.6 1.6 0 0 0-.32-1.76l-.06-.06a1.9 1.9 0 1 1 2.7-2.7l.06.06a1.6 1.6 0 0 0 1.76.32h.08a1.6 1.6 0 0 0 1-1.46V3.7a1.9 1.9 0 1 1 3.8 0v.09a1.6 1.6 0 0 0 1 1.46 1.6 1.6 0 0 0 1.76-.32l.06-.06a1.9 1.9 0 1 1 2.7 2.7l-.06.06a1.6 1.6 0 0 0-.32 1.76v.08a1.6 1.6 0 0 0 1.46 1h.17a1.9 1.9 0 1 1 0 3.8h-.09a1.6 1.6 0 0 0-1.46 1z"></path>'
 };
 
@@ -1532,9 +1534,6 @@ var reportCache = null;
 var chartMode = 'months';
 var dashFilter = { scope: 'all', district: '', tambon: '' };
 var dashRequest = 0;
-var areaTab = 'district';
-var areaShowEmpty = false;
-var areaRowsExpanded = false;
 var areaFilterOpen = false;
 
 function renderDashboard() {
@@ -1560,22 +1559,17 @@ function setChartMode(mode) {
 function drawDashboard(d) {
   dashCache = d;
   dashFilter = d.filter || { scope: 'all', district: '', tambon: '' };
-  main().innerHTML = dashHead() + areaControls(d) + statCards(d) +
-    '<div class="cols"><div>' + chartPanel(d) + '</div><div>' +
-    screeningPanel(d) + upcomingPanel(d) +
+  main().innerHTML = dashHead(d) + statCards(d) +
+    // โดนัทกับกล่องรายการอยู่คอลัมน์แคบ ซึ่งเป็นความกว้างที่พอดีตัวของมัน
+    // ส่วนกราฟกินคอลัมน์กว้างและยืดสูงเต็มแถวเอง ไม่เหลือช่องว่างข้างล่าง
+    '<div class="dash-row"><div class="dash-main">' + chartPanel(d) + '</div><div>' +
+    screeningPanel(d) + attentionPanel(d) + upcomingPanel(d) +
     '</div></div>';
   startClock();
 }
 
 function optionHtml(value, label, selected) {
   return '<option value="' + esc(value) + '"' + (value === selected ? ' selected' : '') + '>' + esc(label) + '</option>';
-}
-
-/** ป้ายแท็บรายตำบล บอกด้วยว่ากำลังดูตำบลของอำเภอไหนอยู่ */
-function tambonTabLabel() {
-  var geo = BOOT.geography || {};
-  var d = (dashCache && dashCache.tambonDistrict) || geo.city || '';
-  return 'ตำบล อ.' + (d === geo.city ? 'เมือง' : d);
 }
 
 function areaLabel(f) {
@@ -1588,24 +1582,31 @@ function areaLabel(f) {
 }
 
 function areaControls(d) {
-  var geo = d.geography || BOOT.geography;
-  if (!geo) return '';
+  var geo = (d && d.geography) || BOOT.geography;
+  if (!geo || !d) return '';
   var f = dashFilter;
-  // เลือกตำบลได้เมื่อเจาะอำเภอไว้แล้ว ไม่ว่าอำเภอไหนก็ตาม ไม่ใช่แค่อำเภอเมือง
-  var picked = Object.prototype.hasOwnProperty.call(geo.districts, f.district) ? f.district : '';
   return '<section class="area-controls' + (areaFilterOpen ? ' open' : '') + '" aria-label="กรองพื้นที่ผู้ป่วย">' +
     '<div class="area-current"><span class="area-pin">' + icon('target', 17, 1.8) + '</span>' +
     '<span class="area-current-text"><small>พื้นที่ที่กำลังดู</small><b>' + esc(areaLabel()) + '</b></span>' +
     '<button class="area-result" onclick="openDashboardPatients()" title="ดูรายชื่อผู้ป่วยในพื้นที่นี้"><strong class="num">' + d.total + '</strong> ราย</button>' +
-    '<button class="btn area-summary-button" onclick="openAreaSummary()" aria-label="เปิดสรุปข้อมูลตามพื้นที่">' + icon('chart', 15, 1.9) + '<span>สรุปพื้นที่</span></button>' +
     '<button class="btn area-mobile-toggle" onclick="toggleAreaFilters()">' + (areaFilterOpen ? 'ซ่อนตัวเลือก' : 'เลือกพื้นที่') + '</button></div>' +
-    '<div class="area-selects"><label class="area-field"><span>พื้นที่</span><select onchange="changeArea(\'scope\',this.value)">' +
+    '<div class="area-selects">' + areaSelects(geo, f, 'changeArea', 'resetArea') + '</div></section>';
+}
+
+/**
+ * ดรอปดาวน์เลือกพื้นที่ ใช้ร่วมกันทั้งแดชบอร์ดและหน้ารายงาน
+ * เขียนที่เดียวเพื่อให้สองหน้ากรองด้วยตัวเลือกชุดเดียวกันเสมอ ไม่มีทางเพี้ยนจากกัน
+ */
+function areaSelects(geo, f, onChange, onReset) {
+  // เลือกตำบลได้เมื่อเจาะอำเภอไว้แล้ว ไม่ว่าอำเภอไหนก็ตาม ไม่ใช่แค่อำเภอเมือง
+  var picked = Object.prototype.hasOwnProperty.call(geo.districts, f.district) ? f.district : '';
+  return '<label class="area-field"><span>พื้นที่</span><select onchange="' + onChange + '(\'scope\',this.value)">' +
     [['all', 'ทุกพื้นที่'], ['krabi', 'ทั้งจังหวัดกระบี่'], ['outside', 'ต่างจังหวัด'], ['unknown', 'ยังไม่ระบุพื้นที่']].map(function (x) { return optionHtml(x[0], x[1], f.scope); }).join('') + '</select></label>' +
-    '<label class="area-field"><span>อำเภอ</span><select onchange="changeArea(\'district\',this.value)"' + (f.scope !== 'krabi' ? ' disabled' : '') + '>' +
+    '<label class="area-field"><span>อำเภอ</span><select onchange="' + onChange + '(\'district\',this.value)"' + (f.scope !== 'krabi' ? ' disabled' : '') + '>' +
     optionHtml('', 'ทุกอำเภอ', f.district) + Object.keys(geo.districts).map(function (x) { return optionHtml(x, x, f.district); }).join('') + optionHtml('__unknown', 'ยังไม่ระบุอำเภอ / ต้องตรวจสอบ', f.district) + '</select></label>' +
-    '<label class="area-field area-tambon"><span>ตำบล</span><select onchange="changeArea(\'tambon\',this.value)"' + (picked ? '' : ' disabled') + '>' +
+    '<label class="area-field area-tambon"><span>ตำบล</span><select onchange="' + onChange + '(\'tambon\',this.value)"' + (picked ? '' : ' disabled') + '>' +
     optionHtml('', 'ทุกตำบล', f.tambon) + (picked ? geo.districts[picked] : []).map(function (x) { return optionHtml(x, x, f.tambon); }).join('') + optionHtml('__unknown', 'ยังไม่ระบุตำบล / ต้องตรวจสอบ', f.tambon) + '</select></label>' +
-    '<button class="area-clear" onclick="resetArea()"' + (f.scope === 'all' ? ' disabled' : '') + ' title="ล้างตัวกรองพื้นที่">ล้าง</button></div></section>';
+    '<button class="area-clear" onclick="' + onReset + '()"' + (f.scope === 'all' ? ' disabled' : '') + ' title="ล้างตัวกรองพื้นที่">ล้าง</button>';
 }
 
 function toggleAreaFilters() {
@@ -1618,7 +1619,6 @@ function changeArea(key, value) {
   next[key] = value;
   if (key === 'scope') { next.district = ''; next.tambon = ''; }
   if (key === 'district') next.tambon = '';
-  areaRowsExpanded = false;
   dashFilter = next; dashCache = null;
   return renderDashboard();
 }
@@ -1629,31 +1629,6 @@ function dashboardPatients() { return dashCache && dashCache.patients ? dashCach
 
 function openDashboardPatients() { openList('ผู้ป่วย · ' + areaLabel(), dashboardPatients(), 'imc-area'); }
 
-function openAreaSummary() {
-  if (!dashCache) return;
-  document.getElementById('area-summary-body').innerHTML = areaPanels(dashCache);
-  var modal = document.getElementById('areamodal');
-  modal.hidden = false;
-  modal.onclick = function (e) { if (e.target === modal) closeAreaSummary(); };
-  document.addEventListener('keydown', areaSummaryKeys);
-}
-
-function closeAreaSummary() {
-  document.getElementById('areamodal').hidden = true;
-  document.removeEventListener('keydown', areaSummaryKeys);
-}
-
-function areaSummaryKeys(e) {
-  if (e.key === 'Escape') { e.preventDefault(); closeAreaSummary(); }
-}
-
-function refreshAreaSummary() {
-  var modal = document.getElementById('areamodal');
-  if (dashCache && modal && !modal.hidden) {
-    document.getElementById('area-summary-body').innerHTML = areaPanels(dashCache);
-  }
-}
-
 function openUpcomingPatients() {
   var today = dashCache.today;
   var rows = dashboardPatients().filter(function (p) {
@@ -1662,86 +1637,17 @@ function openUpcomingPatients() {
   openList('นัดหมาย · ' + areaLabel(), rows, 'imc-appointments');
 }
 
-function areaPanels(d) {
-  if (!d.districts) return '';
-  var level = areaTab;
-  var source = level === 'district' ? d.districts : d.tambons;
-  var indexed = source.map(function (row, index) { return { row: row, index: index }; });
-  var visible = areaShowEmpty ? indexed : indexed.filter(function (x) { return x.row.total > 0; });
-  var allVisible = visible.length;
-  if (!areaRowsExpanded) visible = visible.slice(0, 6);
-  var max = Math.max.apply(null, source.map(function (r) { return r.total; }).concat([1]));
-  var rows = visible.map(function (x) {
-    var r = x.row, i = x.index;
-    return '<tr><th scope="row"><button class="area-name" onclick="openAreaPatients(\'' + level + '\',' + i + ')">' +
-      '<span>' + esc(r.name) + '</span><i><b style="width:' + Math.round(r.total / max * 100) + '%"></b></i></button></th>' +
-      ['total', 'imc', 'active', 'closed'].map(function (metric) {
-        return '<td class="num"><button class="area-count" aria-label="ดูรายชื่อ ' + esc(r.name) + ' ' +
-          ({ total: 'ทั้งหมด', imc: 'IMC', active: 'กำลังดูแล', closed: 'จบแล้ว' })[metric] + '" onclick="openAreaPatients(\'' + level + '\',' + i + ',\'' + metric + '\')">' + r[metric] + '</button></td>';
-      }).join('') + '<td><button class="area-go" onclick="selectAreaRow(\'' + level + '\',' + i + ')" title="ใช้พื้นที่นี้กับแดชบอร์ด" aria-label="เลือก ' + esc(r.name) + '">' + icon('arrow', 15, 2) + '</button></td></tr>';
-  }).join('');
-  if (!rows) rows = '<tr><td colspan="6"><div class="area-empty">ไม่มีผู้ป่วยในมุมมองนี้ <button class="panel-link" onclick="toggleAreaEmpty()">แสดงพื้นที่ทั้งหมด</button></div></td></tr>';
-  var more = allVisible > 6
-    ? '<button class="area-more" onclick="toggleAreaRows()">' + (areaRowsExpanded ? 'ย่อรายการ' : 'ดูทั้งหมด ' + allVisible + ' พื้นที่') + '</button>' : '';
-  var zeroCount = source.filter(function (r) { return r.total === 0; }).length;
-  return '<section class="panel area-panel area-section"><div class="area-panel-head">' +
-    '<span class="area-context">' + esc(areaLabel()) + ' · <b class="num">' + d.total + '</b> ราย</span>' +
-    '<div class="area-tabs" role="tablist"><button role="tab" aria-selected="' + (level === 'district') + '" class="' + (level === 'district' ? 'on' : '') + '" onclick="setAreaTab(\'district\')">รายอำเภอ</button>' +
-    '<button role="tab" aria-selected="' + (level === 'tambon') + '" class="' + (level === 'tambon' ? 'on' : '') + '" onclick="setAreaTab(\'tambon\')">' + esc(tambonTabLabel()) + '</button></div></div>' +
-    '<div class="area-table-wrap"><table class="area-table"><thead><tr><th scope="col">พื้นที่</th><th scope="col">ทั้งหมด</th><th scope="col">IMC</th><th scope="col">ดูแล</th><th scope="col">จบ</th><th scope="col"><span class="sr-only">เลือกพื้นที่</span></th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
-    '<div class="area-panel-foot">' + more + '<button class="area-empty-toggle" onclick="toggleAreaEmpty()">' +
-    (areaShowEmpty ? 'ซ่อนพื้นที่ยอดศูนย์' : 'แสดงพื้นที่ยอดศูนย์' + (zeroCount ? ' (' + zeroCount + ')' : '')) + '</button></div></section>';
-}
-
-function setAreaTab(tab) {
-  areaTab = tab === 'tambon' ? 'tambon' : 'district';
-  areaRowsExpanded = false;
-  refreshAreaSummary();
-}
-
-function toggleAreaEmpty() {
-  areaShowEmpty = !areaShowEmpty;
-  areaRowsExpanded = false;
-  refreshAreaSummary();
-}
-
-function toggleAreaRows() {
-  areaRowsExpanded = !areaRowsExpanded;
-  refreshAreaSummary();
-}
-
-function areaRowFilter(level, index) {
-  var key = (level === 'district' ? dashCache.districts : dashCache.tambons)[index].key;
-  if (level === 'tambon') return { scope: 'krabi', district: dashCache.tambonDistrict, tambon: key };
-  return { scope: key === '__outside' ? 'outside' : (key === '__unknown' ? 'unknown' : 'krabi'), district: key.charAt(0) === '_' ? '' : key, tambon: '' };
-}
-
-function selectAreaRow(level, index) {
-  closeAreaSummary();
-  dashFilter = areaRowFilter(level, index); dashCache = null;
-  return renderDashboard();
-}
-
-function openAreaPatients(level, index, metric) {
-  var group = (level === 'district' ? dashCache.districts : dashCache.tambons)[index];
-  var rows = dashboardPatients().filter(function (p) {
-    var a = p.area;
-    if (!a || (level === 'tambon' && a.districtKey !== dashCache.tambonDistrict)) return false;
-    if ((level === 'district' ? a.districtKey : a.tambonKey) !== group.key) return false;
-    if (metric === 'imc') return p.screening_result === 'IMC';
-    if (metric === 'active') return p.status !== 'closed';
-    if (metric === 'closed') return p.status === 'closed';
-    return true;
-  });
-  closeAreaSummary();
-  openList(group.name + ' · ' + ({ imc: 'เข้าโปรแกรม IMC', active: 'กำลังดูแล', closed: 'จบแล้ว' }[metric] || 'ผู้ป่วยทั้งหมด'), rows, 'imc-area-' + level + '-' + index);
-}
-
-function dashHead() {
+/*
+  หัวข้อหน้ากับตัวกรองพื้นที่อยู่แถวเดียวกัน
+  แยกเป็นสองแถบแล้วกินความสูงเกิน 80px ทั้งที่ตัวกรองมีของอยู่ไม่กี่ชิ้น
+  และแถบบนของแอปใช้ไม่ได้ เพราะมันค้างอยู่ทุกหน้า แต่ตัวกรองนี้มีผลแค่แดชบอร์ด
+*/
+function dashHead(d) {
   var t = new Date();
   return '<div class="page-head">' +
     '<div class="head-text"><h1>แดชบอร์ด IMC</h1>' +
     '<span class="sub">' + esc(BOOT.org) + '</span></div>' +
+    (d ? areaControls(d) : '') +
     '<div class="dash-date">' + icon('calendar', 17, 1.8) + '<span>' +
     '<span id="hero-day">' + esc(thDayText(t)) + '</span>' +
     '<span class="time num" id="hero-time">' + thTimeText(t) + '</span>' +
@@ -1768,35 +1674,43 @@ function startClock() {
 /* ----------------------------------------------------------- การ์ดสถิติ */
 
 /** ป้ายเทียบกับเดือนก่อน ว่างไว้ถ้าคำนวณไม่ได้ ดีกว่าโชว์เลขที่ไม่มีความหมาย */
-function deltaChip(n) {
+function deltaChip(n, after) {
   if (n === null || n === undefined || isNaN(n)) return '';
   var head = n > 0 ? '↑ +' + n : (n < 0 ? '↓ ' + n : '± 0');
   return '<div class="stat-foot"><span class="stat-chip num">' + head + '</span>' +
-    '<span class="stat-after">จากเดือนก่อน</span></div>';
+    '<span class="stat-after">' + esc(after || 'จากเดือนก่อน') + '</span></div>';
 }
 
-function statCard(cls, ico, art, label, value, sub, chip) {
+function statCard(cls, ico, label, value, sub, chip) {
   return '<div class="stat-card ' + cls + '">' +
     '<div class="stat-top">' +
     '<span class="ico">' + icon(ico, 24, 1.9) + '</span>' +
     '<div class="stat-figure"><div class="k">' + esc(label) + '</div>' +
     '<div class="v num">' + esc(value) + '</div></div>' +
-    '<span class="stat-art">' + icon(art, 38, 1.9) + '</span>' +
     '</div>' +
     (sub ? '<div class="sub num">' + esc(sub) + '</div>' : '') +
     (chip || '') +
     '</div>';
 }
 
+/*
+  สามใบตอบคนละคำถาม: งานทั้งหมดมีเท่าไร / ต้องดูแลอยู่เท่าไร / ได้ผลแค่ไหน
+
+  ใบ "เข้าโปรแกรม IMC" ถูกตัดออก เพราะโดนัทผลการคัดกรองในจอเดียวกันบอกเรื่องเดียวกัน
+  และบอกดีกว่า เพราะเห็นทั้งฝั่งเข้าเกณฑ์และไม่เข้าเกณฑ์พร้อมสัดส่วนในภาพเดียว
+  ส่วน "จบแล้ว" คงเป็นบรรทัดรองของ "กำลังดูแล" ไม่แยกเป็นใบของตัวเอง
+  เพราะเป็นเลขที่ลบกันได้จากอีกสองใบ และไม่ใช่ตัวเลขที่ต้องลงมือทำอะไรต่อ
+
+  ชั้นสี s2 ว่างไว้ตั้งแต่ตัดใบนั้นออก ใบที่เหลือคงสีเดิมไว้ให้คนที่ชินจำได้เหมือนเดิม
+*/
 function statCards(d) {
-  var pct = d.total ? Math.round(d.imc / d.total * 100) + '% ของทั้งหมด' : '';
   var gain = d.avgGain === null ? '—' : (d.avgGain > 0 ? '+' : '') + d.avgGain;
 
   return '<div class="stat-grid">' +
-    statCard('s1', 'people', 'people', 'ผู้ป่วยทั้งหมด', d.total, '', deltaChip(d.delta.total)) +
-    statCard('s2', 'userplus', 'chart', 'เข้าโปรแกรม IMC', d.imc, pct, deltaChip(d.delta.imc)) +
-    statCard('s3', 'clock', 'pulse', 'กำลังดูแล', d.active, 'จบแล้ว ' + d.closed, deltaChip(d.delta.active)) +
-    statCard('s4', 'chart', 'target', 'คะแนน BI เพิ่มเฉลี่ย', gain,
+    statCard('s1', 'people', 'ผู้ป่วยทั้งหมด', d.total, '',
+      deltaChip(d.delta.total, 'เข้าใหม่เดือนนี้')) +
+    statCard('s3', 'clock', 'กำลังดูแล', d.active, 'จบแล้ว ' + d.closed, deltaChip(d.delta.active)) +
+    statCard('s4', 'chart', 'คะแนน BI เพิ่มเฉลี่ย', gain,
       'ดีขึ้น ' + d.improved + ' ราย', deltaChip(d.delta.avgGain)) +
     '</div>';
 }
@@ -1857,20 +1771,38 @@ function chartPanel(d) {
 
   var title = chartMode === 'years' ? 'รายปีงบประมาณ'
     : (chartMode === 'quarters' ? 'รายไตรมาส' : 'รายเดือน');
-  var sub = chartMode === 'months' ? 'นับจากวัน Start'
-    : 'นับจากวัน Start · ปีงบประมาณ เริ่ม 1 ต.ค.';
+  /*
+    สองแท่งนี้นับจากคนละช่องวันที่ ต้องเขียนกำกับไว้เสมอ
+    ไม่งั้นคนอ่านจะเหมาว่าทั้งกราฟนับจากวัน Start แล้วตีความแท่งจบผิด
+  */
+  var sub = 'เข้าใหม่นับจากวัน Start · จบนับจากวันสิ้นสุด' +
+    (chartMode === 'months' ? '' : ' · ปีงบประมาณ เริ่ม 1 ต.ค.');
 
   var head = '<div class="panel-head"><span class="panel-ico">' + icon('chart', 20, 1.9) + '</span>' +
-    '<h2>ผู้ป่วยเข้าโปรแกรมใหม่' + title +
+    '<h2>เข้าใหม่และจบโปรแกรม' + title +
     '<span class="sub">' + sub + '</span></h2>' + seg + '</div>';
 
   if (!rows.length) {
     return '<div class="panel">' + head + '<div class="empty">ยังไม่มีข้อมูลวัน Start</div></div>';
   }
 
-  var top = niceTop(Math.max.apply(null, rows.map(function (r) { return r.count; }).concat([1])));
+  // แกนตั้งต้องรองรับทั้งสองแท่ง ไม่งั้นแท่งจบอาจสูงล้นกรอบ
+  var top = niceTop(Math.max.apply(null, rows.map(function (r) {
+    return Math.max(r.count, r.closed);
+  }).concat([1])));
   var step = top / 4;
   var yLabels = [4, 3, 2, 1, 0].map(function (i) { return step * i; });
+
+  var SEGS = [['imc', 'seg-imc', 'เข้าเกณฑ์ IMC'], ['noImc', 'seg-noimc', 'ไม่เข้าเกณฑ์'],
+              ['other', 'seg-other', 'ยังไม่คัดกรอง']];
+  // ชั้น "ยังไม่คัดกรอง" โผล่เฉพาะตอนมีจริง ไม่งั้นคำอธิบายสีจะรกโดยเปล่าประโยชน์
+  var legend = SEGS.filter(function (x) {
+    return x[0] !== 'other' || rows.some(function (r) { return r.other > 0; });
+  }).concat([['closed', 'seg-out', 'จบโปรแกรม']]).map(function (x) {
+    return '<span><i class="' + x[1] + '"></i>' + x[2] + '</span>';
+  }).join('');
+
+  var pct = function (n) { return Math.max(Math.round(n / top * 100), n ? 1 : 0); };
 
   return '<div class="panel">' + head +
     '<div class="chart">' +
@@ -1878,14 +1810,26 @@ function chartPanel(d) {
     '<div class="plot">' +
     '<div class="gridlines"><i></i><i></i><i></i><i></i><i></i></div>' +
     '<div class="bars">' + rows.map(function (r) {
-      return '<div class="bcol" title="ดูรายชื่อ" onclick="openPeriod(\'' + esc(r.key) + '\')">' +
-        '<div class="bar" style="height:' + Math.max(Math.round(r.count / top * 100), 1) + '%">' +
-        '<span class="val num">' + r.count + '</span></div></div>';
+      var label = seriesLabel(r.key);
+      var segs = SEGS.filter(function (x) { return r[x[0]] > 0; }).map(function (x) {
+        return '<i class="' + x[1] + '" style="height:' + (r[x[0]] / r.count * 100) + '%"></i>';
+      }).join('');
+      return '<div class="bcol">' +
+        '<div class="bar bar-in' + (r.count ? '' : ' zero') + '" style="height:' + pct(r.count) + '%"' +
+        ' title="' + esc(label + ' · เข้าใหม่ ' + r.count + ' ราย') + '"' +
+        ' onclick="openPeriod(\'' + esc(r.key) + '\')">' + segs +
+        (r.count ? '<span class="val num">' + r.count + '</span>' : '') + '</div>' +
+        '<div class="bar bar-out' + (r.closed ? '' : ' zero') + '" style="height:' + pct(r.closed) + '%"' +
+        ' title="' + esc(label + ' · จบโปรแกรม ' + r.closed + ' ราย') + '"' +
+        ' onclick="openPeriodClosed(\'' + esc(r.key) + '\')"></div>' +
+        '</div>';
     }).join('') + '</div>' +
     '<div class="x-axis">' + rows.map(function (r) {
       return '<span>' + esc(seriesLabel(r.key)) + '</span>';
     }).join('') + '</div>' +
-    '</div></div></div>';
+    '</div></div>' +
+    // อยู่ก้นการ์ด กราฟจึงยืดกินที่ว่างด้านบนได้เต็ม ไม่เหลือช่องโหว่
+    '<div class="chart-legend">' + legend + '</div></div>';
 }
 
 /* ------------------------------------------------------------ ผลคัดกรอง */
@@ -1910,6 +1854,41 @@ function screeningPanel(d) {
 }
 
 /* -------------------------------------------------------------- นัดหมาย */
+
+/*
+  งานค้างที่ต้องหยิบขึ้นมาทำ แยกบรรทัดตามเหตุผล ไม่รวมเป็นเลขเดียว
+  เพราะแต่ละข้อต้องลงมือคนละแบบ กดแล้วเปิดรายชื่อกลุ่มนั้นได้ทันที
+  ข้อที่ยอดเป็นศูนย์ไม่ต้องแสดง และถ้าไม่ค้างเลยก็บอกไปตรง ๆ
+  ดีกว่าโชว์เลขศูนย์เรียงกันสี่บรรทัดให้ต้องอ่าน
+*/
+function attentionPanel(d) {
+  var items = (d.attention || []).filter(function (a) { return a.count > 0; });
+  var head = '<div class="panel-head"><span class="panel-ico">' + icon('bell', 20, 1.9) + '</span>' +
+    '<h2>ต้องจัดการ</h2></div>';
+
+  if (!items.length) {
+    return '<div class="panel">' + head +
+      '<div class="empty-art">' + icon('check', 46, 1.3) +
+      '<p>ไม่มีงานค้างใน' + esc(areaLabel()) + '</p></div></div>';
+  }
+
+  return '<div class="panel">' + head + items.map(function (a) {
+    return '<button class="todo-row" onclick="openAttention(\'' + esc(a.key) + '\')" ' +
+      'title="ดูรายชื่อ ' + esc(a.label) + '">' +
+      '<span class="todo-label">' + esc(a.label) + '</span>' +
+      '<span class="todo-count num">' + a.count + ' ราย</span>' +
+      icon('arrow', 14, 2) + '</button>';
+  }).join('') + '</div>';
+}
+
+/** รายชื่อผู้ป่วยที่ค้างงานข้อนั้น ใช้ธงชุดเดียวกับที่นับเลขบนหน้าจอ */
+function openAttention(key) {
+  var item = (dashCache.attention || []).filter(function (a) { return a.key === key; })[0];
+  var rows = dashboardPatients().filter(function (p) {
+    return p.attention && p.attention.indexOf(key) !== -1;
+  });
+  openList((item ? item.label : 'ต้องจัดการ') + ' · ' + areaLabel(), rows, 'imc-todo-' + key);
+}
 
 function upcomingPanel(d) {
   var head = '<div class="panel-head"><span class="panel-ico">' + icon('calendar', 20, 1.9) + '</span>' +
@@ -1990,6 +1969,15 @@ function openPeriod(key) {
   openList('เริ่มโปรแกรม ' + label, rows, 'imc-start-' + key);
 }
 
+/** คนที่จบโปรแกรมในงวดนั้น นับจากวันสิ้นสุด คนละฐานกับ openPeriod ที่นับจากวัน Start */
+function openPeriodClosed(key) {
+  var rows = dashboardPatients().filter(function (p) {
+    return String(p.status) === 'closed' && periodKey(p.end_date, chartMode) === key;
+  });
+  var label = (chartMode === 'years' ? 'ปีงบ ' : '') + seriesLabel(key);
+  openList('จบโปรแกรม ' + label, rows, 'imc-closed-' + key);
+}
+
 function openScreening(kind) {
   var rows = (VIEW.name === 'dashboard' ? dashboardPatients() : (patientCache || [])).filter(function (p) {
     return String(p.screening_result) === kind;
@@ -2058,19 +2046,74 @@ function exportSheet() {
 
 /* ---------------------------------------------------------- หน้ารายงาน */
 
+/*
+  หน้ารายงานสืบทอดตัวกรองพื้นที่จากแดชบอร์ดตอนเปิดครั้งแรก
+  เลือกอำเภอไว้แล้วสลับมาดูรายงาน จะได้ไม่ต้องเลือกซ้ำ และไม่เผลออ่านเลขทั้งจังหวัด
+  ว่าเป็นเลขของอำเภอที่เพิ่งดูอยู่ ส่วนปีงบเริ่มที่ "ทุกปีงบ" เสมอ
+*/
+var reportFilter = null;
+
 function renderReport() {
+  if (!reportFilter) {
+    reportFilter = {
+      scope: dashFilter.scope, district: dashFilter.district,
+      tambon: dashFilter.tambon, fy: ''
+    };
+  }
   if (reportCache) { drawReport(reportCache); return; }
   busy(4);
-  call('apiReport').then(function (r) {
+  call('apiReport', reportFilter).then(function (r) {
     reportCache = r;
     drawReport(r);
   }).catch(fail);
 }
 
+function changeReportArea(key, value) {
+  reportFilter[key] = value;
+  if (key === 'scope') { reportFilter.district = ''; reportFilter.tambon = ''; }
+  if (key === 'district') reportFilter.tambon = '';
+  reportCache = null;
+  return renderReport();
+}
+
+function changeReportYear(value) {
+  reportFilter.fy = value;
+  reportCache = null;
+  return renderReport();
+}
+
+function resetReportArea() {
+  reportFilter.scope = 'all'; reportFilter.district = ''; reportFilter.tambon = '';
+  reportCache = null;
+  return renderReport();
+}
+
 function drawReport(r) {
+  // ยึดตัวกรองที่เซิร์ฟเวอร์ตอบกลับมาเป็นหลัก เหมือนที่แดชบอร์ดทำ
+  // หน้าจอจึงตรงกับชุดข้อมูลที่ได้มาจริงเสมอ และวาดได้แม้ยังไม่เคยตั้งค่าตัวกรอง
+  reportFilter = {
+    scope: (r.filter && r.filter.scope) || 'all',
+    district: (r.filter && r.filter.district) || '',
+    tambon: (r.filter && r.filter.tambon) || '',
+    fy: r.fy || ''
+  };
+  var geo = BOOT.geography;
+  var scope = [areaLabel(reportFilter), r.fy ? 'ปีงบ ' + r.fy.replace('FY', '') : 'ทุกปีงบ'].join(' · ');
+
   var html = '<div class="page-head"><div class="head-text"><h1>รายงาน / BI</h1>' +
-    '<span class="sub num">ประเมิน Barthel Index แล้ว ' + r.assessed + ' จาก ' + r.total + ' ราย</span>' +
-    '</div></div>';
+    '<span class="sub num">' + esc(scope) + ' · ประเมิน Barthel Index แล้ว ' +
+    r.assessed + ' จาก ' + r.total + ' ราย</span></div>' +
+    (geo ? '<section class="area-controls open" aria-label="กรองข้อมูลรายงาน"><div class="area-selects">' +
+      areaSelects(geo, reportFilter, 'changeReportArea', 'resetReportArea') +
+      // ปีงบคัดจากวัน Start ฐานเดียวกับกราฟบนแดชบอร์ด เขียนกำกับไว้กันเข้าใจผิด
+      '<label class="area-field"><span>ปีงบ (นับจากวัน Start)</span>' +
+      '<select onchange="changeReportYear(this.value)">' +
+      optionHtml('', 'ทุกปีงบ', r.fy) +
+      (r.fiscalYears || []).map(function (k) {
+        return optionHtml(k, k.replace('FY', ''), r.fy);
+      }).join('') + '</select></label>' +
+      '</div></section>' : '') +
+    '</div>';
 
   html += '<div class="rep-grid">' +
     hbarPanel('การกระจายคะแนน BI ล่าสุด', 'chart', r.buckets) +
@@ -2078,6 +2121,8 @@ function drawReport(r) {
     hbarPanel('กลุ่มการวินิจฉัย', 'pulse', r.dxGroups) +
     hbarPanel('หอผู้ป่วย', 'people', r.wards) +
     hbarPanel('รูปแบบโปรแกรม', 'calendar', r.programs) +
+    // ใส่ฐานไว้ในหัวข้อ กันอ่านเปอร์เซ็นต์ผิดว่าเป็นสัดส่วนของผู้ป่วยทั้งหมด
+    hbarPanel('เหตุจบโปรแกรม (จาก ' + (r.closed || 0) + ' รายที่จบแล้ว)', 'check', r.dcReasons) +
     '</div>';
 
   html += progressPanel(r.progress);

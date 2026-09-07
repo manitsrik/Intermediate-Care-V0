@@ -126,6 +126,115 @@ test('ชื่อตำบลในกระบี่ไม่ซ้ำข้�
   assert.equal(lookup['อ่าวนาง'], 'เมืองกระบี่');
   assert.equal(lookup['เหนือคลอง'], 'เหนือคลอง');
 });
+// วันนี้ในเทสต์คือ 2026-09-07 เกณฑ์ BI ค้างคือเกิน 56 วัน
+const todo = (extra) => ctx.attentionFlags_({ status: 'active', screening_result: 'IMC', ...extra }, '2026-09-07');
+
+test('เคสที่ปิดแล้วไม่มีงานค้าง แม้ทุกอย่างจะเลยกำหนดหมด', () => {
+  assert.equal(ctx.attentionFlags_({
+    status: 'closed', screening_result: 'NoIMC',
+    kbh_appt_date: '2026-01-01', imc_end_date: '2026-01-01', latest_bi_date: '2025-01-01'
+  }, '2026-09-07').join(","), "");
+});
+test('นัดที่เลยวันแล้วขึ้นเตือน ส่วนนัดข้างหน้าไม่ขึ้น', () => {
+  assert.equal(todo({ kbh_appt_date: '2026-09-06' }).join(","), "appt");
+  assert.equal(todo({ kbh_appt_date: '2026-09-07' }).join(","), "");   // วันนี้ ยังไม่ถือว่าเลย
+  assert.equal(todo({ kbh_appt_date: '2026-09-08' }).join(","), "");
+  assert.equal(todo({ kbh_appt_date: '' }).join(","), "");
+});
+test('ครบกำหนดโปรแกรมแล้วยังไม่ปิดเคส ขึ้นเตือน', () => {
+  assert.equal(todo({ imc_end_date: '2026-09-06' }).join(","), "end");
+  assert.equal(todo({ imc_end_date: '2026-12-31' }).join(","), "");
+});
+test('ประเมิน BI ค้างนับจากครั้งล่าสุด ถ้ายังไม่เคยประเมินนับจากวัน Start', () => {
+  assert.equal(todo({ latest_bi_date: '2026-07-09' }).join(","), "bi");   // 60 วัน
+  assert.equal(todo({ latest_bi_date: '2026-07-13' }).join(","), "");       // 56 วัน พอดี ยังไม่เกิน
+  assert.equal(todo({ latest_bi_date: '2026-08-08' }).join(","), "");       // 30 วัน
+  assert.equal(todo({ start_date: '2026-01-01' }).join(","), "bi");       // ไม่เคยประเมินเลย
+  assert.equal(todo({ latest_bi_date: '2026-08-08', start_date: '2020-01-01' }).join(","), "");
+  assert.equal(todo({}).join(","), "");                                     // ไม่มีวันอะไรให้เทียบ
+});
+test('คัดกรองออกแล้วแต่เคสยังไม่ปิด ขึ้นเตือน และค้างพร้อมกันหลายข้อได้', () => {
+  assert.equal(todo({ screening_result: 'NoIMC' }).join(","), "screen");
+  assert.equal(todo({
+    screening_result: 'NoIMC', kbh_appt_date: '2026-01-01',
+    imc_end_date: '2026-01-01', latest_bi_date: '2026-01-01'
+  }).join(","), "appt,end,bi,screen");
+});
+test('ยอดในกล่องต้องจัดการตรงกับรายชื่อที่กดเข้าไปดู', () => {
+  const d = ctx.apiDashboard();
+  for (const a of d.attention) {
+    const rows = d.patients.filter(x => x.attention.indexOf(a.key) !== -1);
+    assert.equal(a.count, rows.length, a.key);
+    assert.ok(rows.every(x => x.status !== 'closed'), a.key + ' ต้องไม่มีเคสที่ปิดแล้ว');
+  }
+  // มีคนเดียวที่ NoIMC แล้วยังไม่ปิดเคส คือ TEST C
+  assert.equal(d.attention.filter(a => a.key === 'screen')[0].count, 1);
+});
+test('สรุปเหตุจบนับจากฐานเคสที่ปิดแล้ว ไม่ใช่ผู้ป่วยทั้งหมด', () => {
+  patients[1].dc_reason = 'BI > 15';                 // TEST B เป็นเคสเดียวที่ปิดแล้ว
+  const r = ctx.apiReport();
+  const closed = patients.filter(x => x.status === 'closed');
+  assert.equal(r.closed, closed.length);
+  const sum = r.dcReasons.reduce((s, x) => s + x.count, 0);
+  assert.equal(sum, closed.length);                  // ฐานคือเคสที่จบ
+  assert.notEqual(sum, r.total);                     // ไม่ใช่ผู้ป่วยทั้งหมด
+  assert.equal(r.dcReasons[0].name, 'BI > 15');
+});
+test('หน้ารายงานกรองตามพื้นที่ได้ เหมือนแดชบอร์ด', () => {
+  const all = ctx.apiReport();
+  assert.equal(all.total, patients.length);
+  assert.equal(all.fy, '');
+
+  const city = ctx.apiReport({ scope: 'krabi', district: 'เมืองกระบี่' });
+  const inCity = patients.filter(x => ctx.patientArea_(x).districtKey === 'เมืองกระบี่');
+  assert.equal(city.total, inCity.length);
+  assert.ok(city.total < all.total, 'กรองแล้วต้องเหลือน้อยลง');
+
+  // ทุกแท่งต้องนับจากชุดที่กรองแล้ว ไม่ใช่ผู้ป่วยทั้งหมด
+  assert.equal(city.wards.reduce((s, x) => s + x.count, 0), inCity.length);
+});
+test('หน้ารายงานกรองตามปีงบได้ และนับปีงบจากวัน Start', () => {
+  patients[0].start_date = '2026-10-05';   // ข้ามไปปีงบ 2570 ทั้งที่ยัง ค.ศ. 2026
+  const r = ctx.apiReport();
+  assert.ok(r.fiscalYears.indexOf('FY2570') !== -1);
+  assert.ok(r.fiscalYears.indexOf('FY2569') !== -1);
+  assert.equal(r.fiscalYears[0], 'FY2570', 'ปีล่าสุดต้องอยู่บนสุด');
+
+  assert.equal(ctx.apiReport({ fy: 'FY2570' }).total, 1);
+  assert.equal(ctx.apiReport({ fy: 'FY2569' }).total, patients.length - 1);
+
+  // กรองพื้นที่กับปีงบพร้อมกันได้
+  const both = ctx.apiReport({ scope: 'krabi', district: 'เมืองกระบี่', fy: 'FY2570' });
+  assert.equal(both.total, 1);
+  assert.equal(both.fy, 'FY2570');
+  patients[0].start_date = '2026-08-01';   // คืนค่าเดิมให้เทสต์ถัดไป
+});
+test('แท่งเข้าใหม่แบ่งชั้นตามผลคัดกรอง ผลรวมต้องเท่าความสูงแท่ง', () => {
+  const d = ctx.apiDashboard();
+  for (const x of d.months) assert.equal(x.count, x.imc + x.noImc + x.other, x.key);
+  for (const x of d.quarters) assert.equal(x.count, x.imc + x.noImc + x.other, x.key);
+  for (const x of d.years) assert.equal(x.count, x.imc + x.noImc + x.other, x.key);
+
+  // ยอดรวมทั้งกราฟต้องตรงกับตัวเลขบนการ์ด ไม่มีใครตกหล่นหรือถูกนับซ้ำ
+  const sum = (k) => d.years.reduce((s, x) => s + x[k], 0);
+  assert.equal(sum('imc') + sum('noImc') + sum('other'),
+    patients.filter(x => x.start_date).length);
+});
+test('แท่งจบโปรแกรมนับจากวันสิ้นสุด คนละงวดกับวัน Start ได้', () => {
+  const d = ctx.apiDashboard();
+  const m = {};
+  d.months.forEach(x => { m[x.key] = x; });
+
+  // TEST B เริ่ม 2026-08 แต่จบ 2026-09 สองแท่งจึงต้องอยู่คนละงวด
+  assert.equal(m['2026-08'].closed, 0, 'งวดที่เริ่มต้องไม่นับว่าจบ');
+  assert.equal(m['2026-09'].closed, 1);
+  // งวด 2026-09 มีทั้งสองแท่ง แต่คนละคน: D เข้าใหม่ ส่วน B จบ
+  assert.equal(m['2026-09'].count, 1);
+  assert.equal(m['2026-08'].count, patients.filter(x => String(x.start_date).slice(0, 7) === '2026-08').length);
+
+  const closedWithDate = patients.filter(x => x.status === 'closed' && x.end_date);
+  assert.equal(d.months.reduce((s, x) => s + x.closed, 0), closedWithDate.length);
+});
 test('บันทึกพื้นที่ลงคอลัมน์ใหม่ และยังเก็บคะแนน BI เดิมครบ', () => {
   patients = [{ ...patients[0], patient_id: 1, _row: 2, bi_1: 5, bi_5: 10 }];
   let saved;

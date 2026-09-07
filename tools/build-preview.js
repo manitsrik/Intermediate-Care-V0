@@ -83,8 +83,11 @@ function p(id, hn, prefix, name, sex, age, rights, dx, ward, start, screening, s
     imc_program: program, kbh_appt_date: appt, kbh_appt_time: '', kbh_hospital: '',
     start_date: start, screening_result: screening,
     first_bi: firstBi, latest_bi: lastBi, latest_bi_date: '2026-02-16', bi_count: biCount,
-    end_date: '', imc_end_date: '2026-04-28', pt_visit_count: biCount + 2,
-    dc_reason: status === 'closed' ? 'BI > 15' : '',
+    // เคสที่ปิดแล้วต้องมีวันสิ้นสุด ไม่งั้นแท่งจบโปรแกรมในพรีวิวจะว่างจนดูไม่ออกว่าทำงานไหม
+    end_date: status === 'closed' ? (id === 6 ? '2025-11-20' : '2025-12-15') : '',
+    imc_end_date: '2026-04-28', pt_visit_count: biCount + 2,
+    // ให้เคสที่จบมีเหตุต่างกัน แท่งสรุปเหตุจบในพรีวิวจะได้เห็นการกระจายจริง
+    dc_reason: status === 'closed' ? (id === 6 ? 'ไม่มาตามนัด' : 'BI > 15') : '',
     home_visit: '', six_month_status: 'ไม่ครบ', note: '',
     status: status, legacy_row: '', created_by: 'preview@local',
     created_at: '', updated_by: '', updated_at: ''
@@ -259,10 +262,22 @@ var API = {
 
   apiDashboard: function (opts) { return apiDashboard(opts); },
 
-  apiReport: function () {
-    var tally = function (pick) {
+  apiReport: function (opts) {
+    opts = opts || {};
+    var f = areaFilter_(opts);
+    var fy = String(opts.fy || '');
+    var seenFy = {};
+    DB.patients.forEach(function (x) {
+      var k = periodKey_(x.start_date, 'years');
+      if (k) seenFy[k] = true;
+    });
+    var picked = DB.patients.filter(function (x) {
+      return matchesArea_(x, f) && (!fy || periodKey_(x.start_date, 'years') === fy);
+    });
+    var closedCases = picked.filter(function (x) { return x.status === 'closed'; });
+    var tally = function (pick, list) {
       var map = {};
-      DB.patients.forEach(function (x) {
+      (list || picked).forEach(function (x) {
         var k = String(pick(x) || '').trim() || 'ไม่ระบุ';
         map[k] = (map[k] || 0) + 1;
       });
@@ -277,7 +292,7 @@ var API = {
       { label: '20 (เต็ม)', min: 20, max: 20, count: 0 }
     ];
     var progress = [];
-    DB.patients.forEach(function (x) {
+    picked.forEach(function (x) {
       var a = Number(x.first_bi), b = Number(x.latest_bi);
       if (isNaN(b)) return;
       buckets.forEach(function (k) { if (b >= k.min && b <= k.max) k.count++; });
@@ -291,7 +306,10 @@ var API = {
     });
     progress.sort(function (m, n) { return n.gain - m.gain; });
     return {
-      total: DB.patients.length,
+      filter: f,
+      fy: fy,
+      fiscalYears: Object.keys(seenFy).sort().reverse(),
+      total: picked.length,
       assessed: progress.length,
       adl: tally(function (x) {
         var b = Number(x.latest_bi);
@@ -301,6 +319,8 @@ var API = {
       dxGroups: tally(function (x) { return x.dx_group || x.dx; }),
       wards: tally(function (x) { return x.ward; }),
       programs: tally(function (x) { return x.imc_program; }),
+      closed: closedCases.length,
+      dcReasons: tally(function (x) { return x.dc_reason; }, closedCases),
       buckets: buckets,
       progress: progress
     };

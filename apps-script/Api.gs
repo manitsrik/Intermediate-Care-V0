@@ -272,9 +272,32 @@ function apiSaveUser(form) {
  * ข้อมูลหน้ารายงาน สรุปตามกลุ่มที่ใช้ตัดสินใจงานจริง
  * กลุ่ม ADL มาจากผลประเมินครั้งล่าสุดของแต่ละคน ไม่ใช่ครั้งแรก
  */
-function apiReport() {
+/**
+ * สรุปองค์ประกอบของผู้ป่วย รับตัวกรองพื้นที่และปีงบเหมือนแดชบอร์ด
+ *
+ * ปีงบคัดจาก start_date ฐานเดียวกับกราฟผู้ป่วยเข้าใหม่บนแดชบอร์ด
+ * คือ "ผู้ป่วยที่เริ่มโปรแกรมในปีงบนั้น" ไม่ใช่ "ที่จบในปีงบนั้น"
+ * ตรงกับวิธีนับของรายงาน IMC ที่ส่งเขต และทำให้สองหน้าพูดภาษาเดียวกัน
+ */
+function apiReport(opts) {
   currentUser_();
-  var patients = readAll_(SHEETS.PATIENTS);
+  opts = opts || {};
+  var filter = areaFilter_(opts);
+  var fy = String(opts.fy || '');
+
+  var all = readAll_(SHEETS.PATIENTS);
+  var patients = all.filter(function (p) {
+    if (!matchesArea_(p, filter)) return false;
+    return !fy || periodKey_(p.start_date, 'years') === fy;
+  });
+
+  // ตัวเลือกปีงบคิดจากผู้ป่วยทุกคนก่อนกรอง ตัวเลือกจะได้ไม่หายไปตอนเปลี่ยนพื้นที่
+  var seenFy = {};
+  all.forEach(function (p) {
+    var k = periodKey_(p.start_date, 'years');
+    if (k) seenFy[k] = true;
+  });
+  var fiscalYears = Object.keys(seenFy).sort().reverse();
   var latest = {};
   readAll_(SHEETS.BI).forEach(function (r) {
     var hn = String(r.hn), d = String(r.assess_date || '');
@@ -322,13 +345,24 @@ function apiReport() {
 
   var assessed = patients.filter(function (p) { return latest[String(p.hn)]; });
 
+  /*
+    เหตุจบนับเฉพาะเคสที่ปิดแล้ว ถ้าเอาทุกคนมานับ เคสที่ยังดูแลอยู่จะไปกองรวมใน
+    "ไม่ระบุ" จนกลบสัดส่วนของเหตุจบจริง เปอร์เซ็นต์ในแท่งจึงคิดจากฐานเคสที่จบแล้ว
+  */
+  var closedCases = patients.filter(function (p) { return String(p.status) === 'closed'; });
+
   return {
+    filter: filter,
+    fy: fy,
+    fiscalYears: fiscalYears,
     total: patients.length,
     assessed: assessed.length,
     adl: tally(assessed, function (p) { return (latest[String(p.hn)] || {}).adl; }),
     dxGroups: tally(patients, function (p) { return p.dx_group || p.dx; }),
     wards: tally(patients, function (p) { return p.ward; }),
     programs: tally(patients, function (p) { return p.imc_program; }),
+    closed: closedCases.length,
+    dcReasons: tally(closedCases, function (p) { return p.dc_reason; }),
     buckets: buckets,
     progress: progress
   };
@@ -691,6 +725,31 @@ function avgOf_(list) {
   return Math.round((sum / list.length) * 10) / 10;
 }
 
+/**
+ * งานค้างของผู้ป่วยหนึ่งราย คืนรหัสเหตุผลที่ค้าง อาจค้างหลายข้อพร้อมกัน
+ *
+ * เคสที่ปิดแล้วไม่มีอะไรต้องทำต่อ จึงตัดออกตั้งแต่ต้น
+ * ข้อ bi ใช้วันประเมินล่าสุด ถ้ายังไม่เคยประเมินเลยก็นับจากวัน Start แทน
+ * ไม่งั้นคนที่เข้าโปรแกรมมานานแต่ไม่เคยถูกประเมินจะรอดสายตาไปตลอด
+ */
+function attentionFlags_(p, today) {
+  if (String(p.status) === 'closed') return [];
+  var flags = [];
+
+  var appt = String(p.kbh_appt_date || '');
+  if (appt && appt < today) flags.push('appt');
+
+  var end = String(p.imc_end_date || '');
+  if (end && end < today) flags.push('end');
+
+  var since = String(p.latest_bi_date || p.start_date || '');
+  var days = since ? daysBetweenIso_(since, today) : null;
+  if (days !== null && days > CONFIG.BI_STALE_DAYS) flags.push('bi');
+
+  if (String(p.screening_result) === 'NoIMC') flags.push('screen');
+  return flags;
+}
+
 function apiDashboard(opts) {
   currentUser_();
   var filter = areaFilter_(opts);
@@ -703,6 +762,22 @@ function buildDashboard_(patients, assessments, today, filter) {
   var cutoff = prevMonthEnd_(today);
 
   var byMonth = {}, byQuarter = {}, byYear = {};
+
+  /*
+    แต่ละงวดเก็บสี่ตัว: เข้าใหม่ที่เข้าเกณฑ์ / ไม่เข้าเกณฑ์ / ยังไม่คัดกรอง / จบโปรแกรม
+    สามตัวแรกนับจาก start_date ตัวสุดท้ายนับจาก end_date จึงเป็นคนละฐานวันที่กัน
+    หน้าจอต้องเขียนกำกับไว้ ไม่งั้นคนอ่านจะนึกว่าทั้งกราฟนับจากวัน Start
+  */
+  var addPeriod_ = function (iso, field) {
+    if (String(iso || '').length < 7) return;
+    [[byMonth, 'months'], [byQuarter, 'quarters'], [byYear, 'years']].forEach(function (x) {
+      var key = periodKey_(iso, x[1]);
+      if (!key) return;
+      if (!x[0][key]) x[0][key] = { imc: 0, noImc: 0, other: 0, closed: 0 };
+      x[0][key][field]++;
+    });
+  };
+
   var imc = 0, noImc = 0, active = 0, closed = 0;
   var newThisMonth = 0, newImcThisMonth = 0;
   var gains = [];
@@ -714,12 +789,8 @@ function buildDashboard_(patients, assessments, today, filter) {
 
     var d = String(p.start_date || '');
     if (d.length >= 7) {
-      var mKey = periodKey_(d, 'months');
-      var qKey = periodKey_(d, 'quarters');
-      var yKey = periodKey_(d, 'years');
-      byMonth[mKey] = (byMonth[mKey] || 0) + 1;
-      byQuarter[qKey] = (byQuarter[qKey] || 0) + 1;
-      byYear[yKey] = (byYear[yKey] || 0) + 1;
+      addPeriod_(d, String(p.screening_result) === 'IMC' ? 'imc'
+        : (String(p.screening_result) === 'NoIMC' ? 'noImc' : 'other'));
 
       if (d.substring(0, 7) === thisMonth) {
         newThisMonth++;
@@ -727,13 +798,20 @@ function buildDashboard_(patients, assessments, today, filter) {
       }
     }
 
+    // แท่งจบโปรแกรมนับจาก end_date ซึ่งเป็นคนละฐานวันที่กับแท่งเข้าใหม่
+    if (String(p.status) === 'closed') addPeriod_(p.end_date, 'closed');
+
     var a = parseFloat(p.first_bi), b = parseFloat(p.latest_bi);
     if (!isNaN(a) && !isNaN(b)) gains.push(b - a);
   });
 
   var series = function (map, keep) {
     return Object.keys(map).sort().slice(-keep).map(function (k) {
-      return { key: k, count: map[k] };
+      var s = map[k];
+      return {
+        key: k, imc: s.imc, noImc: s.noImc, other: s.other, closed: s.closed,
+        count: s.imc + s.noImc + s.other      // ความสูงรวมของแท่งเข้าใหม่ ความหมายเท่าเดิม
+      };
     });
   };
 
@@ -779,10 +857,24 @@ function buildDashboard_(patients, assessments, today, filter) {
       };
     });
 
+  // ติดธงงานค้างไว้กับผู้ป่วยแต่ละราย ทั้งตัวเลขสรุปและรายชื่อที่กดดูจึงมาจากที่เดียวกัน
+  var view = patients.map(function (p) {
+    var o = displayPatient_(p);
+    o.attention = attentionFlags_(p, today);
+    return o;
+  });
+
   return {
     filter: filter,
     today: today,
-    patients: patients.map(displayPatient_),
+    patients: view,
+    attention: ATTENTION.map(function (it) {
+      return {
+        key: it.key,
+        label: it.label,
+        count: view.filter(function (o) { return o.attention.indexOf(it.key) !== -1; }).length
+      };
+    }),
     geography: GEOGRAPHY,
     districts: areaSummary_(patients, 'district'),
     tambons: areaSummary_(patients, 'tambon', filter.district),

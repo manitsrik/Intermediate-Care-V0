@@ -373,6 +373,11 @@ tbody tr:last-child td { border-bottom: 0; }
 .filters input { min-width: 240px; flex: 1; }
 .filters select { width: auto; }
 
+/* ธงงานค้าง หนึ่งรายค้างได้หลายเรื่องพร้อมกัน ปล่อยให้ตกบรรทัดเองเมื่อช่องแคบ */
+.todo-flags { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+/* วันที่ตกบรรทัดแล้วอ่านยาก และดันทุกแถวในตารางให้สูงขึ้นตาม */
+td.date-cell { white-space: nowrap; }
+
 .empty { text-align: center; color: var(--muted); padding: 40px 16px; }
 .count-line { color: var(--faint); font-size: 13px; margin: 4px 0 0; }
 
@@ -667,8 +672,8 @@ tbody tr:last-child td { border-bottom: 0; }
 .rep-head .head-text { flex: 1 1 260px; gap: 2px; }
 
 /* ปุ่มส่งออกชิดขวาในหัวหน้า ตรงที่เคยเป็นช่องว่างเปล่าข้างชื่อหน้า */
-.rep-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; }
-.rep-actions .btn { display: inline-flex; align-items: center; gap: 7px; }
+.rep-actions, .head-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; }
+.rep-actions .btn, .head-actions .btn { display: inline-flex; align-items: center; gap: 7px; }
 
 .rep-filters {
   flex: 1 0 100%; margin-top: 11px; padding-top: 12px;
@@ -899,6 +904,8 @@ tr.row-flat td.head, tr.row-flat td.name-cell { box-shadow: inset 3px 0 0 var(--
 table.cards td.head { display: none; }
 
 /* ================================================================ มือถือ */
+
+.hide-narrow { display: inline; }
 
 @media (max-width: 900px) {
   body { font-size: 15px; }
@@ -1213,6 +1220,8 @@ tr:hover .row-edit, .tl-item:hover .row-edit { color: var(--brand-ink); }
   .area-selects { width: 100%; }
 }
 @media (max-width: 600px) {
+  .hide-narrow { display: none; }
+
   .area-controls { display: block; }
   .area-current { width: 100%; min-width: 0; }
   /* จอแคบไม่มีดรอปดาวน์ให้ดู หมุดกับข้อความจึงกลับมาบอกพื้นที่แทน */
@@ -1239,7 +1248,7 @@ tr:hover .row-edit, .tl-item:hover .row-edit { color: var(--brand-ink); }
     อยู่ในกล่องเลย เหลือไว้จะได้กรอบเปล่า ๆ ส่วนพื้นที่กับช่วงเวลาที่เลือกอยู่
     เขียนไว้ใต้หัวเรื่องแล้ว จึงไม่มีอะไรหายไปจากกระดาษ
   */
-  .rep-filters, .rep-actions { display: none !important; }
+  .rep-filters, .rep-actions, .head-actions, .filters { display: none !important; }
   /*
     บนกระดาษการ์ดแท่งวางด้วยคอลัมน์ข้อความ ไม่ใช่ grid แบบบนจอ
 

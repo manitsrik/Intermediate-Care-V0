@@ -33,7 +33,7 @@ const apiSource = read('Api.gs');
 const dashboard = apiSource.slice(apiSource.indexOf('function prevMonthEnd_('));
 // หน้ารายงานใช้การคำนวณจริงเช่นกัน พรีวิวจะได้ไม่เพี้ยนจากของที่ deploy
 const report = apiSource.slice(apiSource.indexOf('var ADL_RANK'), apiSource.indexOf('function apiBootstrap()'));
-const displayPatient = apiSource.match(/function displayPatient_\(p\)[\s\S]*?\r?\n\}/)[0];
+const displayPatient = apiSource.match(/function displayPatient_\(p, today\)[\s\S]*?\r?\n\}/)[0];
 
 const mock = `
 <script>
@@ -191,7 +191,7 @@ var API = {
       orgUnit: CONFIG.ORG_UNIT, orgPlace: CONFIG.ORG_PLACE, maskMode: true,
       patients: API.apiListPatients({}),
       alerts: DB.patients.filter(function (x) { return x.kbh_appt_date; }).length,
-      biItems: BI_ITEMS, biMax: BI_MAX, vocab: VOCAB, geography: GEOGRAPHY,
+      biItems: BI_ITEMS, biMax: BI_MAX, attention: ATTENTION, vocab: VOCAB, geography: GEOGRAPHY,
       today: new Date().toISOString().slice(0, 10)
     };
   },
@@ -207,6 +207,7 @@ var API = {
     }).map(function (pt) {
       var o = JSON.parse(JSON.stringify(pt));
       o.full_name = full_(pt);
+      o.attention = attentionFlags_(pt, todayIso_());
       return o;
     });
   },

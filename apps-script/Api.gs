@@ -396,6 +396,7 @@ function apiReport(opts) {
   var mode = fq ? 'quarters' : 'years';
 
   var all = readAll_(SHEETS.PATIENTS);
+  var today = todayIso_();
 
   // ตัวเลือกในดรอปดาวน์คิดจากผู้ป่วยทุกคนก่อนกรอง ตัวเลือกจะได้ไม่หายไปตอนเปลี่ยนตัวกรองอื่น
   var seenFy = {}, seenDx = {};
@@ -449,7 +450,7 @@ function apiReport(opts) {
 
   var views = patients.map(function (p) {
     var hn = String(p.hn);
-    var o = displayPatient_(p);
+    var o = displayPatient_(p, today);
     var b = parseFloat(p.latest_bi);
     o.groups = {
       bucket: isNaN(b) ? '' : bucketOf(b),
@@ -693,7 +694,10 @@ function apiBootstrap() {
   ensurePatientAreaHeaders_();
   var today = todayIso_();
   var weekAhead = addDaysIso_(today, 7);
-  var patients = readAll_(SHEETS.PATIENTS).map(displayPatient_).sort(function (a, b) {
+  // ส่ง today เข้าไปเอง ไม่ปล่อยให้ map ยัด index มาเป็นอาร์กิวเมนต์ที่สองแทน
+  var patients = readAll_(SHEETS.PATIENTS).map(function (p) {
+    return displayPatient_(p, today);
+  }).sort(function (a, b) {
     return String(b.start_date || '').localeCompare(String(a.start_date || ''));
   });
 
@@ -714,6 +718,8 @@ function apiBootstrap() {
     maskMode: CONFIG.MASK_MODE,
     biItems: BI_ITEMS,
     biMax: BI_MAX,
+    // คำเต็มกับป้ายสั้นของงานค้าง หน้าจอจะได้ไม่ต้องมีรายการของตัวเองให้หลุดกัน
+    attention: ATTENTION,
     vocab: VOCAB,
     geography: GEOGRAPHY,
     today: todayIso_()
@@ -722,7 +728,17 @@ function apiBootstrap() {
 
 /* --------------------------------------------------------------- ผู้ป่วย */
 
-function displayPatient_(p) {
+/**
+ * แปลงแถวในชีตเป็นข้อมูลผู้ป่วยที่หน้าจอใช้ได้เลย
+ *
+ * ติดธงงานค้างมาให้ตั้งแต่ตรงนี้ ทุกหน้าที่แสดงผู้ป่วยจึงเห็นงานค้างชุดเดียวกัน
+ * ไม่ใช่เห็นเฉพาะหน้าที่นึกจะคำนวณเอง เดิมมีแต่แดชบอร์ดที่คำนวณ หน้ารายชื่อซึ่งเป็น
+ * หน้าที่ทีมเปิดทุกวันจึงเป็นหน้าที่บอกน้อยที่สุด
+ *
+ * รับ today จากผู้เรียกที่วนหลายราย จะได้ไม่ถามวันที่ตามเขตเวลาซ้ำทุกแถว
+ * ซึ่งเป็นการข้ามไปฝั่ง Java ครั้งหนึ่งต่อผู้ป่วยหนึ่งคน
+ */
+function displayPatient_(p, today) {
   var o = {};
   Object.keys(p).forEach(function (k) { o[k] = p[k]; });
   o.area = patientArea_(p);
@@ -731,6 +747,7 @@ function displayPatient_(p) {
   o.start_date_th = toThaiDate_(p.start_date);
   o.imc_end_date_th = toThaiDate_(p.imc_end_date);
   o.latest_bi_date_th = toThaiDate_(p.latest_bi_date);
+  o.attention = attentionFlags_(p, today || todayIso_());
   return o;
 }
 
@@ -741,6 +758,7 @@ function apiListPatients(opts) {
   var q = String(opts.q || '').trim().toLowerCase();
   var status = opts.status || '';
   var screening = opts.screening || '';
+  var today = todayIso_();
 
   return readAll_(SHEETS.PATIENTS)
     .filter(function (p) {
@@ -750,7 +768,7 @@ function apiListPatients(opts) {
       var hay = [p.hn, p.cid, p.first_name, p.last_name, p.tambon, p.dx].join(' ').toLowerCase();
       return hay.indexOf(q) !== -1;
     })
-    .map(displayPatient_)
+    .map(function (p) { return displayPatient_(p, today); })
     .sort(function (a, b) {
       return String(b.start_date || '').localeCompare(String(a.start_date || ''));
     });
@@ -1225,12 +1243,9 @@ function buildDashboard_(patients, assessments, today, filter) {
       };
     });
 
-  // ติดธงงานค้างไว้กับผู้ป่วยแต่ละราย ทั้งตัวเลขสรุปและรายชื่อที่กดดูจึงมาจากที่เดียวกัน
-  var view = patients.map(function (p) {
-    var o = displayPatient_(p);
-    o.attention = attentionFlags_(p, today);
-    return o;
-  });
+  // ธงงานค้างติดมากับ displayPatient_ แล้ว ทั้งตัวเลขสรุป รายชื่อที่กดดู และหน้ารายชื่อ
+  // จึงอ่านจากชุดเดียวกัน ไม่มีหน้าไหนตีความคำว่า "ค้าง" เป็นของตัวเอง
+  var view = patients.map(function (p) { return displayPatient_(p, today); });
 
   return {
     filter: filter,

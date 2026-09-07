@@ -2299,6 +2299,22 @@ function numOr(v, digits) {
   return digits === 0 ? String(Math.round(v)) : String(v);
 }
 
+/*
+  ฐานที่น้อยเกินกว่าจะพูดแทนคนทั้งกลุ่ม
+
+  ไม่กี่รายแปลว่าขยับรายเดียวเปอร์เซ็นต์เด้งทั้งตัว และต่อให้มีหลายรายแต่ครอบคลุม
+  กลุ่มที่ควรตอบได้ไม่ถึงหนึ่งในสาม ตัวเลขก็เป็นภาพของคนส่วนน้อยไม่ใช่ของกลุ่ม
+  เจอตอนใช้ข้อมูลจริง หน้าจอขึ้น "อยู่ครบ 6 เดือน 50%" ตัวโตเท่ากับตัวอื่น
+  ทั้งที่มาจากสองราย จากเคสที่จบแล้วสามสิบสองราย
+*/
+var THIN_MIN_ROWS = 5;
+var THIN_MIN_SHARE = 1 / 3;
+
+function thinBase(base, of) {
+  if (!base) return false;                       // ศูนย์มีข้อความอธิบายของตัวเองอยู่แล้ว
+  return base < THIN_MIN_ROWS || (of > 0 && base < of * THIN_MIN_SHARE);
+}
+
 function drawReport(r) {
   // ยึดตัวกรองที่เซิร์ฟเวอร์ตอบกลับมาเป็นหลัก เหมือนที่แดชบอร์ดทำ
   // หน้าจอจึงตรงกับชุดข้อมูลที่ได้มาจริงเสมอ และวาดได้แม้ยังไม่เคยตั้งค่าตัวกรอง
@@ -2446,7 +2462,7 @@ function outcomePanel(r) {
   var gainChip = '';
   if (prev && prev.avgGain !== null && o.avgGain !== null && o.avgGain !== undefined) {
     var d = Math.round((o.avgGain - prev.avgGain) * 10) / 10;
-    gainChip = '<span class="fig-chip num">' +
+    gainChip = '<span class="fig-chip fig-delta num">' +
       (d > 0 ? '↑ +' + d : (d < 0 ? '↓ ' + d : '± 0')) + ' เทียบ' + esc(prev.label) + '</span>';
   }
 
@@ -2461,43 +2477,54 @@ function outcomePanel(r) {
         ' ราย · BI เพิ่มเฉลี่ย ' + numOr(prev.avgGain)) + '</div>'
     : '';
 
+  /*
+    ตัวเลขแต่ละตัวมีฐานของตัวเอง และฐานนั้นมาจากคนละกลุ่ม
+    "อยู่ครบ 6 เดือน" ถามได้เฉพาะเคสที่ปิดแล้ว ที่เหลือถามจากผู้ป่วยทั้งกลุ่ม
+    จึงบอก of ไว้ด้วย เพื่อคิดว่าฐานครอบคลุมกลุ่มที่ควรตอบได้มากพอหรือยัง
+  */
   var figs = [
     { value: o.base ? (o.avgGain > 0 ? '+' : '') + numOr(o.avgGain) : '—',
       label: 'BI เพิ่มเฉลี่ย',
       meta: o.base ? numOr(o.avgFirst) + ' → ' + numOr(o.avgLatest) + ' · จาก ' + o.base + ' ราย'
         : 'ยังไม่มีใครประเมินครบสองครั้ง',
-      chip: gainChip },
+      base: o.base, of: r.total, chip: gainChip },
 
     { value: shift.base ? pct(shift.up, shift.base) + '%' : '—',
       label: 'เลื่อนกลุ่ม ADL ดีขึ้น',
       meta: shift.base ? shift.up + ' จาก ' + shift.base + ' ราย · คงที่ ' + shift.same + ' · แย่ลง ' + shift.down
-        : 'ต้องประเมินซ้ำอย่างน้อยสองครั้งจึงเทียบได้' },
+        : 'ต้องประเมินซ้ำอย่างน้อยสองครั้งจึงเทียบได้',
+      base: shift.base, of: r.total },
 
     { value: six.base ? pct(six.stayed, six.base) + '%' : '—',
       label: 'อยู่ในโปรแกรมครบ 6 เดือน',
       meta: six.base ? six.stayed + ' จาก ' + six.base + ' รายที่จบแล้ว'
-        : 'ยังไม่มีเคสที่ปิดพร้อมวันครบทั้งสองด้าน' },
+        : 'ยังไม่มีเคสที่ปิดพร้อมวันครบทั้งสองด้าน',
+      base: six.base, of: r.closed },
 
     // ค่ากลางเป็นตัวเลขหลัก เพราะรอนานผิดปกติรายเดียวดันค่าเฉลี่ยได้มากในข้อมูลไม่กี่สิบราย
     { value: numOr(wait.median, 0),
       label: 'วันรอเข้าโปรแกรม',
       meta: wait.base ? 'วัน (ค่ากลาง) · เฉลี่ย ' + numOr(wait.avg) + ' · จาก ' + wait.base + ' ราย'
-        : 'ต้องมีทั้งวัน D/C และวัน Start' },
+        : 'ต้องมีทั้งวัน D/C และวัน Start',
+      base: wait.base, of: r.total },
 
     { value: numOr(pt.median, 0),
       label: 'ครั้งที่ได้ PT',
       meta: pt.base ? 'ครั้ง (ค่ากลาง) · เฉลี่ย ' + numOr(pt.avg) + ' · จาก ' + pt.base + ' ราย'
-        : 'ยังไม่มีบันทึกการติดตามชนิด PT' }
+        : 'ยังไม่มีบันทึกการติดตามชนิด PT',
+      base: pt.base, of: r.total }
   ];
 
   return '<div class="panel"><div class="panel-head">' +
     '<span class="panel-ico">' + icon('pulse', 20, 1.9) + '</span>' +
     '<h2>ผลลัพธ์การดูแล<span class="sub">แต่ละตัวเลขมีฐานไม่เท่ากัน เขียนกำกับไว้ใต้ตัวเลขแล้ว</span></h2></div>' +
     '<div class="outcome">' + figs.map(function (f) {
-      return '<div class="outcome-fig">' +
+      var thin = thinBase(f.base, f.of);
+      return '<div class="outcome-fig' + (thin ? ' fig-thin' : '') + '">' +
         '<div class="fig-v num">' + esc(f.value) + '</div>' +
         '<div class="fig-k">' + esc(f.label) + '</div>' +
         '<div class="fig-m num">' + subParts(f.meta) + '</div>' +
+        (thin ? '<span class="fig-chip fig-warn">ข้อมูลยังน้อย</span>' : '') +
         (f.chip || '') + '</div>';
     }).join('') + '</div>' + prevLine + '</div>';
 }

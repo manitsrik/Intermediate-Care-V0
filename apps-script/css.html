@@ -701,9 +701,15 @@ tbody tr:last-child td { border-bottom: 0; }
 .fig-k { font-size: 13px; font-weight: 500; color: var(--body); margin: 3px 0 4px; }
 .fig-m { font-size: 12px; color: var(--muted); line-height: 1.55; }
 .fig-chip {
-  display: inline-block; margin-top: 7px; padding: 2px 9px; border-radius: 999px;
+  display: inline-block; margin-top: 7px; margin-right: 5px; padding: 2px 9px; border-radius: 999px;
   background: var(--brand-soft); color: var(--brand-ink); font-size: 11.5px; font-weight: 600;
 }
+/*
+  ตัวเลขที่มาจากคนไม่กี่ราย ทำให้จางลงและติดป้ายไว้ ดูรายละเอียดที่ thinBase() ใน js.html
+  ไม่ซ่อนตัวเลขทิ้ง เพราะสองรายก็ยังเป็นข้อมูล แค่ต้องไม่อ่านเป็นภาพของทั้งกลุ่ม
+*/
+.fig-thin .fig-v { color: var(--faint); }
+.fig-warn { background: var(--warn-soft); color: var(--warn); }
 /* บรรทัดปิดท้ายแผง เป็นบริบทของทุกช่องพร้อมกัน จึงกินความกว้างเต็มใต้เส้นคั่น */
 .outcome-prev {
   margin-top: 15px; padding-top: 12px; border-top: 1px solid var(--line-soft);

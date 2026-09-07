@@ -147,6 +147,26 @@ async function screenshot(name) {
       '!document.querySelector(".outcome").textContent.includes("NaN")' +
       ' && document.querySelectorAll(".outcome .outcome-fig").length === 5');
     /*
+      ตัวเลขที่มาจากคนไม่กี่รายต้องดูออกว่าฐานน้อย ไม่ใช่ตัวโตเท่ากับตัวที่ฐานหนา
+      ข้อมูลตัวอย่างหกราย: ครั้งที่ได้ PT ไม่มีใครกรอกเลยจึงเป็นศูนย์ไม่ติดป้าย
+      ส่วนอยู่ครบ 6 เดือนมีฐานสองรายจากที่จบแล้วสองราย ซึ่งน้อยกว่าห้าจึงต้องติด
+    */
+    await check('A figure built on a handful of rows says so',
+      'reportCache.outcome.sixMonth.base === 2' +
+      ' && [...document.querySelectorAll(".outcome-fig")]' +
+      '      .filter(f => f.textContent.includes("อยู่ในโปรแกรมครบ"))[0]' +
+      '      .classList.contains("fig-thin")' +
+      ' && [...document.querySelectorAll(".outcome-fig")]' +
+      '      .filter(f => f.textContent.includes("BI เพิ่มเฉลี่ย"))[0]' +
+      '      .classList.contains("fig-thin") === false' +
+      ' && document.querySelectorAll(".fig-warn").length > 0');
+    // เกณฑ์ต้องดูสัดส่วนด้วย ไม่ใช่ดูแค่จำนวนราย ฐานสิบจากร้อยก็ยังพูดแทนทั้งกลุ่มไม่ได้
+    await check('The threshold looks at share of the group, not just row count',
+      'thinBase(2, 32) === true && thinBase(10, 100) === true' +
+      ' && thinBase(59, 59) === false && thinBase(28, 59) === false' +
+      ' && thinBase(0, 59) === false');
+
+    /*
       หน้ารายงานต้องไม่หยิบการ์ดสีของแดชบอร์ดมาใช้ ไม่งั้นสองหน้าที่ตอบคนละคำถาม
       จะหน้าตาเหมือนกันจนแยกไม่ออก ยิ่งใบ "คะแนน BI เพิ่มเฉลี่ย" มีอยู่ทั้งสองหน้า
       คนละฐานคนละช่วงเวลา ถ้าวางเหมือนกันจะอ่านไม่ออกว่าเป็นเลขของหน้าไหน
@@ -309,7 +329,7 @@ async function screenshot(name) {
     */
     await check('No delta badge when the previous period has nothing to compare',
       'reportCache.prev.avgGain === null' +
-      ' && document.querySelectorAll(".outcome .fig-chip").length === 0');
+      ' && document.querySelectorAll(".outcome .fig-delta").length === 0');
     await evaluate('changeReportYear("")');
     await until(() => evaluate('reportCache.fy === ""'));
 

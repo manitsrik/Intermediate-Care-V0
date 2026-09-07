@@ -282,6 +282,14 @@ var REPORT_GAPS = [
   { key: 'area',    label: 'ยังไม่ระบุพื้นที่' },
   { key: 'start',   label: 'ไม่มีวัน Start' },
   { key: 'bi',      label: 'ยังไม่เคยประเมิน BI' },
+  /*
+    สามข้อนี้เป็นช่องที่การ์ดผลลัพธ์ใช้คิดโดยตรง ขาดเมื่อไรฐานของการ์ดหดทันที
+    เคยไม่ได้ตรวจ หน้าจอจึงขึ้น "อยู่ครบ 6 เดือน 50%" จากฐานสองราย
+    ทั้งที่จบไปแล้ว 32 ราย โดยไม่มีอะไรบอกว่าอีกสามสิบรายหายไปไหน
+  */
+  { key: 'end',     label: 'ปิดเคสแล้วแต่ไม่มีวันสิ้นสุด' },
+  { key: 'dc',      label: 'ไม่มีวันจำหน่ายจากหอผู้ป่วย (D/C)' },
+  { key: 'pt',      label: 'ยังไม่มีบันทึกจำนวนครั้งที่ได้ PT' },
   { key: 'dx',      label: 'ไม่ระบุการวินิจฉัย' },
   { key: 'ward',    label: 'ไม่ระบุหอผู้ป่วย' },
   { key: 'program', label: 'ไม่ระบุรูปแบบโปรแกรม' },
@@ -333,9 +341,23 @@ function periodLabel_(key) {
  */
 function gapFlags_(p, groups, everAssessed) {
   var flags = [];
+  var closed = String(p.status) === 'closed';
+
   if (patientArea_(p).districtKey === '__unknown') flags.push('area');
   if (String(p.start_date || '').length < 7) flags.push('start');
   if (!everAssessed) flags.push('bi');
+
+  // วันสิ้นสุดถามเฉพาะเคสที่ปิดแล้ว เคสที่ยังดูแลอยู่ยังไม่ถึงเวลาต้องมี
+  if (closed && String(p.end_date || '').length < 10) flags.push('end');
+  if (String(p.dc_date || '').length < 10) flags.push('dc');
+
+  /*
+    ช่องนี้ระบบนับให้เองจากบันทึกการติดตามที่ประเภทเป็น PT
+    ว่างแปลว่ายังไม่เคยมีใครบันทึกการติดตามให้รายนี้ ไม่ได้แปลว่าผู้ป่วยไม่ได้ PT
+    ป้ายจึงเขียนว่า "ยังไม่มีบันทึก" ไม่ใช่ "ไม่ได้ PT"
+  */
+  if (isNaN(parseFloat(p.pt_visit_count))) flags.push('pt');
+
   if (groups.dx === UNSPECIFIED) flags.push('dx');
   if (groups.ward === UNSPECIFIED) flags.push('ward');
   if (groups.program === UNSPECIFIED) flags.push('program');

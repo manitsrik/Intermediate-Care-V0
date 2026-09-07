@@ -421,6 +421,44 @@ test('ช่องที่กรอกไม่ครบถูกรวมไ�
   // C D F G H I J ยังไม่เคยประเมิน ส่วน A B E มีใบประเมินแล้ว
   assert.equal(r.gaps.filter(g => g.key === 'bi')[0].count, patients.length - 3);
 });
+test('แจ้งช่องที่การ์ดผลลัพธ์ใช้คิด ไม่ใช่เฉพาะช่องที่โผล่เป็น "ไม่ระบุ"', () => {
+  const count = (r, key) => r.gaps.filter(g => g.key === key)[0].count;
+
+  /*
+    ก่อนหน้านี้ไม่ได้ตรวจสามข้อนี้ หน้าจอจึงขึ้น "อยู่ครบ 6 เดือน" จากฐานสองราย
+    ทั้งที่จบไปแล้วสามสิบสองราย โดยไม่มีอะไรบอกว่าอีกสามสิบรายหายไปไหน
+  */
+  const before = ctx.apiReport();
+  assert.equal(count(before, 'dc'), patients.length);   // ไม่มีใครมีวัน D/C
+  assert.equal(count(before, 'pt'), patients.length);   // ไม่มีใครมีจำนวนครั้ง PT
+  assert.equal(count(before, 'end'), 0);                // เคสที่ปิดแล้วมีวันสิ้นสุดครบ
+
+  const closed = patients.filter(p => p.status === 'closed')[0];
+  const keepEnd = closed.end_date;
+  closed.end_date = '';
+  assert.equal(count(ctx.apiReport(), 'end'), 1);
+  closed.end_date = keepEnd;
+
+  // เคสที่ยังดูแลอยู่ไม่ถูกถามหาวันสิ้นสุด เพราะยังไม่ถึงเวลาต้องมี
+  assert.ok(patients.filter(p => p.status !== 'closed').length > 0);
+  assert.equal(count(ctx.apiReport(), 'end'), 0);
+
+  patients[0].dc_date = '2026-07-20';
+  patients[0].pt_visit_count = 4;
+  const after = ctx.apiReport();
+  assert.equal(count(after, 'dc'), patients.length - 1);
+  assert.equal(count(after, 'pt'), patients.length - 1);
+  assert.equal(after.outcome.admitToStart.base, 1);
+  assert.equal(after.outcome.ptVisits.base, 1);
+
+  // ทุกข้อในกล่องต้องตรงกับรายชื่อที่กดเข้าไปดูเหมือนข้ออื่น
+  after.gaps.forEach(g => {
+    assert.equal(after.patients.filter(p => p.gaps.indexOf(g.key) !== -1).length, g.count, g.key);
+  });
+
+  delete patients[0].dc_date;
+  delete patients[0].pt_visit_count;
+});
 test('ตัวชี้วัดผลลัพธ์คิดจากข้อมูลที่มีจริง ไม่เดาให้เมื่อยังไม่มีอะไรให้เทียบ', () => {
   const o = ctx.apiReport().outcome;
 

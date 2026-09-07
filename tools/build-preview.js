@@ -37,6 +37,7 @@ const displayPatient = apiSource.match(/function displayPatient_\(p, today\)[\s\
 // การเรียงการติดตามกับการคัดรายชื่อที่ถึงกำหนดใช้ของจริง พรีวิวจะได้ไม่ตอบคนละอย่างกับที่ deploy
 const followupLogic = [
   /function compareFollowup_\(a, b\)[\s\S]*?\r?\n\}/,
+  /function compareFollowupDesc_\(a, b\)[\s\S]*?\r?\n\}/,
   /function dueFollowups_\(patients, rows, today\)[\s\S]*?\r?\n\}/
 ].map((re) => apiSource.match(re)[0]).join('\n\n');
 
@@ -315,11 +316,7 @@ var API = {
       o.patient_name = pt ? full_(pt) : '';
       o.fu_date_th = thai_(f.fu_date);
       return o;
-    }).sort(function (a, b) {
-      var ad = String(a.fu_date || ''), bd = String(b.fu_date || '');
-      if (!ad !== !bd) return ad ? -1 : 1;
-      return ad === bd ? compareFollowup_(a, b) : (ad > bd ? -1 : 1);
-    });
+    }).sort(compareFollowupDesc_);
     return { rows: rows, due: dueFollowups_(DB.patients, rows, todayIso_()) };
   },
 

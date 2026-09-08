@@ -1638,7 +1638,7 @@ function biChart(list) {
     ถ้าทุกตัวเท่ากันหมด "ตอนนี้อยู่ตรงไหน" จะจมหายไปกับประวัติ
   */
   var valueY = function (i) {
-    var v = Number(list[i].total), at = y(v), last = i === lastIdx;
+    var v = Number(list[i].total), at = y(v);
     var prev = i > 0 ? Number(list[i - 1].total) : null;
     var next = i < lastIdx ? Number(list[i + 1].total) : null;
     /*
@@ -1646,10 +1646,15 @@ function biChart(list) {
       เขียนใต้จุดแทนซึ่งเป็นที่โล่ง ส่วนจุดอื่นเขียนเหนือจุดตามปกติ
     */
     var dip = prev !== null && next !== null && v < prev && v < next;
-    var above = at - (last ? 12 : 11);
-    var below = at + (last ? 18 : 17);
+    var above = at - 12;
+    var below = at + 18;
     var at_ = dip ? below : above;
-    if (at_ < 13) at_ = below;      // ชนขอบบนตอนคะแนนเต็ม
+    /*
+      คะแนนสูงสุดสามค่า (18-20) จุดชิดขอบบนจนเขียนเหนือจุดแล้วกรอบข้อความไปชนขอบ
+      ย้ายลงใต้จุดให้เหมือนกันทั้งสามค่า เดิมตัดที่ 13 ทำให้ 18 ยังอยู่เหนือจุดตัวเดียว
+      พอดีขอบ ส่วน 19 กับ 20 ลงไปอยู่ใต้จุดแล้ว ซึ่งดูเหมือนวาดพลาดมากกว่าตั้งใจ
+    */
+    if (at_ < 15) at_ = below;      // ชนขอบบนตอนคะแนนสูงสุด
     if (at_ > 172) at_ = above;     // ลงไปชนป้ายวันที่ที่ y=182
     return at_;
   };
@@ -1663,9 +1668,14 @@ function biChart(list) {
     if (i === n - 1 || prevValueX - xs[i] >= 26) { showValue[i] = true; prevValueX = xs[i]; }
   }
 
+  /*
+    ทุกจุดขนาดเท่ากันหมด เคยให้จุดล่าสุดตัวใหญ่กว่าเพื่อเน้นว่าเป็นค่าปัจจุบัน
+    แต่ต่างกันแค่สองพิกเซลแบบนั้นอ่านแล้วเหมือนวาดพลาด ไม่ได้อ่านว่าตั้งใจเน้น
+    ค่าทุกตัวเป็นข้อมูลชนิดเดียวกัน ทำให้เท่ากันแล้วกราฟอ่านเป็นชุดเดียว
+    ส่วนค่าล่าสุดดูออกจากตำแหน่งขวาสุดกับแถวล่างสุดของตารางอยู่แล้ว
+  */
   var values = list.map(function (a, i) {
     if (!showValue[i]) return '';
-    var last = i === lastIdx;
     /*
       จุดแรกอยู่ชิดแกนตั้งพอดี ถ้าเขียนเลขกึ่งกลางจุดจะไปประกบกับตัวเลขบนแกน
       แล้วอ่านติดกันเป็นเลขเดียว เช่น "15" ของแกนกับ "13" ของจุดกลายเป็น "15 13"
@@ -1674,8 +1684,7 @@ function biChart(list) {
     var fromLeft = i === 0 && n > 1;
     return '<text x="' + (xs[i] + (fromLeft ? 6 : 0)).toFixed(1) + '" y="' + valueY(i).toFixed(1) + '" ' +
       'text-anchor="' + (fromLeft ? 'start' : 'middle') + '" ' +
-      'font-size="' + (last ? 13 : 11) + '" font-weight="' + (last ? 600 : 500) + '" ' +
-      'fill="' + (last ? '#1f2933' : '#6f7c89') + '">' + esc(a.total) + '</text>';
+      'font-size="12" font-weight="600" fill="#3f4a56">' + esc(a.total) + '</text>';
   }).join('');
 
   var caption = single

@@ -433,15 +433,23 @@ function ddItem(iconName, label, onclick) {
     '<span>' + esc(label) + '</span></button>';
 }
 
+/**
+ * โฟกัสช่องค้นหาในหน้ารายชื่อ พร้อมเลือกคำค้นเดิมไว้ให้พิมพ์ทับได้เลยโดยไม่ต้องลบก่อน
+ * เรียกได้เฉพาะหลังหน้าวาดเสร็จ ถ้ายังไม่มีช่องอยู่จริงจะไม่ทำอะไร
+ */
+function focusListSearch_() {
+  var f = document.getElementById('f-q');
+  if (!f) return;
+  f.focus();
+  f.select();
+}
+
 function wireTopbar() {
-  // พิมพ์ที่แถบบนแล้วกรองรายชื่อทันที ไม่ต้องรอเซิร์ฟเวอร์เพราะข้อมูลอยู่ในเครื่องแล้ว
-  document.getElementById('top-search').addEventListener('input', function (e) {
-    listFilter.q = e.target.value;
-    if (VIEW.name !== 'list') { go('list'); return; }
-    var f = document.getElementById('f-q');
-    if (f) f.value = listFilter.q;
-    paintRows();
-  });
+  // อยู่หน้าอื่นต้องรอให้หน้ารายชื่อวาดเสร็จก่อน ช่องค้นหาถึงจะมีตัวตนให้โฟกัส
+  document.getElementById('btn-search').onclick = function () {
+    if (VIEW.name === 'list') { focusListSearch_(); return; }
+    Promise.resolve(go('list')).then(focusListSearch_);
+  };
 
   document.getElementById('btn-quick').onclick = function (e) {
     e.stopPropagation();
@@ -460,7 +468,6 @@ function wireTopbar() {
       ddItem('pulse', 'โหลดข้อมูลใหม่', 'reloadAll()'));
   };
 
-  document.getElementById('btn-pdf').onclick = savePdf;
   document.getElementById('sheet-close').onclick = closeList;
   document.getElementById('sheet-excel').onclick = exportSheet;
   document.getElementById('listmodal').onclick = function (e) {
@@ -520,36 +527,14 @@ window.addEventListener('beforeprint', fillPrintHeader);
   ซึ่งไลบรารีพวกนั้นวาดไม่ออก จะได้วงว่างเปล่า ส่วนการพิมพ์ใช้ตัวเบราว์เซอร์เอง
   จึงได้ทุกอย่างตรงกับที่เห็นบนจอ และตัวหนังสือใน PDF ยังคัดลอกกับค้นหาได้
 
-  หน้ารายงานพิมพ์ได้เองด้วย ไม่ใช่ถูกลากกลับไปแดชบอร์ดเหมือนเดิม
-  เพราะเป็นหน้าที่ถูกพิมพ์ไปแนบรายงานบ่อยที่สุด ส่วนหน้าอื่นเป็นฟอร์มกับรายชื่อ
-  ซึ่งพิมพ์ออกมาแล้วไม่ได้ใช้ จึงพากลับไปหน้าที่พิมพ์แล้วได้เรื่องแทน
+  เหลือผู้เรียกเดียวคือปุ่มในหัวหน้ารายงาน ซึ่งจัดหน้ากระดาษไว้แล้ว
+  จึงไม่ต้องเช็คว่าหน้านี้พิมพ์ได้ไหมแล้วถามพาไปหน้าอื่นเหมือนตอนที่ปุ่มอยู่บนแถบบน
+  หน้าอื่นที่จัดกระดาษไว้เหมือนกันคือแดชบอร์ด สั่งพิมพ์ด้วย Ctrl+P ได้ตามปกติ
+  หัวและท้ายกระดาษยังถูกเติมให้ผ่าน beforeprint ข้างบน
 */
-var PRINTABLE = ['dashboard', 'report'];
-
-function printNow_() {
+function savePdf() {
   // เผื่อเวลาให้จัดหน้าเสร็จก่อน ไม่งั้นบางทีได้กระดาษที่ยังวางของไม่ครบ
   setTimeout(function () { window.print(); }, 120);
-}
-
-/**
- * เดิมหน้าที่พิมพ์ไม่ได้จะถูกพาไปแดชบอร์ดแล้วสั่งพิมพ์ทันทีโดยไม่บอกอะไรเลย
- * คนที่กดจากหน้ารายชื่อจึงได้กระดาษเป็นแดชบอร์ดโดยไม่รู้ว่าเกิดอะไรขึ้น
- * ทางลัดยังอยู่ แต่ต้องถามก่อน และบอกทางที่ตรงกว่าให้ด้วยถ้ามี
- */
-function savePdf() {
-  closeDropdown();
-  if (PRINTABLE.indexOf(VIEW.name) !== -1) { printNow_(); return; }
-
-  var hint = VIEW.name === 'list'
-    ? ' ถ้าต้องการรายชื่อเป็นไฟล์ ใช้ปุ่มส่งออกรายชื่อในหน้านี้ได้เลย'
-    : '';
-  askConfirm('หน้านี้ยังพิมพ์ไม่ได้',
-    'พิมพ์ได้เฉพาะหน้าแดชบอร์ดกับหน้ารายงาน จะไปพิมพ์แดชบอร์ดแทนไหม' + hint,
-    { kind: 'info', confirmText: 'ไปหน้าแดชบอร์ด' }
-  ).then(function (ok) {
-    if (!ok) return;
-    Promise.resolve(go('dashboard')).then(printNow_);
-  });
 }
 
 /** ทิ้งของที่เก็บไว้ทั้งหมดแล้ววาดหน้าปัจจุบันใหม่ ใช้ตอนสงสัยว่าเห็นข้อมูลเก่า */
@@ -768,8 +753,9 @@ function renderList(param) {
     }
     return;
   }
+  // คืน promise ออกไปด้วย ปุ่มค้นหาบนแถบบนต้องรอจนวาดเสร็จก่อนจึงโฟกัสช่องค้นหาได้
   busy();
-  loadPatients().then(drawList).catch(fail);
+  return loadPatients().then(drawList).catch(fail);
 }
 
 function loadPatients() {
@@ -917,14 +903,9 @@ function drawList() {
   paintRows();
 }
 
-/**
- * ล้างตัวกรองทุกช่องกลับไปดูทุกราย เรียกจากหน้าว่างตอนกรองจนไม่เหลือใคร
- * ล้างช่องค้นหาบนแถบบนด้วย ไม่งั้นคำค้นเดิมจะค้างอยู่ตรงนั้นทั้งที่ตัวกรองถูกล้างไปแล้ว
- */
+/** ล้างตัวกรองทุกช่องกลับไปดูทุกราย เรียกจากหน้าว่างตอนกรองจนไม่เหลือใคร */
 function clearListFilters() {
   listFilter = { q: '', status: '', screening: '', todo: '' };
-  var top = document.getElementById('top-search');
-  if (top) top.value = '';
   drawList();
 }
 

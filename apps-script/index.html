@@ -60,21 +60,17 @@
   <div class="content">
 
     <header class="topbar">
-      <div class="search">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-             stroke-width="2" stroke-linecap="round" aria-hidden="true">
-          <circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.6-3.6"></path>
-        </svg>
-        <input id="top-search" autocomplete="off" placeholder="ค้นหาผู้ป่วย (HN / ชื่อ-สกุล) ...">
-      </div>
-
       <div class="top-actions">
-        <button class="ic-btn" id="btn-pdf" aria-label="บันทึกหน้านี้เป็น PDF">
+        <!--
+          ปุ่มค้นหาพาไปหน้ารายชื่อแล้วโฟกัสช่องค้นหาของหน้านั้น ไม่ได้มีช่องของตัวเอง
+          เดิมตรงนี้เป็นช่องค้นหาเต็มความกว้าง ซึ่งพอเข้าหน้ารายชื่อจะกลายเป็นช่องที่สอง
+          ทำงานเหมือนกันเป๊ะวางซ้อนกันคนละบรรทัด ส่วนตอนอยู่หน้าอื่นถ้าเผลอพิมพ์ลงไป
+          จะเด้งออกจากหน้านั้นทันทีโดยไม่ถาม
+        -->
+        <button class="ic-btn" id="btn-search" aria-label="ค้นหาผู้ป่วย">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M14 3H7.4A1.4 1.4 0 0 0 6 4.4v15.2A1.4 1.4 0 0 0 7.4 21h9.2a1.4 1.4 0 0 0 1.4-1.4V7z"></path>
-            <path d="M13.8 3.1v4.1h4.1"></path>
-            <path d="M12 11.4v5.2M9.7 14.3l2.3 2.3 2.3-2.3"></path>
+            <circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.6-3.6"></path>
           </svg>
         </button>
 

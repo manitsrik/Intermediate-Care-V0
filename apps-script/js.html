@@ -332,7 +332,8 @@ function renderNav() {
   var items = visibleNav();
 
   document.getElementById('sidenav').innerHTML = items.map(function (n) {
-    return '<button class="navitem" data-nav="' + n.key + '" onclick="go(\'' + n.key + '\')">' +
+    return '<button class="navitem" data-nav="' + n.key + '" title="' + esc(n.label) + '" ' +
+      'onclick="go(\'' + n.key + '\')">' +
       icon(n.icon) + '<span>' + esc(n.label) + '</span></button>';
   }).join('');
 
@@ -340,6 +341,36 @@ function renderNav() {
     return '<button class="tab" data-nav="' + n.key + '" onclick="go(\'' + n.key + '\')">' +
       icon(n.icon, 22) + '<span>' + esc(n.short) + '</span></button>';
   }).join('');
+}
+
+/*
+  ย่อแถบข้างเหลือแค่ไอคอนได้ ตารางเวชระเบียนกว้างกว่าที่จอโน้ตบุ๊กในวอร์ดมีให้
+  จำค่าไว้ในเครื่อง เพราะเป็นความชอบของเครื่องนั้น ไม่ใช่ของคนที่ล็อกอินอยู่
+  จึงแยกกับ SHELL_KEY ที่ถูกเขียนทับใหม่ทุกครั้งที่ชื่อหน่วยงานเปลี่ยน
+*/
+var NAVMIN_KEY = 'imc.navmin.v1';
+var navMin = false;
+
+function readNavMin_() {
+  try { return localStorage.getItem(NAVMIN_KEY) === '1'; } catch (e) { return false; }
+}
+
+function applyNavMin_() {
+  document.body.classList.toggle('nav-min', navMin);
+  var b = document.getElementById('nav-toggle');
+  if (b) {
+    b.title = navMin ? 'ขยายเมนู' : 'ย่อเมนู';
+    b.setAttribute('aria-label', b.title);
+    b.setAttribute('aria-expanded', navMin ? 'false' : 'true');
+  }
+  // ตอนย่อ ชื่อระบบถูกซ่อน วัดความกว้างไม่ได้ ต้องวัดใหม่ตอนกางกลับออกมา
+  if (!navMin) fitBrandText();
+}
+
+function toggleNav() {
+  navMin = !navMin;
+  try { localStorage.setItem(NAVMIN_KEY, navMin ? '1' : '0'); } catch (e) { /* บางเบราว์เซอร์ปิด storage ใน iframe */ }
+  applyNavMin_();
 }
 
 function go(name, param) {
@@ -639,6 +670,10 @@ function netError_(e, fn) {
  * จะได้ไม่วาบให้เห็นเมนูที่ตัวเองกดไม่ได้
  */
 function preboot() {
+  // ตั้งก่อนวาดอย่างอื่น จะได้ไม่วาบให้เห็นแถบกว้างแล้วหดตอนโหลดเสร็จ
+  navMin = readNavMin_();
+  applyNavMin_();
+
   var s = readShell_();
   if (s) {
     document.getElementById('app-name').textContent = s.appName || '';

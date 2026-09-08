@@ -32,6 +32,7 @@
   --radius: 12px;
   --radius-lg: 16px;
   --sidebar-w: 256px;
+  --sidebar-min: 76px;
   --topbar-h: 74px;
 
   /* สีการ์ดสถิติ ตัวหนังสือเข้มพอให้อ่านบนพื้นอ่อนได้ทุกใบ */
@@ -79,6 +80,7 @@ main { flex-grow: 1; padding: 18px 26px 32px; max-width: 1240px; width: 100%; }
   display: flex; flex-direction: column;
   padding: 18px 12px 22px;
   position: sticky; top: 0; height: 100vh; overflow: hidden;
+  transition: width .16s ease;
 }
 
 /*
@@ -95,6 +97,14 @@ main { flex-grow: 1; padding: 18px 26px 32px; max-width: 1240px; width: 100%; }
   background: none; border: 0; padding: 6px 0 24px; cursor: pointer;
   font-family: inherit; text-align: left; color: inherit; width: 100%;
 }
+/* ลอยทับมุมขวาบน จึงไม่ตัดความกว้างที่ fitBrandText() ใช้ขยายชื่อระบบ */
+.nav-toggle {
+  position: absolute; top: 16px; right: 12px;
+  width: 34px; height: 34px; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 0; border-radius: 9px; background: none; color: #9dc9cb; cursor: pointer;
+}
+.nav-toggle:hover { background: rgba(255,255,255,.09); color: #fff; }
 /* ข้อความกินพื้นที่ที่เหลือทั้งหมด และทุกบรรทัดเริ่มที่ขอบเดียวกันใต้ชื่อระบบ */
 /* ลูกทุกตัวต้องกว้างเท่าข้อความจริง ไม่ใช่ยืดเต็มกล่อง ไม่งั้น fitBrandText วัดความกว้างไม่ได้ */
 .brand-text {
@@ -156,6 +166,20 @@ main { flex-grow: 1; padding: 18px 26px 32px; max-width: 1240px; width: 100%; }
 .art-sub { color: #8cc2c4; font-size: 12px; margin: 12px 0 0; line-height: 1.5; }
 
 @media (max-height: 780px) { .side-art { display: none; } }
+
+/*
+  โหมดย่อ เหลือแค่ไอคอน เผื่อจอโน้ตบุ๊กในวอร์ดที่ตารางเวชระเบียนล้นขอบ
+  ชื่อระบบกับชื่อเมนูซ่อนด้วย display: none ไม่ใช่บีบความกว้างให้เหลือศูนย์
+  เพราะ fitBrandText() จะได้รู้ว่าวัดความกว้างไม่ได้แล้วข้ามไป
+  ไม่ไปตั้งขนาดตัวอักษรจากศูนย์ ซึ่งจะทำให้กางกลับมาแล้วชื่อหาย
+*/
+body.nav-min .sidebar { width: var(--sidebar-min); padding-left: 10px; padding-right: 10px; }
+/* ไม่เหลือชื่อระบบให้ปุ่มยืนเคียง จึงกลับเข้าแถวปกติแล้วขึ้นไปอยู่บนสุดกลางแถบ */
+body.nav-min .nav-toggle { position: static; order: -1; align-self: center; margin-bottom: 12px; }
+body.nav-min .brand { justify-content: center; padding: 0 0 18px; }
+body.nav-min .brand-text, body.nav-min .side-art { display: none; }
+body.nav-min .navitem { justify-content: center; gap: 0; padding: 12px 0; }
+body.nav-min .navitem > span { display: none; }
 
 /* วงกลมอักษรย่อ ใช้ทั้งในตาราง หน้าเวชระเบียน และแถบบน */
 .avatar {

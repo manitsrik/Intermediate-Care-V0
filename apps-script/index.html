@@ -35,6 +35,20 @@
       </span>
     </button>
 
+    <!--
+      ปุ่มย่อเมนูวางลอยทับมุมขวาบน ไม่ใช่แทรกเป็นคอลัมน์ในแถวเดียวกับโลโก้
+      เพราะ fitBrandText() ขยายชื่อระบบให้ชนขอบขวาพอดีตามความกว้างที่มี
+      ถ้าปุ่มไปกินความกว้าง ชื่อหน่วยงานจะโดนตัดท้ายทันที ตรงที่ปุ่มทับมีแค่
+      คำว่า IMC ซึ่งสั้นกว่าครึ่งแถบอยู่แล้ว บรรทัดที่ยาวจริงอยู่ต่ำกว่าปุ่ม
+    -->
+    <button class="nav-toggle" id="nav-toggle" onclick="toggleNav()"
+            title="ย่อเมนู" aria-label="ย่อเมนู" aria-expanded="true">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="1.9" stroke-linecap="round" aria-hidden="true">
+        <path d="M4 7h16M4 12h16M4 17h16"></path>
+      </svg>
+    </button>
+
     <nav class="sidenav" id="sidenav"></nav>
 
     <div class="side-art" aria-hidden="true">

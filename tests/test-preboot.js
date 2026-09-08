@@ -30,8 +30,10 @@ html.replace(/<script>([\s\S]*?)<\/script>/g, function (_, body) {
 function makeEl(id) {
   return {
     id: id, innerHTML: '', textContent: '', value: '', title: '',
-    hidden: false, style: {}, dataset: {}, clientWidth: 200,
+    hidden: false, attrs: {}, style: {}, dataset: {}, clientWidth: 200,
     classList: { toggle: function () {}, add: function () {}, remove: function () {} },
+    setAttribute: function (k, v) { this.attrs[k] = String(v); },
+    getAttribute: function (k) { return Object.prototype.hasOwnProperty.call(this.attrs, k) ? this.attrs[k] : null; },
     addEventListener: function () {},
     removeEventListener: function () {},
     querySelector: function () { return makeEl('q'); },

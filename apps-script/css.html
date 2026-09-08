@@ -458,6 +458,20 @@ tbody tr:last-child td { border-bottom: 0; }
 /* วันที่ตกบรรทัดแล้วอ่านยาก และดันทุกแถวในตารางให้สูงขึ้นตาม */
 td.date-cell { white-space: nowrap; }
 
+/*
+  คำอธิบายแถบพื้นหลังกราฟ BI อยู่นอก SVG ไม่ใช่ลอยอยู่ในกราฟ
+  ข้อความที่วางในกราฟจะไปทับจุดข้อมูลเมื่อคะแนนไปตกตรงตำแหน่งนั้นพอดี
+*/
+.bi-legend {
+  display: flex; flex-wrap: wrap; gap: 5px 16px;
+  margin-bottom: 10px; font-size: 11.5px; color: var(--muted);
+}
+.bi-key { display: inline-flex; align-items: center; gap: 6px; }
+.bi-key i { width: 15px; height: 10px; flex: none; border: 1px solid var(--line); border-radius: 3px; }
+/* ตัวอย่างเส้นประ ใช้ขอบบนแทนพื้น จะได้เป็นเส้นจริงไม่ใช่กล่อง */
+.bi-key i.thr { height: 0; border: 0; border-top: 2px dashed #c2340c; border-radius: 0; opacity: .6; }
+.bi-key em { font-style: normal; color: var(--faint); }
+
 .empty { text-align: center; color: var(--muted); padding: 40px 16px; }
 .count-line { color: var(--faint); font-size: 13px; margin: 4px 0 0; }
 

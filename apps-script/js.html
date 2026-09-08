@@ -1534,21 +1534,48 @@ function biTable(list, hn) {
 }
 
 /**
- * กราฟเส้นแสดงพัฒนาการคะแนน BI พร้อมเส้นเกณฑ์ 15 คะแนน
- * เห็นได้ทันทีว่าผู้ป่วยข้ามเกณฑ์เข้าโปรแกรมตอนไหน
+ * กราฟเส้นแสดงพัฒนาการคะแนน BI
  *
- * ประเมินครั้งเดียวก็วาด ไม่ปล่อยว่าง เพราะเส้นกริดกับเส้นเกณฑ์บอกได้แล้วว่าคนไข้
- * เริ่มต้นห่างจากเกณฑ์แค่ไหน ซึ่งเป็นเรื่องที่อยากรู้ที่สุดตอนเพิ่งเข้าโปรแกรม
- * เดิมคืนค่าว่างเงียบ ๆ คนเปิดดูจึงแยกไม่ออกว่ากราฟหายเพราะตั้งใจหรือเพราะพัง
- * พอมีครั้งที่สองจุดจะต่อกันเป็นเส้นเองโดยไม่ต้องเปลี่ยนอะไร
+ * พื้นหลังแบ่งเป็นสามแถบตามกลุ่ม ADL ที่ระบบใช้อยู่แล้ว ไล่เข้มจากล่างขึ้นบน
+ * จึงอ่านออกว่าคนไข้ข้ามจากกลุ่มหนึ่งไปอีกกลุ่มตอนไหน ซึ่งเป็นผลลัพธ์ที่ทีมรายงานจริง
+ * แต่เดิมกราฟไม่บอก ต้องไล่อ่านเอาจากคอลัมน์กลุ่ม ADL ในตารางข้างล่างทีละแถว
+ *
+ * ไม่ย้อมช่วง 0-15 เป็นสีเตือน เพราะนั่นคือเกณฑ์ "เข้าโปรแกรม" ไม่ใช่โซนอันตราย
+ * ผู้ป่วย IMC ทุกคนเริ่มต้นในช่วงนั้นโดยนิยาม ย้อมแล้วจะกลายเป็นสีพื้นของทุกกราฟ
+ * จนเลิกสื่ออะไร และเหมาว่าติดเตียงกับติดสังคมน่าเป็นห่วงเท่ากัน ซึ่งขัดกับ adlGroup_
+ *
+ * ประเมินครั้งเดียวก็วาด เส้นกริดกับเส้นเกณฑ์บอกได้แล้วว่าเริ่มต้นห่างจากเกณฑ์แค่ไหน
+ * พอมีครั้งที่สองจุดจะต่อกันเป็นเส้นเอง
  */
 function biChart(list) {
   if (!list.length) return '';
-  var W = 700, H = 160, L = 34, R = 690, max = BOOT.biMax;
-  var single = list.length < 2;
+  /*
+    เว้นขอบซ้ายขวาไว้ให้ป้ายวันที่ของจุดริมสุด ซึ่งเขียนกึ่งกลางใต้จุด
+    ของเดิมจุดสุดท้ายอยู่ที่ 690 พอดีขอบ viewBox ป้าย "16 ก.พ. 2569" จึงถูกตัดครึ่ง
+  */
+  var H = 160, L = 44, R = 656, max = BOOT.biMax;
+  var n = list.length, single = n < 2, i;
   var y = function (v) { return H - (Number(v) / max) * (H - 10); };
-  // จุดเดียวไม่มีช่วงให้กระจาย วางกลางแกนแทน ไม่งั้น i/(n-1) เป็น 0/0 แล้วพิกัดกลายเป็น NaN
-  var x = function (i) { return single ? (L + R) / 2 : L + (i / (list.length - 1)) * (R - L); };
+
+  /*
+    ขอบแถบใช้จุดกึ่งกลางระหว่างคะแนนเต็มหน่วย เพราะคะแนน BI เป็นจำนวนเต็มเสมอ
+    ลากที่ 5 กับ 12 พอดีจะทำให้จุดที่ได้ 5 หรือ 12 นั่งคาบเส้นจนดูไม่ออกว่าอยู่กลุ่มไหน
+    ตัวเลขเกณฑ์มาจาก adlGroup_ ใน Bi.gs ที่เดียว
+  */
+  var bands = [
+    { lo: 0, hi: 4.5, name: 'ติดเตียง', range: '0–4', shade: 0.12 },
+    { lo: 4.5, hi: 11.5, name: 'ติดบ้าน', range: '5–11', shade: 0.065 },
+    { lo: 11.5, hi: max, name: 'ติดสังคม', range: '12–' + max, shade: 0.02 }
+  ];
+
+  var layout = biChartX_(list, L, R);
+  var xs = layout.xs;
+
+  var zones = bands.map(function (b) {
+    return '<rect x="' + L + '" y="' + y(b.hi).toFixed(1) + '" width="' + (R - L) +
+      '" height="' + (y(b.lo) - y(b.hi)).toFixed(1) +
+      '" fill="rgba(31,41,51,' + b.shade + ')"></rect>';
+  }).join('');
 
   var grid = [0, 5, 10, 15, 20].map(function (v) {
     return '<line x1="' + L + '" y1="' + y(v).toFixed(1) + '" x2="' + R + '" y2="' + y(v).toFixed(1) +
@@ -1556,19 +1583,29 @@ function biChart(list) {
       '<text x="' + (L - 10) + '" y="' + (y(v) + 4).toFixed(1) + '" text-anchor="end" font-size="11" fill="#98a2ac">' + v + '</text>';
   }).join('');
 
-  var pts = list.map(function (a, i) { return x(i).toFixed(1) + ',' + y(a.total).toFixed(1); }).join(' ');
+  var pts = list.map(function (a, i) { return xs[i].toFixed(1) + ',' + y(a.total).toFixed(1); }).join(' ');
 
   var dots = list.map(function (a, i) {
-    return '<circle cx="' + x(i).toFixed(1) + '" cy="' + y(a.total).toFixed(1) + '" r="4.5" ' +
+    return '<circle cx="' + xs[i].toFixed(1) + '" cy="' + y(a.total).toFixed(1) + '" r="4.5" ' +
       'fill="#37aaaf" stroke="#ffffff" stroke-width="2"></circle>';
   }).join('');
 
+  /*
+    วันที่กินที่กว้างกว่า "ครั้งที่ N" จุดที่ชิดกันจึงเขียนป้ายครบทุกจุดไม่ได้
+    ไล่เลือกจากจุดสุดท้ายย้อนกลับมา ครั้งล่าสุดจึงมีป้ายเสมอ เพราะเป็นตัวที่ต้องอ่านที่สุด
+  */
+  var showLabel = {}, prevX = Infinity;
+  for (i = n - 1; i >= 0; i--) {
+    if (i === n - 1 || prevX - xs[i] >= 74) { showLabel[i] = true; prevX = xs[i]; }
+  }
+
   var labels = list.map(function (a, i) {
-    return '<text x="' + x(i).toFixed(1) + '" y="182" text-anchor="middle" font-size="11" fill="#8a95a1">' +
-      'ครั้งที่ ' + esc(a.seq) + '</text>';
+    if (!showLabel[i]) return '';
+    return '<text x="' + xs[i].toFixed(1) + '" y="182" text-anchor="middle" font-size="11" fill="#8a95a1">' +
+      esc(layout.byDate ? thDate(a.assess_date) : 'ครั้งที่ ' + a.seq) + '</text>';
   }).join('');
 
-  var lastIdx = list.length - 1;
+  var lastIdx = n - 1;
 
   /*
     ตัวเลขกำกับปกติวางเหนือจุด แต่คะแนนเต็มทำให้จุดชิดขอบบนจนตัวเลขหลุดออกนอกกรอบ
@@ -1581,20 +1618,85 @@ function biChart(list) {
     ? 'คะแนน Barthel Index ครั้งแรก ' + esc(list[0].total) + ' จาก ' + max + ' คะแนน'
     : 'กราฟคะแนน Barthel Index จาก ' + esc(list[0].total) + ' เป็น ' + esc(list[lastIdx].total);
 
-  return '<svg viewBox="0 0 700 196" style="width:100%;height:190px;display:block;margin-bottom:14px" ' +
+  /*
+    คำอธิบายอยู่นอก SVG ไม่ใช่ลอยอยู่ในกราฟ
+    ของเดิมวางป้าย "เกณฑ์เข้า IMC" ไว้มุมขวาบนเส้น ซึ่งเป็นมุมเดียวกับที่ตัวเลขกำกับ
+    จุดสุดท้ายไปอยู่ วัดแล้วทับกันจริงเมื่อคะแนนสุดท้ายเป็น 13 14 15 หรือ 19
+    ซึ่ง 13-15 คือช่วงรอบเส้นเกณฑ์พอดี เป็นที่ที่คนไข้ไปจบบ่อยที่สุด
+  */
+  var legend = '<div class="bi-legend">' +
+    bands.map(function (b) {
+      return '<span class="bi-key"><i style="background:rgba(31,41,51,' + b.shade + ')"></i>' +
+        esc(b.name) + ' <em class="num">' + esc(b.range) + '</em></span>';
+    }).join('') +
+    '<span class="bi-key"><i class="thr"></i>เกณฑ์เข้า IMC <em class="num">15</em></span>' +
+    '</div>';
+
+  return legend +
+    '<svg viewBox="0 0 700 196" style="width:100%;height:190px;display:block;margin-bottom:14px" ' +
     'role="img" aria-label="' + caption + '">' +
-    grid +
+    zones + grid +
     '<line x1="' + L + '" y1="' + y(15).toFixed(1) + '" x2="' + R + '" y2="' + y(15).toFixed(1) +
       '" stroke="#c2340c" stroke-width="1.2" stroke-dasharray="5 4" opacity="0.5"></line>' +
-    '<text x="' + (R - 4) + '" y="' + (y(15) - 6).toFixed(1) + '" text-anchor="end" font-size="11" fill="#c2340c">เกณฑ์เข้า IMC</text>' +
     // จุดเดียวไม่มีเส้นให้ลาก ข้ามไปเลย ไม่ต้องปล่อย polyline ที่มีจุดเดียวค้างไว้ใน DOM
     (single ? '' :
       '<polyline points="' + pts + '" fill="none" stroke="#37aaaf" stroke-width="2" ' +
       'stroke-linecap="round" stroke-linejoin="round"></polyline>') +
     dots + labels +
-    '<text x="' + x(lastIdx).toFixed(1) + '" y="' + valueY.toFixed(1) + '" ' +
+    '<text x="' + xs[lastIdx].toFixed(1) + '" y="' + valueY.toFixed(1) + '" ' +
       'text-anchor="middle" font-size="13" font-weight="600" fill="#1f2933">' + esc(list[lastIdx].total) + '</text>' +
     '</svg>';
+}
+
+/**
+ * ตำแหน่งแนวนอนของแต่ละจุด
+ *
+ * วางตามวันที่จริงเมื่อทำได้ กราฟจึงบอกได้ว่าเว้นช่วงไปนานแค่ไหน ไม่ใช่แค่ลำดับครั้ง
+ * เดิมวางห่างเท่ากันทุกใบ คนที่ประเมินห่างกันสี่วันกับสี่เดือนได้กราฟหน้าตาเหมือนกันเป๊ะ
+ * ทั้งที่ระบบมีธงเตือนเรื่องเว้นช่วงประเมินนานอยู่แล้ว แต่กราฟซึ่งเป็นที่ที่ควรเห็นชัดที่สุด
+ * กลับมองไม่เห็น
+ *
+ * กลับไปวางห่างเท่ากันเมื่อวันที่เชื่อไม่ได้ ดีกว่าวาดระยะที่อ่านผิดได้
+ *   - ใบไหนไม่มีวันที่ (ข้อมูลนำเข้าบางแถวเป็นแบบนี้)
+ *   - วันที่ย้อนหลังสวนลำดับครั้งที่ แปลว่ากรอกผิด อย่าเดาแทน
+ *   - ทุกใบอยู่วันเดียวกัน ไม่มีระยะให้กาง
+ *   - จุดเยอะจนกางแล้วยังไงก็ชิดกันเกิน
+ */
+function biChartX_(list, L, R) {
+  var span = R - L, n = list.length, i;
+  var even = list.map(function (a, i) {
+    return n < 2 ? (L + R) / 2 : L + (i / (n - 1)) * span;
+  });
+
+  var GAP = 30;   // ระยะน้อยสุดระหว่างจุด กันการประเมินสองครั้งในวันเดียวกันทับกันสนิท
+  if (n < 2 || (n - 1) * GAP > span) return { xs: even, byDate: false };
+
+  var days = [];
+  for (i = 0; i < n; i++) {
+    var d = isoDay_(list[i].assess_date);
+    if (d === null || (i && d < days[i - 1])) return { xs: even, byDate: false };
+    days.push(d);
+  }
+  if (days[n - 1] <= days[0]) return { xs: even, byDate: false };
+
+  var xs = days.map(function (d) {
+    return L + ((d - days[0]) / (days[n - 1] - days[0])) * span;
+  });
+
+  /*
+    ดันจุดที่ชิดเกินไปออกไปทางขวา ล้นกรอบไม่ได้เพราะเช็คไว้แล้วว่ากางครบทุกจุดยังพอดี
+    ตำแหน่งสุดท้ายจึงไม่เกิน R เสมอ ทั้งกรณีวางตามวันที่และกรณีถูกดัน
+  */
+  for (i = 1; i < n; i++) if (xs[i] - xs[i - 1] < GAP) xs[i] = xs[i - 1] + GAP;
+  return { xs: xs, byDate: true };
+}
+
+/** yyyy-MM-dd เป็นเลขวันไว้เทียบระยะห่าง คืน null เมื่อใช้ไม่ได้ */
+function isoDay_(iso) {
+  var p = String(iso || '').split('-');
+  if (p.length !== 3) return null;
+  var d = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
+  return isNaN(d.getTime()) ? null : Math.round(d.getTime() / 86400000);
 }
 
 /* -------------------------------------------------------- ฟอร์มประเมิน BI */

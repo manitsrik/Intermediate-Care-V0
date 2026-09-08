@@ -201,6 +201,53 @@ body.nav-min .navitem > span { display: none; }
   padding: 0 26px; position: sticky; top: 0; z-index: 30;
 }
 
+/* ป้ายโหมดทดสอบบนแถบบน ทำหน้าที่เดียวกับ .mask-banner ที่ใช้บนมือถือกับกระดาษ */
+.mask-chip {
+  flex: none; background: var(--warn-soft); color: var(--warn);
+  border: 1px solid #f7dbd1; border-radius: 999px;
+  padding: 4px 14px; font-size: 12.5px; font-weight: 500;
+}
+
+/*
+  ช่องค้นหาไว้กระโดดไปหาคนไข้ทีละคน ไม่ใช่ตัวกรองรายชื่อ
+  กล่องผลลัพธ์จึงเกาะขอบซ้ายขวาของช่อง ไม่ใช่ลอยกลางจอ จะได้รู้ว่ามาจากช่องไหน
+*/
+.search {
+  position: relative; display: flex; align-items: center; gap: 10px;
+  background: #f3f7f8; border: 1px solid transparent; border-radius: 999px;
+  padding: 0 18px; height: 42px; flex-grow: 1; max-width: 560px; color: var(--faint);
+}
+.search:focus-within { border-color: var(--brand-line); background: #fff; }
+.search input {
+  border: 0; background: none; padding: 0; height: 100%; flex: 1; min-width: 0;
+  font-family: inherit; font-size: 14px; color: var(--text);
+}
+.search input:focus { outline: 0; }
+
+.search-hits {
+  position: absolute; top: calc(100% + 6px); left: 0; right: 0; z-index: 40;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
+  box-shadow: 0 12px 34px rgba(16,24,40,.14); padding: 6px;
+}
+.hit {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 8px 10px; border: 0; border-radius: 10px; background: none;
+  font-family: inherit; font-size: 13.5px; color: inherit; text-align: left; cursor: pointer;
+}
+/* แถวที่เลือกด้วยลูกศรใช้พื้นเดียวกับตอนชี้เมาส์ จะได้ไม่ต้องจำสองแบบ */
+.hit:hover, .hit.on { background: var(--brand-tint); }
+.hit-t { display: flex; flex-direction: column; line-height: 1.35; min-width: 0; flex: 1; }
+.hit-t b { font-weight: 500; }
+.hit-t small {
+  font-size: 11.5px; color: var(--muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.hit-foot {
+  border-top: 1px solid var(--line-soft); margin-top: 4px;
+  padding: 8px 10px 4px; font-size: 11.5px; color: var(--faint);
+}
+.hit-none { padding: 13px 12px; font-size: 13px; color: var(--muted); }
+
 .top-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; position: relative; }
 
 .ic-btn {
@@ -261,6 +308,8 @@ body.nav-min .navitem > span { display: none; }
 }
 
 .mask-banner {
+  /* จอใหญ่ใช้ป้ายบนแถบบนแทน ตัวนี้กลับมาเฉพาะบนมือถือที่ไม่มีแถบบน กับบนกระดาษ */
+  display: none;
   background: var(--warn-soft); color: var(--warn);
   font-size: 13px; text-align: center; padding: 6px 16px;
   border-bottom: 1px solid #f7dbd1;
@@ -943,6 +992,9 @@ table.cards td.head { display: none; }
 
   .sidebar { display: none; }
 
+  /* ไม่มีแถบบนให้ป้ายโหมดทดสอบเกาะ จึงกลับมาเป็นแถบเต็มความกว้างเหมือนเดิม */
+  .mask-banner { display: block; }
+
   .mobilebar {
     display: flex; align-items: center; gap: 12px;
     background: var(--brand-deep); padding: 12px 16px;
@@ -1142,7 +1194,7 @@ table.cards td.head { display: none; }
   main { padding: 0; max-width: none; }
 
   /* แถบโหมดทดสอบต้องติดไปกับกระดาษด้วย ไม่งั้นเอกสารจะดูเหมือนข้อมูลผู้ป่วยจริง */
-  .mask-banner { border: 1px solid #f7dbd1; border-radius: 6px; margin-bottom: 8px; padding: 4px; font-size: 11px; }
+  .mask-banner { display: block; border: 1px solid #f7dbd1; border-radius: 6px; margin-bottom: 8px; padding: 4px; font-size: 11px; }
   .net-banner { border: 1px solid #f7dbd1; border-radius: 6px; margin-bottom: 8px; padding: 4px; font-size: 11px; }
 
   .page-head { min-height: 0; padding: 9px 14px; margin-bottom: 10px; border-radius: 10px; }

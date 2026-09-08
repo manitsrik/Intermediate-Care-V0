@@ -60,20 +60,30 @@
   <div class="content">
 
     <header class="topbar">
-      <div class="top-actions">
-        <!--
-          ปุ่มค้นหาพาไปหน้ารายชื่อแล้วโฟกัสช่องค้นหาของหน้านั้น ไม่ได้มีช่องของตัวเอง
-          เดิมตรงนี้เป็นช่องค้นหาเต็มความกว้าง ซึ่งพอเข้าหน้ารายชื่อจะกลายเป็นช่องที่สอง
-          ทำงานเหมือนกันเป๊ะวางซ้อนกันคนละบรรทัด ส่วนตอนอยู่หน้าอื่นถ้าเผลอพิมพ์ลงไป
-          จะเด้งออกจากหน้านั้นทันทีโดยไม่ถาม
-        -->
-        <button class="ic-btn" id="btn-search" aria-label="ค้นหาผู้ป่วย">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-               stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.6-3.6"></path>
-          </svg>
-        </button>
+      <!--
+        ป้ายโหมดทดสอบตัวสำหรับจอใหญ่ คู่กับ .mask-banner ข้างล่างที่ทำหน้าที่เดียวกัน
+        บนมือถือซึ่งไม่มีแถบบน ทั้งสองตัวถูกเปิดปิดพร้อมกันเสมอโดย paintMask_()
+        แล้วให้ CSS เป็นคนเลือกว่าจอขนาดนี้เห็นตัวไหน
+      -->
+      <span class="mask-chip" id="mask-chip" hidden>โหมดทดสอบ</span>
 
+      <!--
+        ช่องนี้ไว้กระโดดไปหาคนไข้ทีละคน ไม่ใช่ตัวกรองรายชื่อ ตัวกรองอยู่ในหน้ารายชื่อ
+        พิมพ์แล้วขึ้นรายชื่อที่ตรงให้เลือกตรงนี้ ไม่ลากคนออกจากหน้าที่กำลังทำอยู่
+      -->
+      <div class="search">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" aria-hidden="true">
+          <circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.6-3.6"></path>
+        </svg>
+        <input id="top-search" autocomplete="off" role="combobox" aria-expanded="false"
+               aria-controls="search-hits" aria-autocomplete="list"
+               placeholder="ค้นหาผู้ป่วย (HN / ชื่อ-สกุล) ...">
+        <div class="search-hits" id="search-hits" role="listbox"
+             aria-label="ผู้ป่วยที่ตรงกับคำค้น" hidden></div>
+      </div>
+
+      <div class="top-actions">
         <button class="ic-btn" id="btn-alerts" onclick="go('dashboard')" aria-label="นัดหมายใน 7 วันข้างหน้า">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -138,6 +148,7 @@
       </span>
     </header>
 
+    <!-- ป้ายโหมดทดสอบตัวสำหรับมือถือกับกระดาษ จอใหญ่ใช้ .mask-chip บนแถบบนแทน -->
     <div class="mask-banner" id="mask-banner" hidden>โหมดทดสอบ</div>
     <div class="net-banner" id="net-banner" role="status" aria-live="polite" hidden>
       ออฟไลน์ — บันทึกข้อมูลไม่ได้จนกว่าจะต่อเน็ตใหม่

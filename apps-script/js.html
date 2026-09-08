@@ -433,23 +433,159 @@ function ddItem(iconName, label, onclick) {
     '<span>' + esc(label) + '</span></button>';
 }
 
-/**
- * โฟกัสช่องค้นหาในหน้ารายชื่อ พร้อมเลือกคำค้นเดิมไว้ให้พิมพ์ทับได้เลยโดยไม่ต้องลบก่อน
- * เรียกได้เฉพาะหลังหน้าวาดเสร็จ ถ้ายังไม่มีช่องอยู่จริงจะไม่ทำอะไร
- */
-function focusListSearch_() {
-  var f = document.getElementById('f-q');
-  if (!f) return;
-  f.focus();
-  f.select();
+/* ------------------------------------------- ช่องค้นหาบนแถบบน
+
+  หน้าที่ของช่องนี้คือพาไปหาคนไข้ทีละคน ไม่ใช่กรองรายชื่อ ซึ่งเป็นงานของช่อง
+  ในหน้ารายชื่อ ตอนที่ทั้งสองช่องทำงานเดียวกัน หน้ารายชื่อมีช่องค้นหาสองช่อง
+  วางซ้อนกันคนละบรรทัด และการเผลอพิมพ์ตอนอยู่หน้าอื่นลากคนออกจากหน้าที่
+  กำลังกรอกอยู่ทันทีโดยไม่ถาม แยกหน้าที่แล้วทั้งสองอาการหายไปพร้อมกัน
+
+  ค้นจากรายชื่อที่โหลดเก็บไว้ในเครื่องแล้ว ไม่ได้ถามเซิร์ฟเวอร์ระหว่างพิมพ์
+*/
+var SEARCH_MAX = 8;
+var searchHits = [];
+var searchFound = 0;
+var searchActive = -1;
+
+/*
+  ค้นเฉพาะช่องที่ใช้ระบุตัวคน ไม่รวม Dx กับตำบลอย่างช่องกรองในหน้ารายชื่อ
+  เพราะคำถามคนละแบบ ตรงนี้คือ "คนนี้อยู่ไหน" ไม่ใช่ "ใครบ้างที่เข้าเงื่อนไขนี้"
+*/
+function searchMatch_(p, q) {
+  return [p.hn, p.cid, p.full_name, p.first_name, p.last_name].some(function (v) {
+    return String(v || '').toLowerCase().indexOf(q) !== -1;
+  });
+}
+
+function searchHitHtml_(p, i) {
+  var meta = [p.hn, p.sex, p.age ? p.age + ' ปี' : '', p.ward, p.dx].filter(String).join(' · ');
+  var on = i === searchActive;
+  return '<button class="hit' + (on ? ' on' : '') + '" type="button" role="option"' +
+    ' aria-selected="' + (on ? 'true' : 'false') + '"' +
+    ' onclick="openFromSearch(\'' + esc(p.hn) + '\')">' +
+    '<span class="avatar sm">' + esc(initials(p.first_name)) + '</span>' +
+    '<span class="hit-t"><b>' + esc(p.full_name || '—') + '</b>' +
+    '<small class="num">' + esc(meta) + '</small></span>' +
+    statusChip(p.status) + '</button>';
+}
+
+function paintSearch_() {
+  var box = document.getElementById('search-hits');
+  var input = document.getElementById('top-search');
+  if (!box || !input) return;
+
+  var open = String(input.value || '').trim() !== '';
+  box.hidden = !open;
+  input.setAttribute('aria-expanded', open ? 'true' : 'false');
+  if (!open) { box.innerHTML = ''; return; }
+
+  if (!searchHits.length) {
+    box.innerHTML = '<div class="hit-none">ไม่พบผู้ป่วยที่ตรงกับคำนี้</div>';
+    return;
+  }
+  var more = searchFound > searchHits.length
+    ? 'แสดง ' + searchHits.length + ' จาก ' + searchFound + ' ราย'
+    : 'พบ ' + searchFound + ' ราย';
+  box.innerHTML = searchHits.map(searchHitHtml_).join('') +
+    '<div class="hit-foot num">' + more + ' · กด Enter เพื่อดูทั้งหมดในหน้ารายชื่อ</div>';
+}
+
+function runSearch_() {
+  var input = document.getElementById('top-search');
+  var q = String(input.value || '').trim().toLowerCase();
+  searchActive = -1;
+
+  if (!q) { searchHits = []; searchFound = 0; paintSearch_(); return; }
+
+  /*
+    ของที่จำไว้ถูกล้างทุกครั้งที่บันทึกข้อมูล ถ้าพิมพ์ตอนนั้นพอดีต้องโหลดใหม่ก่อน
+    แล้วค่อยค้นซ้ำ เช็คว่าคำในช่องยังเป็นคำเดิมอยู่ไหม กันผลของคำเก่ามาทับคำใหม่
+  */
+  if (!patientCache) {
+    loadPatients().then(function () {
+      if (String(input.value || '').trim().toLowerCase() === q) runSearch_();
+    }).catch(function () { /* ยังกด Enter ไปดูในหน้ารายชื่อได้ ไม่ต้องเด้งอะไรขึ้นมา */ });
+    return;
+  }
+
+  var all = patientCache.filter(function (p) { return searchMatch_(p, q); });
+  searchFound = all.length;
+  searchHits = all.slice(0, SEARCH_MAX);
+  paintSearch_();
+}
+
+function closeSearch_() {
+  searchHits = [];
+  searchFound = 0;
+  searchActive = -1;
+  var box = document.getElementById('search-hits');
+  var input = document.getElementById('top-search');
+  if (box) { box.hidden = true; box.innerHTML = ''; }
+  if (input) input.setAttribute('aria-expanded', 'false');
+}
+
+/** เปิดเวชระเบียนของคนที่เลือก แล้วเก็บช่องให้เรียบร้อย ไม่ทิ้งคำค้นค้างไว้บนแถบบน */
+function openFromSearch(hn) {
+  var input = document.getElementById('top-search');
+  if (input) { input.value = ''; input.blur(); }
+  closeSearch_();
+  go('detail', hn);
+}
+
+/*
+  ยังไม่ได้เลือกใครแล้วกด Enter แปลว่าอยากเห็นทุกคนที่ตรงกับคำนี้
+  ย้ายคำค้นลงไปเป็นตัวกรองของหน้ารายชื่อ ไม่ทิ้งไว้บนแถบบนให้เข้าใจว่ามีสองช่อง
+*/
+function searchAll_() {
+  var input = document.getElementById('top-search');
+  var q = String(input.value || '').trim();
+  if (!q) return;
+  input.value = '';
+  input.blur();
+  closeSearch_();
+  listFilter.q = q;
+  go('list');
+}
+
+function searchKeys_(e) {
+  if (e.key === 'Escape') { closeSearch_(); return; }
+
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    if (searchActive >= 0 && searchHits[searchActive]) openFromSearch(searchHits[searchActive].hn);
+    else searchAll_();
+    return;
+  }
+
+  if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+  if (!searchHits.length) return;
+  // ลูกศรในช่องข้อความปกติเลื่อนเคอร์เซอร์ ตรงนี้ให้เลื่อนรายการแทน
+  e.preventDefault();
+  var n = searchHits.length;
+  searchActive = e.key === 'ArrowDown'
+    ? (searchActive + 1 >= n ? 0 : searchActive + 1)
+    : (searchActive <= 0 ? n - 1 : searchActive - 1);
+  paintSearch_();
+}
+
+function wireSearch_() {
+  var input = document.getElementById('top-search');
+  var box = document.getElementById('search-hits');
+
+  input.addEventListener('input', runSearch_);
+  input.addEventListener('keydown', searchKeys_);
+  input.addEventListener('focus', runSearch_);
+  input.addEventListener('blur', closeSearch_);
+
+  /*
+    กดเมาส์ที่รายการทำให้ช่องเสียโฟกัสก่อน กล่องจึงถูกปิดทิ้งไปก่อนที่คลิกจะทำงาน
+    กัน mousedown ไว้ ช่องยังถือโฟกัสอยู่ คลิกจึงไปถึงปุ่มในรายการจริง ๆ
+  */
+  box.addEventListener('mousedown', function (e) { e.preventDefault(); });
 }
 
 function wireTopbar() {
-  // อยู่หน้าอื่นต้องรอให้หน้ารายชื่อวาดเสร็จก่อน ช่องค้นหาถึงจะมีตัวตนให้โฟกัส
-  document.getElementById('btn-search').onclick = function () {
-    if (VIEW.name === 'list') { focusListSearch_(); return; }
-    Promise.resolve(go('list')).then(focusListSearch_);
-  };
+  wireSearch_();
 
   document.getElementById('btn-quick').onclick = function (e) {
     e.stopPropagation();
@@ -585,6 +721,18 @@ function fitBrandText() {
     Math.max(unit.getBoundingClientRect().width, place.getBoundingClientRect().width));
 }
 
+/*
+  ป้ายโหมดทดสอบมีสองตัว ตัวบนแถบบนสำหรับจอใหญ่ กับแถบเต็มความกว้างสำหรับมือถือ
+  ซึ่งไม่มีแถบบน และสำหรับกระดาษ สลับพร้อมกันเสมอ แล้วให้ CSS เลือกว่าจอนี้เห็นตัวไหน
+  ถ้าแยกกันสลับ จะมีทางที่เอกสารพิมพ์ออกมาโดยไม่มีป้ายบอกว่าเป็นข้อมูลสมมติ
+*/
+function paintMask_(on) {
+  ['mask-chip', 'mask-banner'].forEach(function (id) {
+    var el = document.getElementById(id);
+    if (el) el.hidden = !on;
+  });
+}
+
 /** ชื่อที่แสดงบนแถบบน ใช้ชื่อจริงถ้ามี ไม่งั้นใช้ส่วนหน้าของอีเมล */
 function displayName(u) {
   return u.name || String(u.email || '').split('@')[0] || '—';
@@ -705,7 +853,7 @@ function boot() {
     document.getElementById('user-role').textContent = b.user.isAdmin ? 'ผู้ดูแลระบบ' : 'เจ้าหน้าที่ IMC';
     document.getElementById('btn-user').title = b.user.email;
     document.getElementById('user-initial').textContent = initials(displayName(b.user));
-    document.getElementById('mask-banner').hidden = !b.maskMode;
+    paintMask_(b.maskMode);
     fillPrintHeader();
     setAlerts(b.alerts || 0);
     // apiBootstrap ส่งรายชื่อผู้ป่วยมาด้วยเลย หน้าแรกจึงคุยกับเซิร์ฟเวอร์รอบเดียว ไม่ใช่สองรอบ
@@ -753,7 +901,7 @@ function renderList(param) {
     }
     return;
   }
-  // คืน promise ออกไปด้วย ปุ่มค้นหาบนแถบบนต้องรอจนวาดเสร็จก่อนจึงโฟกัสช่องค้นหาได้
+  // คืน promise ออกไปด้วยเหมือนหน้าอื่น ผู้เรียกจะได้รอจนวาดเสร็จจริงก่อนทำต่อ
   busy();
   return loadPatients().then(drawList).catch(fail);
 }
@@ -2299,7 +2447,7 @@ function drawSettings(users) {
         maskBtn.disabled = true;
         call('apiSetMaskMode', want).then(function (r) {
           BOOT.maskMode = r.maskMode;
-          document.getElementById('mask-banner').hidden = !r.maskMode;
+          paintMask_(r.maskMode);
           return toast(r.maskMode ? 'เปิดโหมดทดสอบแล้ว' : 'ปิดโหมดทดสอบแล้ว').then(refreshSettings);
         }).catch(function (err) { maskBtn.disabled = false; fail(err); refreshSettings(); });
       });

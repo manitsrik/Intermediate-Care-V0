@@ -1608,11 +1608,52 @@ function biChart(list) {
   var lastIdx = n - 1;
 
   /*
-    ตัวเลขกำกับปกติวางเหนือจุด แต่คะแนนเต็มทำให้จุดชิดขอบบนจนตัวเลขหลุดออกนอกกรอบ
-    ซึ่งเกิดกับทุกคนที่ประเมินได้ 20 ไม่ใช่เฉพาะกราฟจุดเดียว ถ้าเหนือจุดไม่พอก็ย้ายไปใต้จุด
+    เขียนคะแนนกำกับทุกจุด ไม่ใช่เฉพาะจุดสุดท้าย จะได้อ่านพัฒนาการจบในกราฟ
+    ไม่ต้องกวาดตาลงไปเทียบกับตารางข้างล่างทีละแถว
+
+    แต่ยังแยกน้ำหนักไว้ จุดล่าสุดตัวใหญ่และเข้มกว่า เพราะเป็นตัวที่ใช้ตัดสินใจ
+    ถ้าทุกตัวเท่ากันหมด "ตอนนี้อยู่ตรงไหน" จะจมหายไปกับประวัติ
   */
-  var valueY = y(list[lastIdx].total) - 12;
-  if (valueY < 13) valueY = y(list[lastIdx].total) + 18;
+  var valueY = function (i) {
+    var v = Number(list[i].total), at = y(v), last = i === lastIdx;
+    var prev = i > 0 ? Number(list[i - 1].total) : null;
+    var next = i < lastIdx ? Number(list[i + 1].total) : null;
+    /*
+      จุดที่ต่ำกว่าเพื่อนบ้านทั้งสองข้าง เหนือจุดคือช่องแคบ ๆ ระหว่างเส้นสองเส้นที่บีบเข้าหากัน
+      เขียนใต้จุดแทนซึ่งเป็นที่โล่ง ส่วนจุดอื่นเขียนเหนือจุดตามปกติ
+    */
+    var dip = prev !== null && next !== null && v < prev && v < next;
+    var above = at - (last ? 12 : 11);
+    var below = at + (last ? 18 : 17);
+    var at_ = dip ? below : above;
+    if (at_ < 13) at_ = below;      // ชนขอบบนตอนคะแนนเต็ม
+    if (at_ > 172) at_ = above;     // ลงไปชนป้ายวันที่ที่ y=182
+    return at_;
+  };
+
+  /*
+    จุดที่ชิดกันมากเขียนตัวเลขครบทุกจุดไม่ได้ ไล่จากจุดสุดท้ายย้อนกลับมาเหมือนป้ายแกนนอน
+    คะแนนล่าสุดจึงมีเสมอ ตัวเลขแคบกว่าวันที่มาก จึงใช้ระยะขั้นต่ำน้อยกว่า
+  */
+  var showValue = {}, prevValueX = Infinity;
+  for (i = n - 1; i >= 0; i--) {
+    if (i === n - 1 || prevValueX - xs[i] >= 26) { showValue[i] = true; prevValueX = xs[i]; }
+  }
+
+  var values = list.map(function (a, i) {
+    if (!showValue[i]) return '';
+    var last = i === lastIdx;
+    /*
+      จุดแรกอยู่ชิดแกนตั้งพอดี ถ้าเขียนเลขกึ่งกลางจุดจะไปประกบกับตัวเลขบนแกน
+      แล้วอ่านติดกันเป็นเลขเดียว เช่น "15" ของแกนกับ "13" ของจุดกลายเป็น "15 13"
+      จุดแรกจึงเขียนไล่ไปทางขวาแทน ซึ่งเป็นที่โล่ง
+    */
+    var fromLeft = i === 0 && n > 1;
+    return '<text x="' + (xs[i] + (fromLeft ? 6 : 0)).toFixed(1) + '" y="' + valueY(i).toFixed(1) + '" ' +
+      'text-anchor="' + (fromLeft ? 'start' : 'middle') + '" ' +
+      'font-size="' + (last ? 13 : 11) + '" font-weight="' + (last ? 600 : 500) + '" ' +
+      'fill="' + (last ? '#1f2933' : '#6f7c89') + '">' + esc(a.total) + '</text>';
+  }).join('');
 
   var caption = single
     ? 'คะแนน Barthel Index ครั้งแรก ' + esc(list[0].total) + ' จาก ' + max + ' คะแนน'
@@ -1642,9 +1683,7 @@ function biChart(list) {
     (single ? '' :
       '<polyline points="' + pts + '" fill="none" stroke="#37aaaf" stroke-width="2" ' +
       'stroke-linecap="round" stroke-linejoin="round"></polyline>') +
-    dots + labels +
-    '<text x="' + xs[lastIdx].toFixed(1) + '" y="' + valueY.toFixed(1) + '" ' +
-      'text-anchor="middle" font-size="13" font-weight="600" fill="#1f2933">' + esc(list[lastIdx].total) + '</text>' +
+    dots + labels + values +
     '</svg>';
 }
 

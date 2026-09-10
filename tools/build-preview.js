@@ -228,16 +228,26 @@ var API = {
   },
 
   apiBootstrap: function () {
+    var today = new Date().toISOString().slice(0, 10);
+    var weekAhead = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
     return {
       user: { email: 'preview@local', name: 'พรีวิวบนเครื่อง', role: 'admin', isAdmin: true },
       appName: CONFIG.APP_NAME, org: CONFIG.ORG,
       orgUnit: CONFIG.ORG_UNIT, orgPlace: CONFIG.ORG_PLACE, maskMode: PREVIEW_MASK,
       sheetUrl: 'https://docs.google.com/spreadsheets/d/ตัวอย่างพรีวิว/edit',
       patients: API.apiListPatients({}),
-      alerts: DB.patients.filter(function (x) { return x.kbh_appt_date; }).length,
+      /*
+        เงื่อนไขต้องตรงกับ apiBootstrap ใน Api.gs เป๊ะ ๆ คือนัดที่ยังมาไม่ถึงภายใน 7 วัน
+        เดิมตัวจำลองนับทุกคนที่มีวันนัด เลขบนกระดิ่งในพรีวิวจึงมากกว่ารายการในกล่อง
+        แจ้งเตือนซึ่งคัดตามเงื่อนไขจริง ทำให้ดูเหมือนกล่องแสดงไม่ครบทั้งที่ถูกแล้ว
+      */
+      alerts: DB.patients.filter(function (x) {
+        var d = String(x.kbh_appt_date || '');
+        return d && d >= today && d <= weekAhead && x.status !== 'closed';
+      }).length,
       biItems: BI_ITEMS, biMax: BI_MAX, attention: ATTENTION, vocab: VOCAB, geography: GEOGRAPHY,
       dueAheadDays: CONFIG.FU_DUE_AHEAD_DAYS,
-      today: new Date().toISOString().slice(0, 10)
+      today: today
     };
   },
 

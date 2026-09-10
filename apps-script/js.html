@@ -217,7 +217,11 @@ var ICONS = {
   pulse: '<path d="M2.8 12.4h4L9 7.6l3.4 9.2 2.4-5.2h6.4"></path>',
   calendar: '<rect x="3.6" y="5.4" width="16.8" height="15" rx="2.4"></rect><path d="M3.6 10h16.8M8.4 3v4.4M15.6 3v4.4"></path>',
   calplus: '<rect x="3.6" y="5.4" width="16.8" height="15" rx="2.4"></rect><path d="M3.6 10h16.8M8.4 3v4.4M15.6 3v4.4"></path><path d="M12 12.8v5M9.5 15.3h5"></path>',
-  bell: '<path d="M18 8.6a6 6 0 1 0-12 0c0 6-2.2 7.4-2.2 7.4h16.4S18 14.6 18 8.6"></path><path d="M13.7 19.5a2 2 0 0 1-3.4 0"></path>',
+  /*
+    ฐานโค้งรับกับตัว ไม่ใช่ขีดตรงพาดใต้โดมแล้วหักฉากกับด้านข้าง
+    และมีหูแขวนบนยอด ไม่งั้นโดมกลมบนฐานแคบ ๆ อ่านเป็นเห็ดได้พอ ๆ กับกระดิ่ง
+  */
+  bell: '<path d="M12 2.9v1.7"></path><path d="M7 9.6a5 5 0 0 1 10 0c0 3.3.9 5.2 1.9 6.3.7.8.2 2-.9 2H6c-1.1 0-1.6-1.2-.9-2 1-1.1 1.9-3 1.9-6.3z"></path><path d="M9.9 20.3a2.4 2.4 0 0 0 4.2 0"></path>',
   check: '<circle cx="12" cy="12" r="8.6"></circle><path d="M8.4 12.2l2.5 2.5 4.7-5"></path>',
   edit: '<path d="M4 20h4l10-10a2.1 2.1 0 0 0-3-3L5 17z"></path><path d="M14.5 6.5l3 3"></path>',
   gear: '<circle cx="12" cy="12" r="3.1"></circle><path d="M19.6 14.6a1.6 1.6 0 0 0 .32 1.76l.06.06a1.9 1.9 0 1 1-2.7 2.7l-.06-.06a1.6 1.6 0 0 0-1.76-.32 1.6 1.6 0 0 0-1 1.46v.17a1.9 1.9 0 1 1-3.8 0v-.09a1.6 1.6 0 0 0-1.05-1.46 1.6 1.6 0 0 0-1.76.32l-.06.06a1.9 1.9 0 1 1-2.7-2.7l.06-.06a1.6 1.6 0 0 0 .32-1.76 1.6 1.6 0 0 0-1.46-1H3.7a1.9 1.9 0 1 1 0-3.8h.09a1.6 1.6 0 0 0 1.46-1.05 1.6 1.6 0 0 0-.32-1.76l-.06-.06a1.9 1.9 0 1 1 2.7-2.7l.06.06a1.6 1.6 0 0 0 1.76.32h.08a1.6 1.6 0 0 0 1-1.46V3.7a1.9 1.9 0 1 1 3.8 0v.09a1.6 1.6 0 0 0 1 1.46 1.6 1.6 0 0 0 1.76-.32l.06-.06a1.9 1.9 0 1 1 2.7 2.7l-.06.06a1.6 1.6 0 0 0-.32 1.76v.08a1.6 1.6 0 0 0 1.46 1h.17a1.9 1.9 0 1 1 0 3.8h-.09a1.6 1.6 0 0 0-1.46 1z"></path>'
@@ -408,17 +412,22 @@ function setAlerts(n) {
   b.textContent = n > 9 ? '9+' : String(n);
   b.hidden = !n;
   document.getElementById('btn-alerts').title = n
-    ? 'มีนัดหมาย ' + n + ' รายใน 7 วันข้างหน้า' : 'ไม่มีนัดหมายใน 7 วันข้างหน้า';
+    ? 'การแจ้งเตือน · มีนัดหมาย ' + n + ' รายใน 7 วันข้างหน้า'
+    : 'การแจ้งเตือน · ไม่มีนัดหมายใน 7 วันข้างหน้า';
 }
 
 var dropdownKind = '';
 
+/** คืน true เมื่อกล่องเพิ่งถูกเปิด ผู้เรียกบางรายมีงานต้องทำต่อตอนเปิดเท่านั้น */
 function toggleDropdown(kind, html) {
   var el = document.getElementById('dropdown');
-  if (dropdownKind === kind && !el.hidden) { closeDropdown(); return; }
+  if (dropdownKind === kind && !el.hidden) { closeDropdown(); return false; }
   el.innerHTML = html;
+  // ติดชื่อชนิดไว้ที่กล่องด้วย กล่องแจ้งเตือนจะได้กว้างและไม่มีขอบในเหมือนเมนูสั้น ๆ
+  el.className = 'dropdown dd-' + kind;
   el.hidden = false;
   dropdownKind = kind;
+  return true;
 }
 
 function closeDropdown() {
@@ -431,6 +440,91 @@ function closeDropdown() {
 function ddItem(iconName, label, onclick) {
   return '<button class="dd-item" onclick="' + onclick + '">' + icon(iconName, 17) +
     '<span>' + esc(label) + '</span></button>';
+}
+
+/* ------------------------------------------------------- กล่องแจ้งเตือน
+
+  กระดิ่งเปิดกล่องรายการ ไม่ใช่กระโดดไปแดชบอร์ดทั้งหน้าอย่างเดิม
+  ซึ่งทิ้งงานที่กำลังกรอกค้างไว้เพื่อไปดูว่ามีนัดใครบ้าง แล้วต้องกดกลับมาเอง
+
+  ของในกล่องเป็นชุดเดียวกับเลขบนกระดิ่ง คือวันนัด OPD ที่ถึงกำหนดใน 7 วันข้างหน้า
+  ถ้าสองอย่างนี้คนละชุด คนอ่านจะนับรายการในกล่องไม่ตรงกับเลขที่เห็นแล้วไม่เชื่อทั้งคู่
+  ส่วนนัดที่เลยกำหนดไปแล้วอยู่ในงานค้าง "เลยนัด" ของหน้ารายชื่อกับแดชบอร์ด
+
+  จุดหน้ารายการบอกว่ายังไม่ได้อ่าน จำไว้ในเครื่องคนอ่าน ไม่ใช่ในชีต เพราะเป็นเรื่อง
+  ของแต่ละคนว่าเห็นแล้วหรือยัง ไม่ใช่สถานะของผู้ป่วยที่ทั้งทีมใช้ร่วมกัน
+*/
+var ALERT_AHEAD_DAYS = 7;
+var NOTIF_SEEN_KEY = 'imc.notif.seen';
+
+/** กุญแจของรายการ ผูกกับวันนัดด้วย เลื่อนนัดเมื่อไรถือเป็นเรื่องใหม่ที่ยังไม่ได้อ่าน */
+function notifKey_(it) { return it.hn + '|' + it.appt; }
+
+function notifSeen_() {
+  try { return JSON.parse(localStorage.getItem(NOTIF_SEEN_KEY)) || []; } catch (e) { return []; }
+}
+
+function saveNotifSeen_(keys) {
+  try { localStorage.setItem(NOTIF_SEEN_KEY, JSON.stringify(keys)); } catch (e) { /* บางเบราว์เซอร์ปิด storage ใน iframe */ }
+}
+
+/** นัดที่ถึงกำหนด เรียงใกล้สุดขึ้นก่อน เงื่อนไขเดียวกับที่เซิร์ฟเวอร์นับเลขบนกระดิ่ง */
+function notifItems_() {
+  return (patientCache || []).filter(function (p) {
+    var d = String(p.kbh_appt_date || '');
+    if (!d || String(p.status) === 'closed') return false;
+    var left = -daysAgo_(d);
+    return left >= 0 && left <= ALERT_AHEAD_DAYS;
+  }).map(function (p) {
+    return {
+      hn: String(p.hn),
+      name: p.full_name || String(p.hn),
+      dx: p.dx || p.imc_program || '',
+      appt: String(p.kbh_appt_date),
+      left: -daysAgo_(String(p.kbh_appt_date))
+    };
+  }).sort(function (a, b) { return a.left - b.left; });
+}
+
+function notifDropdown_() {
+  var items = notifItems_();
+  var seen = notifSeen_();
+  var unread = items.filter(function (it) { return seen.indexOf(notifKey_(it)) === -1; });
+
+  /*
+    กันคลิกในกล่องไม่ให้ไหลไปถึงตัวปิดที่ผูกไว้กับ document
+    รายการยาวพอที่คนจะเผลอคลิกช่องว่างระหว่างเลื่อนอ่าน แล้วกล่องหุบทั้งที่ยังอ่านไม่จบ
+    ส่วนแถวที่กดแล้วไปหน้าอื่นปิดตัวเองอยู่แล้วผ่าน go()
+  */
+  return '<div class="notif" onclick="event.stopPropagation()">' +
+    '<div class="notif-head"><b>การแจ้งเตือน</b>' +
+    '<small class="num">' + unread.length + ' รายการที่ยังไม่อ่าน</small></div>' +
+    (items.length
+      ? '<div class="notif-list">' + items.map(function (it) {
+          return notifRow_(it, seen.indexOf(notifKey_(it)) === -1);
+        }).join('') + '</div>'
+      : '<div class="notif-empty">ไม่มีนัดหมายใน ' + ALERT_AHEAD_DAYS + ' วันข้างหน้า</div>') +
+    '<button class="notif-foot" onclick="go(\'followups\')">ดูการแจ้งเตือนทั้งหมด</button>' +
+    '</div>';
+}
+
+function notifRow_(it, unread) {
+  var when = it.left === 0 ? 'วันนี้' : (it.left === 1 ? 'พรุ่งนี้' : 'อีก ' + it.left + ' วัน');
+  return '<button class="notif-item' + (unread ? ' unread' : '') + '"' +
+    ' onclick="go(\'detail\',\'' + esc(it.hn) + '\')">' +
+    '<span class="notif-dot"></span><span class="notif-text">' +
+    '<b>ถึงกำหนดนัด OPD ' + esc(when) + '</b>' +
+    '<span>' + esc(it.name) + (it.dx ? ' · ' + esc(it.dx) : '') + '</span>' +
+    '<small class="num">HN ' + esc(it.hn) + ' · ' + esc(thDate(it.appt)) + '</small>' +
+    '</span></button>';
+}
+
+/**
+ * เปิดกล่องแล้วถือว่าอ่านครบ เก็บเฉพาะกุญแจของรายการที่ยังอยู่
+ * ไม่งั้นรายการที่เลยนัดไปแล้วจะค้างสะสมใน localStorage ไปเรื่อย ๆ
+ */
+function markNotifSeen_() {
+  saveNotifSeen_(notifItems_().map(notifKey_));
 }
 
 /* ------------------------------------------- ช่องค้นหาบนแถบบน
@@ -586,6 +680,12 @@ function wireSearch_() {
 
 function wireTopbar() {
   wireSearch_();
+
+  document.getElementById('btn-alerts').onclick = function (e) {
+    e.stopPropagation();
+    // อ่านแล้วค่อยบันทึกว่าอ่าน ถ้าบันทึกก่อนวาด จุดจะจางหมดตั้งแต่ครั้งแรกที่เปิด
+    if (toggleDropdown('alerts', notifDropdown_())) markNotifSeen_();
+  };
 
   document.getElementById('btn-quick').onclick = function (e) {
     e.stopPropagation();

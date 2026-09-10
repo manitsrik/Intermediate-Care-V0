@@ -256,11 +256,21 @@ body.nav-min .navitem > span { display: none; }
   display: inline-flex; align-items: center; justify-content: center;
 }
 .ic-btn:hover { background: var(--brand-soft); color: var(--brand-ink); }
+/*
+  ป้ายตัวเลขเกาะมุมนอกปุ่ม ไม่ใช่วางทับกลางปุ่ม
+  เดิมวางที่ 4px จากมุม และคิดขนาดแบบ content-box ซึ่ง padding กับขอบบวกเพิ่ม
+  จาก min-width อีก 12px ป้ายจึงกว้าง 28px ทั้งที่ตั้งไว้ 18px กินเข้ามาคลุมโดม
+  กระดิ่งทั้งใบ เหลือให้เห็นแค่เส้นโค้งล่างจนดูไม่ออกว่าเป็นรูปอะไร
+
+  border-box ทำให้เลขหลักเดียวได้วงกลม 20px พอดี ส่วน 9+ ค่อยยืดเป็นแคปซูลเอง
+  ยื่นออกนอกปุ่มได้ ช่องไฟระหว่างปุ่มมี 8px และไม่มีใครตัดขอบทิ้ง
+*/
 .badge {
-  position: absolute; top: 4px; right: 4px; min-width: 18px; height: 18px;
-  border-radius: 999px; background: var(--warn); color: #fff;
-  font-size: 11px; font-weight: 600; line-height: 18px; padding: 0 5px;
-  border: 2px solid var(--surface); box-sizing: content-box;
+  position: absolute; top: -3px; right: -3px; min-width: 20px; height: 20px;
+  box-sizing: border-box; border-radius: 999px;
+  background: var(--warn); color: #fff; text-align: center;
+  font-size: 10.5px; font-weight: 600; line-height: 15px; padding: 0 4px;
+  border: 2px solid var(--surface);
 }
 
 .userchip {
@@ -289,6 +299,41 @@ body.nav-min .navitem > span { display: none; }
 }
 .dd-item:hover { background: var(--brand-tint); color: var(--brand-ink); }
 .dd-item svg { flex: none; color: var(--brand-ink); }
+
+/*
+  กล่องแจ้งเตือนใต้กระดิ่ง กว้างกว่าเมนูสั้น ๆ เพราะแต่ละรายการมีสามบรรทัด
+  รายการยาวได้ไม่จำกัด จึงให้เลื่อนในกล่องแทนการดันกล่องยาวเกินขอบจอ
+  ไม่มีขอบในที่ตัวกล่อง แถวจะได้ลากเส้นคั่นเต็มความกว้างเหมือนรายการจริง
+*/
+.dropdown.dd-alerts { width: 384px; max-width: calc(100vw - 32px); padding: 0; overflow: hidden; }
+.notif-head { padding: 14px 16px 12px; }
+.notif-head b { display: block; font-size: 15px; font-weight: 500; }
+.notif-head small { color: var(--muted); font-size: 12px; }
+.notif-list { max-height: 340px; overflow-y: auto; }
+.notif-item {
+  display: flex; align-items: flex-start; gap: 10px; width: 100%;
+  background: none; border: 0; border-top: 1px solid var(--line-soft);
+  padding: 12px 16px; font-family: inherit; text-align: left; cursor: pointer;
+}
+.notif-item:hover { background: var(--brand-tint); }
+/* จุดยังอยู่ตอนอ่านแล้ว แค่จางลง แถวจะได้ไม่ขยับตำแหน่งตอนกลับมาเปิดอีกครั้ง */
+.notif-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--line); margin-top: 6px; }
+.notif-item.unread .notif-dot { background: var(--brand); }
+.notif-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.notif-text b { font-size: 13.5px; font-weight: 500; color: var(--text); }
+.notif-text > span { font-size: 13px; color: var(--brand-ink); line-height: 1.45; }
+.notif-text small { font-size: 11.5px; color: var(--faint); }
+.notif-empty {
+  border-top: 1px solid var(--line-soft);
+  padding: 26px 16px; text-align: center; color: var(--muted); font-size: 13px;
+}
+.notif-foot {
+  display: block; width: 100%; background: var(--brand-tint);
+  border: 0; border-top: 1px solid var(--line-soft);
+  padding: 12px; font-family: inherit; font-size: 13.5px; font-weight: 500;
+  color: var(--brand-ink); cursor: pointer;
+}
+.notif-foot:hover { background: var(--brand-soft); }
 
 .app-foot {
   font-family: "Charmonman", cursive;
